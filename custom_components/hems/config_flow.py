@@ -42,8 +42,13 @@ ROLE_LABELS = {
 }
 
 
-def _entity(domain: str | list[str] = "sensor") -> selector.EntitySelector:
-    return selector.EntitySelector(selector.EntitySelectorConfig(domain=domain))
+def _entity(
+    domain: str | list[str] = "sensor", device_class: str | None = None
+) -> selector.EntitySelector:
+    config = selector.EntitySelectorConfig(domain=domain)
+    if device_class is not None:
+        config["device_class"] = device_class
+    return selector.EntitySelector(config)
 
 
 def _number(
@@ -72,18 +77,18 @@ def _priority_mode() -> selector.SelectSelector:
 FORECAST_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
-        vol.Required("energy_today"): _entity(),
-        vol.Required("energy_remaining"): _entity(),
-        vol.Required("energy_tomorrow"): _entity(),
-        vol.Optional("power_now"): _entity(),
+        vol.Required("energy_today"): _entity(device_class="energy"),
+        vol.Required("energy_remaining"): _entity(device_class="energy"),
+        vol.Required("energy_tomorrow"): _entity(device_class="energy"),
+        vol.Optional("power_now"): _entity(device_class="power"),
     }
 )
 
 STORAGE_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
-        vol.Required("soc_entity"): _entity(),
-        vol.Optional("power_entity"): _entity(),
+        vol.Required("soc_entity"): _entity(device_class="battery"),
+        vol.Optional("power_entity"): _entity(device_class="power"),
         vol.Required("capacity_kwh"): _number(0.1, 100, "kWh", 0.01),
         vol.Required("reserve_soc", default=DEFAULT_RESERVE_SOC): _number(0, 100, "%"),
         vol.Required("max_charge_w", default=DEFAULT_MAX_CHARGE_W): _number(
@@ -95,7 +100,7 @@ STORAGE_SCHEMA = vol.Schema(
 THERMAL_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
-        vol.Optional("temp_entity"): _entity(),
+        vol.Optional("temp_entity"): _entity(device_class="temperature"),
         vol.Required("base_target", default=DEFAULT_BASE_TARGET): _number(
             30, 70, "°C"
         ),
@@ -109,7 +114,7 @@ SWITCHABLE_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
         vol.Required("switch_entity"): _entity(["switch", "climate"]),
-        vol.Optional("power_entity"): _entity(),
+        vol.Optional("power_entity"): _entity(device_class="power"),
         vol.Required("min_on_min", default=20): _number(0, 240, "min"),
         vol.Required("min_off_min", default=10): _number(0, 240, "min"),
         vol.Required("max_block_min", default=120): _number(0, 720, "min"),
@@ -121,7 +126,7 @@ MODULATED_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
         vol.Required("current_entity"): _entity(["number", "input_number"]),
-        vol.Optional("power_entity"): _entity(),
+        vol.Optional("power_entity"): _entity(device_class="power"),
         vol.Required("min_a", default=6): _number(1, 32, "A"),
         vol.Required("max_a", default=16): _number(1, 32, "A"),
         vol.Required("phases", default=3): _number(1, 3, ""),
@@ -148,7 +153,7 @@ EDIT_STEPS = {
 # Zähler, Grundlasten und Prioritäten: identisch bei Einrichtung und Grundwerten
 GENERAL_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_METER): _entity(),
+        vol.Required(CONF_METER): _entity(device_class="power"),
         vol.Required(CONF_INVERT, default=False): selector.BooleanSelector(),
         vol.Required(CONF_BASELINE_W, default=DEFAULT_BASELINE_W): _number(
             50, 5000, "W"
@@ -162,14 +167,58 @@ GENERAL_SCHEMA = vol.Schema(
 class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
+    def __init__(self) -> None:
+        self._general: dict = {}
+        self._devices: list[dict] = []
+
     async def async_step_user(self, user_input=None):
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
         if user_input is not None:
-            return self.async_create_entry(
-                title="HEMS", data=user_input, options={CONF_DEVICES: []}
-            )
+            self._general = user_input
+            return await self.async_step_devices()
         return self.async_show_form(step_id="user", data_schema=GENERAL_SCHEMA)
+
+    async def async_step_devices(self, user_input=None):
+        """Geräte direkt bei der Einrichtung anlegen (jederzeit erweiterbar)."""
+        return self.async_show_menu(
+            step_id="devices",
+            menu_options=[
+                "add_forecast",
+                "add_storage",
+                "add_thermal",
+                "add_switchable",
+                "add_modulated",
+                "finish",
+            ],
+            description_placeholders={"count": str(len(self._devices))},
+        )
+
+    async def _async_add_step(self, role: str, step_id: str, user_input):
+        if user_input is not None:
+            self._devices.append({"id": uuid4().hex, "role": role, **user_input})
+            return await self.async_step_devices()
+        return self.async_show_form(step_id=step_id, data_schema=ROLE_SCHEMAS[role])
+
+    async def async_step_add_forecast(self, user_input=None):
+        return await self._async_add_step(ROLE_FORECAST, "add_forecast", user_input)
+
+    async def async_step_add_storage(self, user_input=None):
+        return await self._async_add_step(ROLE_STORAGE, "add_storage", user_input)
+
+    async def async_step_add_thermal(self, user_input=None):
+        return await self._async_add_step(ROLE_THERMAL, "add_thermal", user_input)
+
+    async def async_step_add_switchable(self, user_input=None):
+        return await self._async_add_step(ROLE_SWITCHABLE, "add_switchable", user_input)
+
+    async def async_step_add_modulated(self, user_input=None):
+        return await self._async_add_step(ROLE_MODULATED, "add_modulated", user_input)
+
+    async def async_step_finish(self, user_input=None):
+        return self.async_create_entry(
+            title="HEMS", data=self._general, options={CONF_DEVICES: self._devices}
+        )
 
     @staticmethod
     @callback

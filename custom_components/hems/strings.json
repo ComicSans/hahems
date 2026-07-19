@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Set up HEMS",
-        "description": "HEMS automatically distributes your PV surplus to hot water, home battery and flexible loads.\n\n**How it works:** the meter at the grid connection reports whether you are currently exporting (surplus) or importing power. Combined with the PV forecast, battery state and your priorities, this drives the recommendation and, later, the control.\n\nAfter setup, add your devices via **Configure**: PV forecasts, storage, hot water, plus switchable and modulated loads. Every entry can be edited at any time.",
+        "description": "HEMS automatically distributes your PV surplus to hot water, home battery and flexible loads.\n\n**How it works:** the meter at the grid connection reports whether you are currently exporting (surplus) or importing power. Combined with the PV forecast, battery state and your priorities, this drives the recommendation and, later, the control.\n\nIn the next step you add your devices right away: PV forecasts, storage, hot water, plus switchable and modulated loads. Every entry can be edited at any time later via **Configure**.",
         "data": {
           "meter_entity": "Meter (power at grid connection)",
           "invert_meter": "Invert sign",
@@ -17,6 +17,96 @@
           "baseline_load_w": "Typical continuous consumption of the house during the day without large consumers (fridge, network, standby).",
           "night_load_w": "Initial value for night-time consumption. HEMS learns the real value automatically from meter statistics after a few days.",
           "priority_mode": "Where should surplus go first? \"Automatic\" fills the battery first when yield is scarce so the night is covered; with plenty of yield the EV may charge first. Hot-water base heating always has top priority."
+        }
+      },
+      "devices": {
+        "title": "Add devices",
+        "description": "Add your devices now: PV forecast, storage (battery), hot water, switchable loads (e.g. heat pump) and modulated loads (e.g. wallbox for the EV).\n\nDevices added so far: {count}. Via **Configure** you can add, edit or remove devices at any time later.",
+        "menu_options": {
+          "add_forecast": "Add PV forecast plane",
+          "add_storage": "Add storage (battery)",
+          "add_thermal": "Add hot water storage",
+          "add_switchable": "Add switchable load (e.g. heat pump)",
+          "add_modulated": "Add modulated load (e.g. wallbox)",
+          "finish": "Finish setup"
+        }
+      },
+      "add_forecast": {
+        "title": "PV forecast plane",
+        "description": "A **PV forecast plane** provides the expected solar production, e.g. from the Forecast.Solar or Solcast integration. Add multiple planes (east/west roof) separately — HEMS sums them automatically.",
+        "data": {
+          "name": "Name",
+          "energy_today": "Energy today (kWh)",
+          "energy_remaining": "Energy remaining today (kWh)",
+          "energy_tomorrow": "Energy tomorrow (kWh)",
+          "power_now": "Power now (W, optional)"
+        }
+      },
+      "add_storage": {
+        "title": "Storage",
+        "description": "A **storage** (home battery) buffers PV surplus for the night. HEMS derives a target state of charge from night consumption and reserve and schedules charging within the solar window.",
+        "data": {
+          "name": "Name",
+          "soc_entity": "SoC entity (%)",
+          "power_entity": "Power entity (W, optional)",
+          "capacity_kwh": "Capacity (kWh)",
+          "reserve_soc": "Reserve SoC (%)",
+          "max_charge_w": "Max. charging power (W)"
+        },
+        "data_description": {
+          "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
+          "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window."
+        }
+      },
+      "add_thermal": {
+        "title": "Hot water storage",
+        "description": "A **hot water storage** stores surplus as heat. The base target is always maintained — from the grid if necessary. Heating up to the comfort target happens only on PV surplus.",
+        "data": {
+          "name": "Name",
+          "temp_entity": "Temperature entity (optional)",
+          "base_target": "Base target (°C)",
+          "comfort_target": "Comfort target (°C)"
+        },
+        "data_description": {
+          "base_target": "This temperature is always maintained, from the grid if necessary.",
+          "comfort_target": "Heating up to this temperature only happens on PV surplus."
+        }
+      },
+      "add_switchable": {
+        "title": "Switchable load",
+        "description": "**Switchable (sheddable) loads** are devices HEMS can only turn on or off — their power cannot be modulated. Examples: heat pump (SG-Ready/blocking contact), heating rod, pool pump. Minimum runtime and minimum pause protect the device from frequent cycling.",
+        "data": {
+          "name": "Name",
+          "switch_entity": "Switch/climate entity",
+          "power_entity": "Power entity (W, optional)",
+          "min_on_min": "Minimum runtime (min)",
+          "min_off_min": "Minimum pause (min)",
+          "max_block_min": "Max. block duration per day (min)",
+          "priority": "Priority"
+        },
+        "data_description": {
+          "min_on_min": "Once switched on, the device stays on for at least this long.",
+          "min_off_min": "After switching off, the device stays off for at least this long.",
+          "max_block_min": "The device is never blocked for longer than this per day.",
+          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
+        }
+      },
+      "add_modulated": {
+        "title": "Modulated load",
+        "description": "**Modulated loads** can adjust their power consumption continuously. The typical example is a wallbox whose charging current (in amperes) can be regulated between a minimum and maximum. HEMS continuously tracks the setpoint to the available surplus.",
+        "data": {
+          "name": "Name",
+          "current_entity": "Current setpoint entity (A)",
+          "power_entity": "Power entity (W, optional)",
+          "min_a": "Minimum current (A)",
+          "max_a": "Maximum current (A)",
+          "phases": "Phases",
+          "priority": "Priority"
+        },
+        "data_description": {
+          "current_entity": "Number entity used to set the current setpoint.",
+          "min_a": "The device cannot operate below this current (wallbox minimum is usually 6 A).",
+          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
         }
       }
     },
