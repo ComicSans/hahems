@@ -5,7 +5,11 @@ import logging
 from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.helpers.event import (
+    EventStateChangedData,
+    async_track_state_change_event,
+)
 from homeassistant.helpers.sun import get_astral_event_next
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
@@ -118,6 +122,62 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
     @property
     def registry(self) -> DeviceRegistry:
         return parse_devices(self.entry.options.get(CONF_DEVICES, []))
+
+    def _tracked_entities(self) -> set[str]:
+        """Alle Quell-Entitäten, deren Verfügbarwerden eine Neurechnung auslöst."""
+        reg = self.registry
+        ids: set[str] = set()
+        for key in (CONF_METER, CONF_PV_POWER, CONF_WEATHER):
+            if entity := self._opt(key, None):
+                ids.add(entity)
+        for device in self.entry.options.get(CONF_DEVICES, []):
+            if entity := device.get("power_now"):
+                ids.add(entity)
+        for f in reg.forecasts:
+            ids.update(
+                e for e in (f.energy_today, f.energy_remaining, f.energy_tomorrow) if e
+            )
+        for s in reg.storages:
+            ids.update(e for e in (s.soc_entity, s.power_entity) if e)
+        for t in reg.thermals:
+            if t.temp_entity:
+                ids.add(t.temp_entity)
+        for s in reg.switchables:
+            ids.update(e for e in (s.switch_entity, s.power_entity) if e)
+        for m in reg.modulateds:
+            ids.update(e for e in (m.current_entity, m.switch_entity, m.power_entity) if e)
+        return ids
+
+    @callback
+    def async_setup_source_tracking(self) -> None:
+        """Sofort neu rechnen, sobald eine Quelle verfügbar wird.
+
+        Nach einem Neustart sind die Quell-Entitäten (Zähler, Speicher-SoC,
+        Prognose, Wetter …) oft noch nicht bereit; der 60-s-Poll würde die
+        Karten bis zu eine Minute leer lassen. Wir hören daher auf den
+        Übergang „nicht bereit → bereit" und stoßen dann eine (entprellte)
+        Neuberechnung an. Reine Wertänderungen laufender Sensoren lösen bewusst
+        nichts aus — dafür genügt der reguläre Poll.
+        """
+        entities = self._tracked_entities()
+        if not entities:
+            return
+
+        @callback
+        def _source_became_ready(event: Event[EventStateChangedData]) -> None:
+            new = event.data["new_state"]
+            if new is None or new.state in ("unknown", "unavailable"):
+                return
+            old = event.data["old_state"]
+            if old is not None and old.state not in ("unknown", "unavailable"):
+                return  # nur das Verfügbarwerden zählt, keine Wertänderung
+            self.hass.async_create_task(self.async_request_refresh())
+
+        self.entry.async_on_unload(
+            async_track_state_change_event(
+                self.hass, list(entities), _source_became_ready
+            )
+        )
 
     # -- Helfer ------------------------------------------------------------
 
