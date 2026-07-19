@@ -1,5 +1,7 @@
 # HEMS
 
+<img src="assets/icon.png" alt="HEMS Icon" width="128" align="right">
+
 Home Energy Management System als Home-Assistant-Custom-Integration.
 Geräte-agnostisch: Akkus, PV-Prognosen, Warmwasser, Wärmepumpe und Wallbox werden
 als Rollen über die UI konfiguriert, keine Entity-IDs im Code.
