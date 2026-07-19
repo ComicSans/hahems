@@ -12,12 +12,24 @@
  */
 
 const W = 480;
-const H = 240;
-const PAD = { left: 40, right: 34, top: 14, bottom: 26 };
+const H = 300;
+// bottom trägt Stundenachse und Warmwasser-Band
+const PAD = { left: 40, right: 34, top: 16, bottom: 52 };
+const WW_BAND = { y: H - 26, h: 11 };
 
 const COLOR_PV = "#ff9800";
 const COLOR_PLAN = "#4caf50";
 const COLOR_SOC = "#488fc2";
+const COLOR_WW_OK = "#26a69a";
+const COLOR_WW_BLOCK = "#b0bec5";
+
+// Muss mit CARD_HEIGHT in hems-flow-card.js übereinstimmen, damit beide
+// Karten nebeneinander gleich hoch sind. Per `height:` überschreibbar.
+const CARD_HEIGHT = 440;
+
+function cssLength(value) {
+  return typeof value === "number" ? `${value}px` : String(value);
+}
 
 function fmtKwh(v) {
   if (v === null || v === undefined) return "–";
@@ -36,12 +48,14 @@ class HemsPlanCard extends HTMLElement {
     this._config = {
       entity: config.entity || "sensor.hems_einspeiseplan",
       title: config.title,
+      height: config.height ?? CARD_HEIGHT,
     };
     this._lastUpdated = null;
   }
 
   getCardSize() {
-    return 4;
+    // gleiche Höhe wie die Flow-Card, damit beide nebeneinander passen
+    return 5;
   }
 
   set hass(hass) {
@@ -90,8 +104,14 @@ class HemsPlanCard extends HTMLElement {
       return;
     }
 
-    const t0 = Math.min(...all.map((s) => s.von.getTime()));
-    const t1 = Math.max(...all.map((s) => s.bis.getTime()));
+    // Feste Achse: kompletter heutiger und kompletter morgiger Kalendertag,
+    // unabhängig davon, ab wann Plandaten vorliegen.
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 2);
+    const t0 = dayStart.getTime();
+    const t1 = dayEnd.getTime();
     const maxW = Math.max(100, ...all.map((s) => s.watt));
     const yMax = Math.ceil(maxW / 500) * 500;
 
@@ -100,35 +120,54 @@ class HemsPlanCard extends HTMLElement {
     const ySoc = (p) => H - PAD.bottom - (p / 100) * (H - PAD.top - PAD.bottom);
     const y0 = H - PAD.bottom;
 
+    const now = Date.now();
+    const fmtTime = (d) =>
+      d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+
     const bar = (s, color, cls) => {
       const bx = x(s.von.getTime());
       const bw = Math.max(1, x(s.bis.getTime()) - bx - 1);
       const by = y(s.watt);
-      return `<rect class="${cls}" x="${bx.toFixed(1)}" y="${by.toFixed(1)}"
+      const past = s.bis.getTime() <= now ? " past" : "";
+      return `<rect class="${cls}${past}" x="${bx.toFixed(1)}" y="${by.toFixed(1)}"
         width="${bw.toFixed(1)}" height="${Math.max(0, y0 - by).toFixed(1)}"
-        fill="${color}"><title>${s.von.toLocaleTimeString("de-DE", {
-          hour: "2-digit",
-          minute: "2-digit",
-        })} · ${s.watt} W</title></rect>`;
+        fill="${color}"><title>${fmtTime(s.von)} · ${s.watt} W</title></rect>`;
     };
 
     const pvBars = pv.map((s) => bar(s, COLOR_PV, "pv")).join("");
     const planBars = plan.map((s) => bar(s, COLOR_PLAN, "plan")).join("");
 
-    // SoC-Verlauf: Punkte an den Slot-Enden; läuft die Nacht schon, beginnt
-    // die Linie beim aktuellen Gesamt-SoC.
-    let socPts = plan
-      .filter((s) => s.soc !== null && s.soc !== undefined)
-      .map((s) => [s.bis.getTime(), s.soc]);
-    const now = Date.now();
-    if (plan.length && a.speicher_soc != null && now >= plan[0].von.getTime()) {
-      socPts = [[Math.max(t0, now), a.speicher_soc], ...socPts];
-    }
+    // SoC-Prognose ab jetzt, gestrichelt: die Linie zeigt eine Erwartung,
+    // keinen gemessenen Verlauf. Für die Vergangenheit gibt es bewusst keine
+    // Kurve — bekannt ist nur der aktuelle Stand.
+    const socPts = (a.soc_prognose || [])
+      .map((p) => [new Date(p.zeit).getTime(), p.soc])
+      .filter(([t, p]) => p != null && t >= t0 && t <= t1);
     const socLine = socPts.length
       ? `<polyline class="soc" points="${socPts
           .map(([t, p]) => `${x(t).toFixed(1)},${ySoc(p).toFixed(1)}`)
           .join(" ")}"/>`
       : "";
+
+    // Warmwasser-Band: durchgehend "verfügbar", darüber die Sperrfenster.
+    const ww = (a.ww_sperren || [])
+      .map((s) => ({ von: new Date(s.von), bis: new Date(s.bis) }))
+      .filter((s) => s.bis.getTime() > t0 && s.von.getTime() < t1);
+    const wwBlocks = ww
+      .map((s) => {
+        const bx = x(Math.max(t0, s.von.getTime()));
+        const bw = Math.max(1, x(Math.min(t1, s.bis.getTime())) - bx);
+        return `<rect class="ww-block" x="${bx.toFixed(1)}" y="${WW_BAND.y}"
+          width="${bw.toFixed(1)}" height="${WW_BAND.h}" fill="${COLOR_WW_BLOCK}"
+          ><title>Warmwasser gesperrt ${fmtTime(s.von)} – ${fmtTime(s.bis)}</title></rect>`;
+      })
+      .join("");
+    const wwBand = `
+      <rect class="ww-ok" x="${PAD.left}" y="${WW_BAND.y}"
+        width="${W - PAD.left - PAD.right}" height="${WW_BAND.h}"
+        fill="${COLOR_WW_OK}"><title>Warmwasser verfügbar</title></rect>
+      ${wwBlocks}
+      <text class="ylabel" x="${PAD.left - 4}" y="${WW_BAND.y + WW_BAND.h - 2}">WW</text>`;
 
     // Mitternachts-Trenner + Tageslabels
     const days = [];
@@ -144,13 +183,28 @@ class HemsPlanCard extends HTMLElement {
       .map(([dx, label]) => `<text class="day" x="${dx}" y="${PAD.top - 2}">${label}</text>`)
       .join("");
 
+    // Bereits vergangener Teil des heutigen Tages: Für ihn liegen keine
+    // Verlaufsdaten vor (die Kurven sind Prognosen ab jetzt), deshalb bleibt
+    // er leer und wird nur ausgegraut.
+    const pastZone =
+      now > t0
+        ? `<rect class="past-zone" x="${PAD.left}" y="${PAD.top}"
+             width="${(x(Math.min(now, t1)) - PAD.left).toFixed(1)}"
+             height="${(y0 - PAD.top).toFixed(1)}"/>`
+        : "";
+    const pastLabel =
+      x(Math.min(now, t1)) - PAD.left > 70
+        ? `<text class="past-label" x="${((PAD.left + x(Math.min(now, t1))) / 2).toFixed(1)}"
+             y="${((PAD.top + y0) / 2).toFixed(1)}">keine Verlaufsdaten</text>`
+        : "";
+
     // Jetzt-Marker
     const nowMark =
       now >= t0 && now <= t1
         ? `<line class="now" x1="${x(now)}" y1="${PAD.top}" x2="${x(now)}" y2="${y0}"/>`
         : "";
 
-    // Achsen: alle 3 h eine Stundenmarke, links W, rechts %
+    // Achsen: über 48 h alle 3 h ein Strich, beschriftet alle 6 h
     let ticks = "";
     const tick = new Date(t0);
     tick.setMinutes(0, 0, 0);
@@ -158,8 +212,10 @@ class HemsPlanCard extends HTMLElement {
     for (; tick.getTime() < t1; tick.setHours(tick.getHours() + 1)) {
       if (tick.getHours() % 3 !== 0) continue;
       const tx = x(tick.getTime());
-      ticks += `<line class="grid" x1="${tx}" y1="${y0}" x2="${tx}" y2="${y0 + 4}"/>
-        <text class="tick" x="${tx}" y="${y0 + 16}">${tick.getHours()}</text>`;
+      ticks += `<line class="grid" x1="${tx}" y1="${y0}" x2="${tx}" y2="${y0 + 4}"/>`;
+      if (tick.getHours() % 6 === 0) {
+        ticks += `<text class="tick" x="${tx}" y="${y0 + 16}">${tick.getHours()}</text>`;
+      }
     }
     let yTicks = "";
     for (let v = 0; v <= yMax; v += yMax / 2) {
@@ -186,17 +242,40 @@ class HemsPlanCard extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>
-        ha-card { overflow: hidden; }
-        .container { padding: 8px 8px 0; }
-        svg { width: 100%; height: auto; display: block; }
+        /* Feste Höhe (siehe CARD_HEIGHT): das SVG skaliert mit, statt die
+           Kartenhöhe zu bestimmen. So sind beide Karten in jedem Layout
+           gleich hoch. */
+        ha-card {
+          overflow: hidden;
+          height: ${cssLength(this._config.height)};
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+        }
+        .container { padding: 8px 8px 0; flex: 1 1 auto; min-height: 0; }
+        svg { width: 100%; height: 100%; display: block; }
         .pv { opacity: 0.55; }
         .plan { opacity: 0.9; }
+        .past { opacity: 0.3; }
+        .past-zone {
+          fill: var(--secondary-text-color, #727272);
+          opacity: 0.07;
+        }
+        .past-label {
+          font-size: 10px;
+          fill: var(--secondary-text-color, #727272);
+          text-anchor: middle;
+          opacity: 0.8;
+        }
         .soc {
           fill: none;
           stroke: ${COLOR_SOC};
           stroke-width: 2;
+          stroke-dasharray: 5 4;
           stroke-linejoin: round;
         }
+        .ww-ok { opacity: 0.8; }
+        .ww-block { opacity: 0.9; }
         .grid { stroke: var(--divider-color, #e0e0e0); stroke-width: 1; }
         .grid.mid { stroke-dasharray: 4 4; }
         .now { stroke: var(--error-color, #f44336); stroke-width: 1.5; }
@@ -221,7 +300,12 @@ class HemsPlanCard extends HTMLElement {
           background: var(--secondary-background-color, #f5f5f5);
           color: var(--primary-text-color, #212121);
         }
-        .legend { display: flex; gap: 14px; padding: 4px 16px 0; }
+        .legend {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px 14px;
+          padding: 4px 16px 0;
+        }
         .legend span {
           font-size: 11px;
           color: var(--secondary-text-color, #727272);
@@ -230,15 +314,26 @@ class HemsPlanCard extends HTMLElement {
           gap: 4px;
         }
         .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+        /* gestrichelt wie die Linie im Diagramm */
+        .soc-swatch {
+          height: 0;
+          border-top: 2px dashed ${COLOR_SOC};
+          border-radius: 0;
+          width: 12px;
+        }
       </style>
       <ha-card ${this._config.title ? `header="${this._config.title}"` : `header="Einspeiseplan"`}>
         <div class="legend">
           <span><i class="swatch" style="background:${COLOR_PV}"></i>PV-Prognose</span>
           <span><i class="swatch" style="background:${COLOR_PLAN}"></i>Einspeisung geplant</span>
-          <span><i class="swatch" style="background:${COLOR_SOC}"></i>SoC erwartet</span>
+          <span><i class="swatch soc-swatch"></i>SoC-Prognose</span>
+          <span><i class="swatch" style="background:${COLOR_WW_OK}"></i>WW verfügbar</span>
+          <span><i class="swatch" style="background:${COLOR_WW_BLOCK}"></i>WW gesperrt</span>
         </div>
         <div class="container">
-          <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Einspeiseplan">
+          <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"
+               role="img" aria-label="Einspeiseplan">
+            ${pastZone}
             ${yTicks}
             ${sep}
             ${dayLabels}
@@ -248,6 +343,8 @@ class HemsPlanCard extends HTMLElement {
             ${nowMark}
             ${ticks}
             ${socTicks}
+            ${pastLabel}
+            ${wwBand}
           </svg>
         </div>
         <div class="footer">${chips}</div>

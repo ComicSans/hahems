@@ -53,6 +53,12 @@ class ThermalStore:
     temp_entity: str | None = None
     base_target: float = DEFAULT_BASE_TARGET
     comfort_target: float = DEFAULT_COMFORT_TARGET
+    # Sperrzeit als lokale Uhrzeiten "HH:MM:SS". In diesem Fenster wird weder
+    # Basis- noch Komfortladung empfohlen; block_end < block_start bedeutet ein
+    # Fenster über Mitternacht (z. B. 18:00 → 06:00). Gleiche Zeiten = keine
+    # Sperre.
+    block_start: str | None = None
+    block_end: str | None = None
 
 
 @dataclass

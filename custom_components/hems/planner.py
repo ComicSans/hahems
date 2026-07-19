@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta, tzinfo
 
 from .const import PRIORITY_AUTO, PRIORITY_BATTERY_FIRST, PRIORITY_EV_FIRST
 
@@ -50,6 +50,20 @@ class PlanInput:
     # ganze Profil), greift die gleiche Stunde im anderen Tagtyp, sonst
     # night_load_w als Fallback.
     load_profile_w: dict[tuple[int, int], float] | None = None
+    # Darstellungshorizont der Plankarte: lokal 00:00 heute bis 00:00 über-
+    # morgen, vom Coordinator als UTC übergeben (der Planner kennt keine
+    # Zeitzone). Kurven werden darauf beschnitten.
+    horizon_start: datetime | None = None
+    horizon_end: datetime | None = None
+    # Sonnenzeiten der beiden Kalendertage im Horizont, für die PV-Glocken.
+    today_sunrise: datetime | None = None
+    today_sunset: datetime | None = None
+    tomorrow_sunrise: datetime | None = None
+    tomorrow_sunset: datetime | None = None
+    # Warmwasser-Sperrfenster im Horizont, bereits über Mitternacht aufgelöst.
+    thermal_block_windows: list[tuple[datetime, datetime]] = field(
+        default_factory=list
+    )
 
 
 @dataclass
@@ -72,6 +86,14 @@ class DischargeSlot:
 
 
 @dataclass
+class SocPoint:
+    """Stützstelle der SoC-Prognose (Zeitpunkt, erwarteter Gesamt-SoC in %)."""
+
+    zeit: datetime
+    soc: float
+
+
+@dataclass
 class PlanResult:
     nachtdefizit_kwh: float = 0.0
     ueberschuss_rest_kwh: float = 0.0
@@ -88,8 +110,58 @@ class PlanResult:
     einspeise_w_jetzt: float | None = None
     einspeiseplan: list[DischargeSlot] = field(default_factory=list)
     pv_kurve: list[PvSlot] = field(default_factory=list)
+    soc_prognose: list[SocPoint] = field(default_factory=list)
+    ww_gesperrt: bool = False
+    ww_sperrfenster: list[tuple[datetime, datetime]] = field(default_factory=list)
     empfehlung: str = "keine Daten"
     prioritaeten: list[str] = field(default_factory=list)
+
+
+def block_windows(
+    block_start: str | None,
+    block_end: str | None,
+    horizon_start: datetime,
+    horizon_end: datetime,
+    tz: tzinfo,
+) -> list[tuple[datetime, datetime]]:
+    """Sperrzeit ("HH:MM:SS", lokal) in konkrete Fenster im Horizont auflösen.
+
+    Liegt das Ende vor dem Anfang (18:00 → 06:00), läuft das Fenster über
+    Mitternacht; über den 48-h-Horizont ergeben sich daraus bis zu drei
+    Fenster: der Rest der laufenden Nacht sowie die beiden folgenden. Gleiche
+    Zeiten heißt "keine Sperre". Die Fenster sind auf den Horizont beschnitten
+    und tragen dieselbe Zeitzone wie dessen Grenzen.
+    """
+    start_t = _parse_time(block_start)
+    end_t = _parse_time(block_end)
+    if start_t is None or end_t is None or start_t == end_t:
+        return []
+
+    # Einen Tag vor dem Horizont beginnen, damit ein über Mitternacht
+    # laufendes Fenster der Vornacht noch hineinragen kann.
+    first_day = horizon_start.astimezone(tz).date() - timedelta(days=1)
+
+    windows: list[tuple[datetime, datetime]] = []
+    for offset in range(4):
+        day = first_day + timedelta(days=offset)
+        # Kalendertage statt +24 h, damit Sommerzeitwechsel die Wanduhrzeit
+        # der Sperre nicht verschieben.
+        end_day = day + timedelta(days=1) if end_t <= start_t else day
+        start = datetime.combine(day, start_t, tzinfo=tz)
+        end = datetime.combine(end_day, end_t, tzinfo=tz)
+        clipped = (max(start, horizon_start), min(end, horizon_end))
+        if clipped[1] > clipped[0]:
+            windows.append(clipped)
+    return windows
+
+
+def _parse_time(value: str | None) -> time | None:
+    if not value:
+        return None
+    try:
+        return time.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def compute_plan(inp: PlanInput) -> PlanResult:
@@ -159,8 +231,19 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     if known and cap > 0:
         _discharge_plan(inp, result, available, reserve, ziel_kwh, cap)
 
-    # Geschätzte PV-Stundenkurve für heute (Rest) und morgen, für die Plankarte
+    # Geschätzte PV-Stundenkurve über beide Kalendertage, für die Plankarte
     result.pv_kurve = _pv_curve(inp)
+
+    # Warmwasser-Sperre: Fenster durchreichen und prüfen, ob jetzt gesperrt ist.
+    result.ww_sperrfenster = list(inp.thermal_block_windows)
+    result.ww_gesperrt = any(
+        start <= inp.now < end for start, end in inp.thermal_block_windows
+    )
+
+    # SoC-Prognose ab jetzt bis zum Horizontende. Bewusst nicht rückwirkend:
+    # bekannt ist nur der aktuelle Stand, alles davor wäre erfunden.
+    if known and cap > 0:
+        result.soc_prognose = _soc_forecast(inp, result, available, reserve, cap)
 
     result.prioritaeten = _priorities(inp, result)
     result.empfehlung = (
@@ -285,42 +368,90 @@ def _discharge_plan(
 
 
 def _pv_curve(inp: PlanInput) -> list[PvSlot]:
-    """PV-Prognose als Stundenkurve: Tagesenergie sinusförmig über das
-    Sonnenfenster verteilt (grobe Glocke, als "geschätzt" gekennzeichnet)."""
+    """PV-Prognose als Stundenkurve bis zum Ende des Horizonts.
+
+    Die Glockenform wird über den kompletten Kalendertag aufgespannt, damit die
+    Leistung zur Tageszeit passt; ausgegeben werden aber nur Slots ab jetzt.
+    Für vergangene Stunden liegen keine Messdaten vor, und eine rückwirkend
+    geschätzte Kurve wäre erfunden — die Karte lässt den Bereich stattdessen
+    leer. Kennt der Coordinator die Sonnenzeiten der Kalendertage nicht, greift
+    die Näherung über die nächsten Sonnenereignisse ±24 h.
+    """
     curve: list[PvSlot] = []
-    night = inp.next_sunrise is not None and inp.next_sunrise < inp.sunset
-    if night:
-        # Nur der kommende Tag: nächster Aufgang → nächster Untergang. Vor
-        # Mitternacht (UTC-Datumsgrenze als Näherung) liefert der Morgen-Wert
-        # die Energie, danach meist schon die Rest-Prognose.
-        energy = (
-            inp.pv_tomorrow_kwh
-            if inp.now.date() != inp.next_sunrise.date()
-            else (inp.pv_remaining_kwh or inp.pv_tomorrow_kwh)
-        )
-        curve += _day_curve(inp.next_sunrise, inp.sunset, energy, inp.now)
+    if inp.today_sunrise and inp.today_sunset:
+        curve += _day_curve(inp.today_sunrise, inp.today_sunset, inp.pv_today_kwh)
+        if inp.tomorrow_sunrise and inp.tomorrow_sunset:
+            curve += _day_curve(
+                inp.tomorrow_sunrise, inp.tomorrow_sunset, inp.pv_tomorrow_kwh
+            )
+    elif inp.next_sunrise is not None and inp.next_sunrise < inp.sunset:
+        curve += _day_curve(inp.next_sunrise, inp.sunset, inp.pv_tomorrow_kwh)
     else:
-        # Rest von heute (heutiger Aufgang ≈ morgiger minus 24 h) …
+        curve += _day_curve(inp.sunrise - timedelta(hours=24), inp.sunset, inp.pv_today_kwh)
         curve += _day_curve(
-            inp.sunrise - timedelta(hours=24), inp.sunset, inp.pv_remaining_kwh, inp.now
+            inp.sunrise, inp.sunset + timedelta(hours=24), inp.pv_tomorrow_kwh
         )
-        # … und der komplette morgige Tag (Untergang ≈ heutiger plus 24 h)
-        curve += _day_curve(
-            inp.sunrise, inp.sunset + timedelta(hours=24), inp.pv_tomorrow_kwh, inp.now
-        )
-    return curve
+
+    end = inp.horizon_end
+    return [
+        s
+        for s in curve
+        if s.end > inp.now and (end is None or s.start < end)
+    ]
+
+
+def _pv_power_at(curve: list[PvSlot], t: datetime) -> float:
+    """PV-Leistung der Stunde, in die t fällt (0 außerhalb der Kurve)."""
+    for slot in curve:
+        if slot.start <= t < slot.end:
+            return slot.watt
+    return 0.0
+
+
+def _soc_forecast(
+    inp: PlanInput,
+    res: PlanResult,
+    available_kwh: float,
+    reserve_kwh: float,
+    cap_kwh: float,
+) -> list[SocPoint]:
+    """Stündlicher Vorwärtslauf des Speicherstands ab jetzt.
+
+    Überschuss lädt (begrenzt durch Ladeleistung und Kapazität), Defizit
+    entlädt bis zur Reserve; darunter deckt das Netz. Grobe Prognose, die in
+    der Karte gestrichelt dargestellt wird.
+    """
+    end = inp.horizon_end
+    if end is None or end <= inp.now or cap_kwh <= 0:
+        return []
+
+    max_charge_w = sum(s.max_charge_w for s in inp.storages)
+    max_discharge_w = sum(s.max_discharge_w for s in inp.storages)
+
+    energy = available_kwh
+    points = [SocPoint(zeit=inp.now, soc=round(energy / cap_kwh * 100, 1))]
+    for t, nxt in _hour_slots(inp.now, end):
+        hours = (nxt - t).total_seconds() / 3600
+        balance_w = _pv_power_at(res.pv_kurve, t) - _expected_load_w(inp, t)
+        if balance_w >= 0:
+            charge_w = min(balance_w, max_charge_w)
+            energy = min(cap_kwh, energy + charge_w * hours / 1000)
+        else:
+            discharge_w = min(-balance_w, max_discharge_w)
+            energy = max(reserve_kwh, energy - discharge_w * hours / 1000)
+        points.append(SocPoint(zeit=nxt, soc=round(energy / cap_kwh * 100, 1)))
+    return points
 
 
 def _day_curve(
-    day_start: datetime, day_end: datetime, energy_kwh: float, now: datetime
+    day_start: datetime, day_end: datetime, energy_kwh: float
 ) -> list[PvSlot]:
-    """Energie eines Tages sinusförmig auf Stunden-Slots ab `now` verteilen."""
+    """Energie eines Tages sinusförmig auf Stunden-Slots verteilen."""
     total_s = (day_end - day_start).total_seconds()
     if total_s <= 0 or energy_kwh <= 0:
         return []
-    start = max(day_start, now)
     raw: list[tuple[datetime, datetime, float]] = []
-    for t, nxt in _hour_slots(start, day_end):
+    for t, nxt in _hour_slots(day_start, day_end):
         mid = t + (nxt - t) / 2
         shape = math.sin(math.pi * (mid - day_start).total_seconds() / total_s)
         raw.append((t, nxt, max(0.0, shape)))
@@ -332,10 +463,14 @@ def _day_curve(
 
 
 def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
-    """Dynamische Reihenfolge für den Überschuss. WW ist immer Priorität 1."""
+    """Dynamische Reihenfolge für den Überschuss. WW ist Priorität 1, sofern
+    keine Sperrzeit läuft; in der Sperrzeit entfallen Basis- und Komfort-
+    ladung, der Speicher darf also unter die Basistemperatur auskühlen."""
     prio: list[str] = []
 
-    if inp.thermal_temp is not None and inp.thermal_temp < inp.thermal_base:
+    if res.ww_gesperrt:
+        prio.append("WW gesperrt")
+    elif inp.thermal_temp is not None and inp.thermal_temp < inp.thermal_base:
         prio.append(
             f"WW-Basisladung ({inp.thermal_temp:.0f} → {inp.thermal_base:.0f} °C, notfalls Netz)"
         )
@@ -349,7 +484,9 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
         return prio
 
     ww_comfort_pending = (
-        inp.thermal_temp is not None and inp.thermal_temp < inp.thermal_comfort
+        not res.ww_gesperrt
+        and inp.thermal_temp is not None
+        and inp.thermal_temp < inp.thermal_comfort
     )
     if ww_comfort_pending:
         prio.append(f"WW-Komfort ({inp.thermal_comfort:.0f} °C)")

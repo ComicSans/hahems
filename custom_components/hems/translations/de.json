@@ -66,11 +66,15 @@
           "name": "Name",
           "temp_entity": "Temperatur-Entität (optional)",
           "base_target": "Basis-Soll (°C)",
-          "comfort_target": "Komfort-Soll (°C)"
+          "comfort_target": "Komfort-Soll (°C)",
+          "block_start": "Sperrzeit ab",
+          "block_end": "Sperrzeit bis"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
-          "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt."
+          "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt.",
+          "block_start": "Beginn der täglichen Sperrzeit, in der kein Warmwasser bereitet wird. Beide Felder leer lassen heißt keine Sperre.",
+          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00)."
         }
       },
       "add_switchable": {
@@ -214,11 +218,15 @@
           "name": "Name",
           "temp_entity": "Temperatur-Entität (optional)",
           "base_target": "Basis-Soll (°C)",
-          "comfort_target": "Komfort-Soll (°C)"
+          "comfort_target": "Komfort-Soll (°C)",
+          "block_start": "Sperrzeit ab",
+          "block_end": "Sperrzeit bis"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
-          "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt."
+          "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt.",
+          "block_start": "Beginn der täglichen Sperrzeit, in der kein Warmwasser bereitet wird. Beide Felder leer lassen heißt keine Sperre.",
+          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00)."
         }
       },
       "add_switchable": {
@@ -308,11 +316,15 @@
           "name": "Name",
           "temp_entity": "Temperatur-Entität (optional)",
           "base_target": "Basis-Soll (°C)",
-          "comfort_target": "Komfort-Soll (°C)"
+          "comfort_target": "Komfort-Soll (°C)",
+          "block_start": "Sperrzeit ab",
+          "block_end": "Sperrzeit bis"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
-          "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt."
+          "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt.",
+          "block_start": "Beginn der täglichen Sperrzeit, in der kein Warmwasser bereitet wird. Beide Felder leer lassen heißt keine Sperre.",
+          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00)."
         }
       },
       "edit_switchable": {

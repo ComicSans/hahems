@@ -66,11 +66,15 @@
           "name": "Name",
           "temp_entity": "Temperature entity (optional)",
           "base_target": "Base target (°C)",
-          "comfort_target": "Comfort target (°C)"
+          "comfort_target": "Comfort target (°C)",
+          "block_start": "Blocked from",
+          "block_end": "Blocked until"
         },
         "data_description": {
           "base_target": "This temperature is always maintained, from the grid if necessary.",
-          "comfort_target": "Heating up to this temperature only happens on PV surplus."
+          "comfort_target": "Heating up to this temperature only happens on PV surplus.",
+          "block_start": "Start of the daily period in which no hot water is prepared. Leave both empty for no blocking.",
+          "block_end": "End of the blocked period. An end before the start means the window runs over midnight (e.g. 18:00 to 06:00)."
         }
       },
       "add_switchable": {
@@ -214,11 +218,15 @@
           "name": "Name",
           "temp_entity": "Temperature entity (optional)",
           "base_target": "Base target (°C)",
-          "comfort_target": "Comfort target (°C)"
+          "comfort_target": "Comfort target (°C)",
+          "block_start": "Blocked from",
+          "block_end": "Blocked until"
         },
         "data_description": {
           "base_target": "This temperature is always maintained, from the grid if necessary.",
-          "comfort_target": "Heating up to this temperature only happens on PV surplus."
+          "comfort_target": "Heating up to this temperature only happens on PV surplus.",
+          "block_start": "Start of the daily period in which no hot water is prepared. Leave both empty for no blocking.",
+          "block_end": "End of the blocked period. An end before the start means the window runs over midnight (e.g. 18:00 to 06:00)."
         }
       },
       "add_switchable": {
@@ -308,11 +316,15 @@
           "name": "Name",
           "temp_entity": "Temperature entity (optional)",
           "base_target": "Base target (°C)",
-          "comfort_target": "Comfort target (°C)"
+          "comfort_target": "Comfort target (°C)",
+          "block_start": "Blocked from",
+          "block_end": "Blocked until"
         },
         "data_description": {
           "base_target": "This temperature is always maintained, from the grid if necessary.",
-          "comfort_target": "Heating up to this temperature only happens on PV surplus."
+          "comfort_target": "Heating up to this temperature only happens on PV surplus.",
+          "block_start": "Start of the daily period in which no hot water is prepared. Leave both empty for no blocking.",
+          "block_end": "End of the blocked period. An end before the start means the window runs over midnight (e.g. 18:00 to 06:00)."
         }
       },
       "edit_switchable": {

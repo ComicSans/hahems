@@ -32,6 +32,17 @@ const EDGES = {
 
 const MIN_FLOW_W = 15; // darunter gilt eine Kante als inaktiv
 
+// Gemeinsame Standardhöhe beider HEMS-Karten. Eine feste Höhe ist der einzige
+// Weg, der in jedem Dashboard-Layout gleich hohe Karten ergibt: height:100%
+// wirkt nur in Stretch-Layouts (Sections-Grid, horizontal-stack), im Masonry-
+// Layout richtet sich jede Karte sonst nach ihrem eigenen Seitenverhältnis.
+// Per `height:` in der Kartenkonfiguration überschreibbar ("auto" = natürlich).
+const CARD_HEIGHT = 440;
+
+function cssLength(value) {
+  return typeof value === "number" ? `${value}px` : String(value);
+}
+
 function fmtW(w) {
   if (w === null || w === undefined) return "–";
   const abs = Math.abs(w);
@@ -81,6 +92,7 @@ class HemsFlowCard extends HTMLElement {
     this._config = {
       entity: config.entity || "sensor.hems_lastfluss",
       title: config.title,
+      height: config.height ?? CARD_HEIGHT,
     };
     this._lastUpdated = null;
   }
@@ -173,9 +185,18 @@ class HemsFlowCard extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>
-        ha-card { overflow: hidden; }
-        .container { padding: 8px 8px 4px; }
-        svg { width: 100%; height: auto; display: block; }
+        /* Feste Höhe (siehe CARD_HEIGHT): das SVG skaliert mit, statt die
+           Kartenhöhe zu bestimmen. So sind beide Karten in jedem Layout
+           gleich hoch. */
+        ha-card {
+          overflow: hidden;
+          height: ${cssLength(this._config.height)};
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+        }
+        .container { padding: 8px 8px 4px; flex: 1 1 auto; min-height: 0; }
+        svg { width: 100%; height: 100%; display: block; }
         .node {
           fill: var(--card-background-color, var(--ha-card-background, #fff));
           stroke-width: 2.5;
@@ -224,7 +245,8 @@ class HemsFlowCard extends HTMLElement {
       </style>
       <ha-card ${this._config.title ? `header="${this._config.title}"` : ""}>
         <div class="container">
-          <svg viewBox="0 0 440 390" role="img" aria-label="Lastfluss">
+          <svg viewBox="0 0 440 390" preserveAspectRatio="xMidYMid meet"
+               role="img" aria-label="Lastfluss">
             ${edgeSvg}
             ${nodeSvg}
           </svg>

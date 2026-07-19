@@ -10,7 +10,7 @@ from homeassistant.helpers.event import (
     EventStateChangedData,
     async_track_state_change_event,
 )
-from homeassistant.helpers.sun import get_astral_event_next
+from homeassistant.helpers.sun import get_astral_event_date, get_astral_event_next
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -35,7 +35,13 @@ from .const import (
     WEATHER_CONDITION_FACTORS,
 )
 from .models import DeviceRegistry, parse_devices
-from .planner import PlanInput, PlanResult, StorageState, compute_plan
+from .planner import (
+    PlanInput,
+    PlanResult,
+    StorageState,
+    block_windows,
+    compute_plan,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -522,6 +528,23 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         ]
         thermal = reg.thermals[0] if reg.thermals else None
 
+        # Darstellungshorizont der Plankarte: der ganze heutige und der ganze
+        # morgige Kalendertag (lokal), plus die Sonnenzeiten beider Tage für
+        # die PV-Glocken. Der Planner rechnet ausschließlich in UTC.
+        today_local = dt_util.now().date()
+        tomorrow_local = today_local + timedelta(days=1)
+        horizon_start = dt_util.as_utc(dt_util.start_of_local_day())
+        horizon_end = dt_util.as_utc(
+            dt_util.start_of_local_day(today_local + timedelta(days=2))
+        )
+        ww_sperren = block_windows(
+            thermal.block_start if thermal else None,
+            thermal.block_end if thermal else None,
+            horizon_start,
+            horizon_end,
+            dt_util.DEFAULT_TIME_ZONE,
+        )
+
         data.plan = compute_plan(
             PlanInput(
                 now=now,
@@ -546,6 +569,17 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 free_h=float(self._opt(CONF_FREE_H, DEFAULT_FREE_H)),
                 next_sunrise=next_sunrise,
                 load_profile_w=self._load_profile,
+                horizon_start=horizon_start,
+                horizon_end=horizon_end,
+                today_sunrise=get_astral_event_date(self.hass, "sunrise", today_local),
+                today_sunset=get_astral_event_date(self.hass, "sunset", today_local),
+                tomorrow_sunrise=get_astral_event_date(
+                    self.hass, "sunrise", tomorrow_local
+                ),
+                tomorrow_sunset=get_astral_event_date(
+                    self.hass, "sunset", tomorrow_local
+                ),
+                thermal_block_windows=ww_sperren,
             )
         )
 

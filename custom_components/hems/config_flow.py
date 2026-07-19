@@ -122,6 +122,8 @@ THERMAL_SCHEMA = vol.Schema(
         vol.Required("comfort_target", default=DEFAULT_COMFORT_TARGET): _number(
             30, 70, "°C"
         ),
+        vol.Optional("block_start"): selector.TimeSelector(),
+        vol.Optional("block_end"): selector.TimeSelector(),
     }
 )
 

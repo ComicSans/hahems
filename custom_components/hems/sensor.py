@@ -140,7 +140,6 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
                     "von": dt_util.as_local(s.start).isoformat(),
                     "bis": dt_util.as_local(s.end).isoformat(),
                     "watt": s.watt,
-                    "soc_erwartet": s.soc_erwartet,
                 }
                 for s in d.plan.einspeiseplan
             ],
@@ -153,6 +152,20 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
                 }
                 for s in d.plan.pv_kurve
             ],
+            # Erwarteter SoC-Verlauf ab jetzt bis zum Ende des Folgetags
+            "soc_prognose": [
+                {"zeit": dt_util.as_local(p.zeit).isoformat(), "soc": p.soc}
+                for p in d.plan.soc_prognose
+            ],
+            # Warmwasser-Sperrzeiten im Darstellungshorizont
+            "ww_sperren": [
+                {
+                    "von": dt_util.as_local(start).isoformat(),
+                    "bis": dt_util.as_local(end).isoformat(),
+                }
+                for start, end in d.plan.ww_sperrfenster
+            ],
+            "ww_gesperrt": d.plan.ww_gesperrt,
             "pv_rest_heute_kwh": d.pv_remaining_kwh,
             "pv_morgen_kwh": d.pv_tomorrow_kwh,
             "speicher_soc": d.plan.speicher_soc,
