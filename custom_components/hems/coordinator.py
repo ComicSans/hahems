@@ -39,9 +39,35 @@ STATS_CACHE = timedelta(hours=6)
 WEATHER_CACHE = timedelta(minutes=30)
 NIGHT_HOURS_LOCAL = (22, 23, 0, 1, 2, 3, 4, 5)
 
+# Volles 24-h-Lastprofil aus dem rekonstruierten Hausverbrauch
+PROFILE_DAYS = timedelta(days=28)
+MIN_PROFILE_SAMPLES = 2  # Mindest-Beobachtungen je (Tagtyp, Stunde)-Bucket
+MIN_PROFILE_BUCKETS = 6  # darunter gilt das Profil als zu dünn, Fallback greift
+
 # Umrechnung nach W bzw. kWh; Sensoren ohne Einheit werden als W/kWh gelesen.
 POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
+
+
+def _profile_rows(
+    profile: dict[tuple[int, int], float] | None, now: datetime
+) -> list[dict]:
+    """Gelerntes Profil für die Anzeige in lokale Stunden umrechnen."""
+    if not profile:
+        return []
+    midnight = now.replace(minute=0, second=0, microsecond=0)
+    rows: list[dict] = []
+    for utc_hour in range(24):
+        werktag = profile.get((0, utc_hour))
+        wochenende = profile.get((1, utc_hour))
+        if werktag is None and wochenende is None:
+            continue
+        local_hour = dt_util.as_local(midnight.replace(hour=utc_hour)).hour
+        rows.append(
+            {"stunde": local_hour, "werktag_w": werktag, "wochenende_w": wochenende}
+        )
+    rows.sort(key=lambda r: r["stunde"])
+    return rows
 
 
 class HemsData:
@@ -60,6 +86,8 @@ class HemsData:
         self.wp_w: float | None = None
         self.wallbox_w: float | None = None
         self.haus_w: float | None = None
+        self.lastprofil_quelle: str = ""
+        self.lastprofil: list[dict] = []
         self.plan: PlanResult = PlanResult()
 
 
@@ -75,7 +103,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self.mode: str = MODE_OBSERVE
         self._night_load_w: float | None = None
         self._night_load_fetched: datetime | None = None
-        self._load_profile: dict[int, float] | None = None  # UTC-Stunde → W
+        # (Tagtyp, UTC-Stunde) → mittlere Last in W; Tagtyp 0 = Werktag, 1 = Wochenende
+        self._load_profile: dict[tuple[int, int], float] | None = None
+        self._profile_source: str = "konstante"
         self._weather_cache: tuple[str | None, float | None] = (None, None)
         self._weather_fetched: datetime | None = None
         self._unit_warned: set[str] = set()
@@ -158,12 +188,15 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         vals = [v for e in entity_ids if e and (v := self._power_w(e)) is not None]
         return round(sum(vals), 0) if vals else None
 
-    async def _night_load(self) -> float:
-        """Nachtlast und Stunden-Lastprofil aus den Zähler-Statistiken lernen.
+    async def _refresh_load_model(self) -> float:
+        """Lastmodell lernen: Nacht-Grundlast (Skalar) und 24-h-Lastprofil.
 
-        Nebenprodukt `self._load_profile`: mittlere Last je UTC-Stunde über die
-        letzten 14 Tage — nur für Nachtstunden, tagsüber verfälscht PV den
-        Zählerwert. Fallback: konfigurierter Wert, falls Statistik fehlt.
+        Primärquelle für das Profil ist der bereits rekonstruierte Haus-
+        verbrauch (`lastfluss`-Sensor, PV- und akkukompensiert) — damit
+        bekommen auch die Tagesstunden ein echtes Profil, nicht nur die
+        Nacht. Fehlt dessen Historie (frische Installation), greift das
+        Nacht-Profil aus dem rohen Zähler, zuletzt der konfigurierte
+        Konstantwert. Rückgabe ist die Nacht-Grundlast als Fallback-Skalar.
         """
         fallback = float(self._opt(CONF_NIGHT_W, DEFAULT_NIGHT_W))
         now = dt_util.utcnow()
@@ -174,51 +207,126 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         ):
             return self._night_load_w
 
-        meter = self._opt(CONF_METER, None)
-        learned: float | None = None
-        by_hour: dict[int, list[float]] = {}
+        night_scalar, night_profile = await self._meter_night_stats(now)
+        house_profile = await self._house_load_profile(now)
+
+        if house_profile:
+            self._load_profile = house_profile
+            self._profile_source = "hausverbrauch (24 h)"
+        elif night_profile:
+            self._load_profile = night_profile
+            self._profile_source = "zähler-nacht"
+        else:
+            self._load_profile = None
+            self._profile_source = "konstante"
+
+        self._night_load_w = (
+            night_scalar if night_scalar and night_scalar > 0 else fallback
+        )
+        self._night_load_fetched = now
+        return self._night_load_w
+
+    async def _statistics_hourly_mean(
+        self, stat_id: str, start: datetime
+    ) -> list[dict] | None:
+        """Stündliche Mittelwert-Statistik ab `start` lesen (oder None)."""
         try:
             from homeassistant.components.recorder import get_instance
             from homeassistant.components.recorder.statistics import (
                 statistics_during_period,
             )
 
-            start = now - timedelta(days=14)
             stats = await get_instance(self.hass).async_add_executor_job(
                 statistics_during_period,
                 self.hass,
                 start,
                 None,
-                {meter},
+                {stat_id},
                 "hour",
                 None,
                 {"mean"},
             )
-            means = []
-            for row in stats.get(meter, []):
-                ts = row.get("start")
-                mean = row.get("mean")
-                if ts is None or mean is None:
-                    continue
-                utc = dt_util.utc_from_timestamp(ts)
-                if dt_util.as_local(utc).hour in NIGHT_HOURS_LOCAL:
-                    # Nur Bezug zählt; ein evtl. gedeckelter Zähler liefert eh >= 0
-                    val = max(0.0, float(mean))
-                    means.append(val)
-                    by_hour.setdefault(utc.hour, []).append(val)
-            if means:
-                learned = sum(means) / len(means)
         except Exception as err:  # Statistik ist optional, nie fatal
-            _LOGGER.debug("Nachtlast-Statistik nicht verfügbar: %s", err)
+            _LOGGER.debug("Statistik für %s nicht verfügbar: %s", stat_id, err)
+            return None
+        return stats.get(stat_id, [])
 
-        self._load_profile = (
-            {h: round(sum(v) / len(v), 1) for h, v in by_hour.items()}
-            if by_hour
-            else None
+    async def _meter_night_stats(
+        self, now: datetime
+    ) -> tuple[float | None, dict[tuple[int, int], float] | None]:
+        """Nachtlast aus dem rohen Zähler (14 Tage) als Fallback lernen.
+
+        Nur Nachtstunden, weil tagsüber PV den Zählerwert verfälscht. Liefert
+        den Skalar-Mittelwert und ein Nacht-Profil, das auf beide Wochentag-
+        typen gespiegelt wird — es dient nur, bis der Hausverbrauch genug
+        Historie für ein volles 24-h-Profil hat.
+        """
+        meter = self._opt(CONF_METER, None)
+        if not meter:
+            return None, None
+        rows = await self._statistics_hourly_mean(meter, now - timedelta(days=14))
+        if not rows:
+            return None, None
+
+        by_hour: dict[int, list[float]] = {}
+        for row in rows:
+            ts, mean = row.get("start"), row.get("mean")
+            if ts is None or mean is None:
+                continue
+            utc = dt_util.utc_from_timestamp(ts)
+            if dt_util.as_local(utc).hour in NIGHT_HOURS_LOCAL:
+                # Nur Bezug zählt; ein evtl. gedeckelter Zähler liefert eh >= 0
+                by_hour.setdefault(utc.hour, []).append(max(0.0, float(mean)))
+        if not by_hour:
+            return None, None
+
+        all_vals = [v for vals in by_hour.values() for v in vals]
+        scalar = sum(all_vals) / len(all_vals)
+        profile: dict[tuple[int, int], float] = {}
+        for hour, vals in by_hour.items():
+            watt = round(sum(vals) / len(vals), 1)
+            profile[(0, hour)] = watt  # Werktag
+            profile[(1, hour)] = watt  # Wochenende (mangels Daten identisch)
+        return scalar, profile
+
+    async def _house_load_profile(
+        self, now: datetime
+    ) -> dict[tuple[int, int], float] | None:
+        """Volles 24-h-Lastprofil aus dem rekonstruierten Hausverbrauch lernen.
+
+        Quelle ist der integrationseigene `lastfluss`-Sensor (state_class
+        measurement → Langzeitstatistik). Gebündelt nach Wochentagstyp
+        (Werktag/Wochenende) und UTC-Stunde über `PROFILE_DAYS`. Buckets mit
+        zu wenigen Beobachtungen werden verworfen; ist das Profil insgesamt zu
+        dünn, greift der Aufrufer auf das Nacht-Profil zurück.
+        """
+        from homeassistant.helpers import entity_registry as er
+
+        ent_reg = er.async_get(self.hass)
+        stat_id = ent_reg.async_get_entity_id(
+            "sensor", DOMAIN, f"{self.entry.entry_id}_lastfluss"
         )
-        self._night_load_w = learned if learned and learned > 0 else fallback
-        self._night_load_fetched = now
-        return self._night_load_w
+        if not stat_id:
+            return None
+        rows = await self._statistics_hourly_mean(stat_id, now - PROFILE_DAYS)
+        if not rows:
+            return None
+
+        buckets: dict[tuple[int, int], list[float]] = {}
+        for row in rows:
+            ts, mean = row.get("start"), row.get("mean")
+            if ts is None or mean is None:
+                continue
+            utc = dt_util.utc_from_timestamp(ts)
+            daytype = 1 if utc.weekday() >= 5 else 0
+            buckets.setdefault((daytype, utc.hour), []).append(max(0.0, float(mean)))
+
+        profile = {
+            key: round(sum(vals) / len(vals), 1)
+            for key, vals in buckets.items()
+            if len(vals) >= MIN_PROFILE_SAMPLES
+        }
+        return profile if len(profile) >= MIN_PROFILE_BUCKETS else None
 
     async def _weather_tomorrow(self) -> tuple[str | None, float | None]:
         """Wetterlage und PV-Ertragsfaktor (0–1) für morgen bestimmen.
@@ -365,7 +473,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 pv_power_now_w=data.pv_power_now_w,
                 saldo_w=data.saldo_w,
                 storages=storages,
-                night_load_w=await self._night_load(),
+                night_load_w=await self._refresh_load_model(),
                 baseline_load_w=float(
                     self._opt(CONF_BASELINE_W, DEFAULT_BASELINE_W)
                 ),
@@ -380,6 +488,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 load_profile_w=self._load_profile,
             )
         )
+
+        data.lastprofil_quelle = self._profile_source
+        data.lastprofil = _profile_rows(self._load_profile, now)
 
         if self.mode == MODE_OBSERVE:
             _LOGGER.info("HEMS-Empfehlung: %s", data.plan.empfehlung)

@@ -43,9 +43,13 @@ Parameter des einzelnen Geräts. Ein vierter Akku = neue Storage-Instanz, fertig
 ## Architektur (vier Module)
 
 1. **Forecast-Fusion**: aggregiert alle ForecastSources, rechnet gegen ein
-   Lastprofil (aus Recorder-Langzeitstatistiken gelernt, Fallback: konfigurierte
-   Grundlast). Liefert u.a. PV-Rest heute, PV morgen, Überschuss-Prognose,
-   Nachtdefizit, Sonnenfenster.
+   gelerntes Lastprofil. Primärquelle ist der rekonstruierte Hausverbrauch
+   (`lastfluss` = PV + Netzsaldo + Akku, PV- und akkukompensiert), aus dem ein
+   volles 24-h-Profil je Wochentagstyp (Werktag/Wochenende, UTC-Stunde, 28 Tage
+   Langzeitstatistik) gebildet wird. Fällt die Historie noch aus, greift das
+   Nacht-Profil aus dem rohen Zähler (14 Tage, nur Nachtstunden), zuletzt die
+   konfigurierte Grundlast. Liefert u.a. PV-Rest heute, PV morgen,
+   Überschuss-Prognose, Nachtdefizit, Sonnenfenster.
 2. **Planner**: rollierender Plan in 15-min-Slots (24-48 h), prognosebasierte
    Heuristik. Pro Slot: WW-Basis → Hausverbrauch → (WW-Komfort | Akku | Auto in
    prognoseabhängiger Reihenfolge) → Einspeisung als Rest.
@@ -99,7 +103,8 @@ Parameter des einzelnen Geräts. Ein vierter Akku = neue Storage-Instanz, fertig
    Reserve) als stündliche Einspeise-Obergrenzen über die Nacht ("gleichmäßig
    strecken", damit der Akku bis Sonnenaufgang reicht); live soll die
    Einspeisung später saldo-geführt darunter bleiben. Die Stundenwerte kommen
-   aus einem gelernten Nacht-Lastprofil (14 Tage Zähler-Statistik je Stunde),
+   aus dem gelernten Lastprofil (24 h je Wochentagstyp aus dem rekonstruierten
+   Hausverbrauch, Nacht-Zählerprofil als Fallback bis genug Historie da ist),
    die zugehörige **hems-plan-card** zeigt Plan, SoC-Verlauf und die
    PV-Stundenkurve für heute und morgen.
    Nebenbei: Vorzeichenverhalten der 16.7.0 gegen Historie klären
