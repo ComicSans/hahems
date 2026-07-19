@@ -1,0 +1,14 @@
+{
+  "domain": "hems",
+  "name": "HEMS",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["sun", "http", "frontend"],
+  "after_dependencies": ["recorder"],
+  "documentation": "https://github.com/tobiasreithmeier/hems",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/tobiasreithmeier/hems/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
