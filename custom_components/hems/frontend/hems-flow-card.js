@@ -234,12 +234,16 @@ class HemsFlowCard extends HTMLElement {
   }
 }
 
-customElements.define("hems-flow-card", HemsFlowCard);
+if (!customElements.get("hems-flow-card")) {
+  customElements.define("hems-flow-card", HemsFlowCard);
+}
 
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "hems-flow-card",
-  name: "HEMS Lastfluss",
-  description: "Animierter Energiefluss zwischen PV, Netz, Batterie und Haus.",
-  preview: true,
-});
+if (!window.customCards.some((c) => c.type === "hems-flow-card")) {
+  window.customCards.push({
+    type: "hems-flow-card",
+    name: "HEMS Lastfluss",
+    description: "Animierter Energiefluss zwischen PV, Netz, Batterie und Haus.",
+    preview: true,
+  });
+}

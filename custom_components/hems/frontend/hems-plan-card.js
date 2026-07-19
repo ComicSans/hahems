@@ -255,12 +255,16 @@ class HemsPlanCard extends HTMLElement {
   }
 }
 
-customElements.define("hems-plan-card", HemsPlanCard);
+if (!customElements.get("hems-plan-card")) {
+  customElements.define("hems-plan-card", HemsPlanCard);
+}
 
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "hems-plan-card",
-  name: "HEMS Einspeiseplan",
-  description: "Nächtlicher Einspeiseplan mit SoC-Verlauf und PV-Prognose für heute und morgen.",
-  preview: true,
-});
+if (!window.customCards.some((c) => c.type === "hems-plan-card")) {
+  window.customCards.push({
+    type: "hems-plan-card",
+    name: "HEMS Einspeiseplan",
+    description: "Nächtlicher Einspeiseplan mit SoC-Verlauf und PV-Prognose für heute und morgen.",
+    preview: true,
+  });
+}
