@@ -31,7 +31,8 @@ Variante manuell: den Ordner `custom_components/hems/` in das
 - `sensor.hems_nachtdefizit` (kWh, erwarteter Verbrauch Sonnenuntergang → Sonnenaufgang)
 - `sensor.hems_ueberschuss_rest_heute` (kWh, Prognose)
 - `sensor.hems_speicher_soc` / `hems_speicher_verfuegbar` / `hems_speicher_ziel_soc`
-- `sensor.hems_empfehlung` (Text; Details als Attribute)
+- `sensor.hems_empfehlung` (Text; Details als Attribute, u.a. das gelernte
+  24-h-Lastprofil je Wochentagstyp und dessen Quelle `lastprofil_quelle`)
 - `sensor.hems_lastfluss` (W, Hausverbrauch; alle Flusswerte als Attribute)
 - `sensor.hems_einspeiseplan` (W, geplante Einspeisung jetzt; Stunden-Slots,
   SoC-Verlauf und PV-Stundenkurve als Attribute)

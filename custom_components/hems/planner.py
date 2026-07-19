@@ -45,9 +45,11 @@ class PlanInput:
     # Nächster Sonnenaufgang ab jetzt. Nachts liegt er vor dem nächsten
     # Sonnenuntergang und markiert das Ende des laufenden Nachtfensters.
     next_sunrise: datetime | None = None
-    # Gelerntes Lastprofil: UTC-Stunde → mittlere Last in W. Fehlt eine
-    # Stunde (oder das ganze Profil), gilt night_load_w als Fallback.
-    load_profile_w: dict[int, float] | None = None
+    # Gelerntes Lastprofil: (Tagtyp, UTC-Stunde) → mittlere Last in W, mit
+    # Tagtyp 0 = Werktag, 1 = Wochenende. Fehlt der passende Eintrag (oder das
+    # ganze Profil), greift die gleiche Stunde im anderen Tagtyp, sonst
+    # night_load_w als Fallback.
+    load_profile_w: dict[tuple[int, int], float] | None = None
 
 
 @dataclass
@@ -126,8 +128,12 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         result.speicher_bedarf_kwh = round(max(0.0, ziel_kwh - available), 2)
         speicher_frei_kwh = max(0.0, available - ziel_kwh)
 
-    # Erwarteter Restverbrauch des Tages (v1: Grundlast; lernendes Profil folgt)
-    expected_day_kwh = inp.baseline_load_w * result.sonnenfenster_h / 1000
+    # Erwarteter Restverbrauch bis Sonnenuntergang: aus dem gelernten Profil,
+    # sofern es die Tagesstunden abdeckt, sonst die konfigurierte Grundlast.
+    if _profile_covers(inp, inp.now, inp.sunset):
+        expected_day_kwh = _window_load_kwh(inp, inp.now, inp.sunset)
+    else:
+        expected_day_kwh = inp.baseline_load_w * result.sonnenfenster_h / 1000
     result.ueberschuss_rest_kwh = round(
         max(0.0, inp.pv_remaining_kwh - expected_day_kwh), 2
     )
@@ -163,11 +169,34 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     return result
 
 
+def _daytype(t: datetime) -> int:
+    """0 = Werktag (Mo–Fr), 1 = Wochenende (Sa/So). UTC, wie das Profil."""
+    return 1 if t.weekday() >= 5 else 0
+
+
 def _expected_load_w(inp: PlanInput, t: datetime) -> float:
-    """Erwartete Last zur Stunde von t: gelerntes Profil, sonst Nachtlast."""
-    if inp.load_profile_w and t.hour in inp.load_profile_w:
-        return inp.load_profile_w[t.hour]
+    """Erwartete Last zur Stunde von t: gelerntes Profil (Tagtyp + Stunde),
+    sonst gleiche Stunde im anderen Tagtyp, sonst Nachtlast."""
+    prof = inp.load_profile_w
+    if prof:
+        key = (_daytype(t), t.hour)
+        if key in prof:
+            return prof[key]
+        same_hour = [w for (_d, h), w in prof.items() if h == t.hour]
+        if same_hour:
+            return sum(same_hour) / len(same_hour)
     return inp.night_load_w
+
+
+def _profile_covers(inp: PlanInput, start: datetime, end: datetime) -> bool:
+    """True, wenn das Profil jede Stunde des Fensters (in einem Tagtyp) kennt."""
+    prof = inp.load_profile_w
+    if not prof:
+        return False
+    return all(
+        (0, t.hour) in prof or (1, t.hour) in prof
+        for t, _nxt in _hour_slots(start, end)
+    )
 
 
 def _hour_slots(start: datetime, end: datetime) -> list[tuple[datetime, datetime]]:

@@ -170,6 +170,9 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "wetter_morgen": d.wetter_morgen,
             "wetter_faktor_morgen": d.wetter_faktor_morgen,
             "morgen_knapp": d.plan.morgen_knapp,
+            # Gelerntes Lastprofil (Phase 1: Validierung)
+            "lastprofil_quelle": d.lastprofil_quelle,
+            "lastprofil": d.lastprofil,
         },
     ),
 )
