@@ -234,9 +234,22 @@ class HemsFlowCard extends HTMLElement {
   }
 }
 
-if (!customElements.get("hems-flow-card")) {
-  customElements.define("hems-flow-card", HemsFlowCard);
+// Erst nach dem window-load registrieren. HA bindet Karten aus
+// add_extra_js_url per dynamischem import() im <head> ein, also im Rennen mit
+// dem Frontend-Bundle. Gewinnt diese Datei, landet define() in der nativen
+// Registry; danach ersetzt HA window.customElements durch
+// scoped-custom-element-registry mit eigener Map und findet die Karte nicht
+// mehr ("Custom element not found"). Ein zweites define() ist keine Option:
+// dieselbe Klasse darf nur einmal registriert werden.
+function defineWhenReady(tag, cls) {
+  const define = () => {
+    if (!window.customElements.get(tag)) window.customElements.define(tag, cls);
+  };
+  if (document.readyState === "complete") define();
+  else window.addEventListener("load", define, { once: true });
 }
+
+defineWhenReady("hems-flow-card", HemsFlowCard);
 
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === "hems-flow-card")) {
