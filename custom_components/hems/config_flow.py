@@ -77,9 +77,11 @@ def _priority_mode() -> selector.SelectSelector:
 FORECAST_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
-        vol.Required("energy_today"): _entity(device_class="energy"),
-        vol.Required("energy_remaining"): _entity(device_class="energy"),
-        vol.Required("energy_tomorrow"): _entity(device_class="energy"),
+        # Kein device_class-Filter: viele Prognose-Integrationen liefern
+        # kWh-Sensoren ohne device_class "energy".
+        vol.Required("energy_today"): _entity(),
+        vol.Required("energy_remaining"): _entity(),
+        vol.Required("energy_tomorrow"): _entity(),
         vol.Optional("power_now"): _entity(device_class="power"),
     }
 )
@@ -87,7 +89,9 @@ FORECAST_SCHEMA = vol.Schema(
 STORAGE_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
-        vol.Required("soc_entity"): _entity(device_class="battery"),
+        # Kein device_class-Filter: SoC-Sensoren vieler Wechselrichter-
+        # Integrationen haben keine device_class "battery".
+        vol.Required("soc_entity"): _entity(),
         vol.Optional("power_entity"): _entity(device_class="power"),
         vol.Required("capacity_kwh"): _number(0.1, 100, "kWh", 0.01),
         vol.Required("reserve_soc", default=DEFAULT_RESERVE_SOC): _number(0, 100, "%"),
