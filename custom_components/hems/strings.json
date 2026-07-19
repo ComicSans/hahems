@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Set up HEMS",
-        "description": "HEMS automatically distributes your PV surplus to hot water, home battery and flexible loads.\n\n**How it works:** the meter at the grid connection reports whether you are currently exporting (surplus) or importing power. Combined with the PV forecast, battery state and your priorities, this drives the recommendation and, later, the control.\n\nIn the next step you add your devices right away: PV forecasts, storage, hot water, plus switchable and modulated loads. Every entry can be edited at any time later via **Configure**.",
+        "description": "HEMS automatically distributes your PV surplus to hot water, home battery and flexible loads.\n\n**How it works:** the meter at the grid connection reports whether you are currently exporting (surplus) or importing power. Combined with the PV forecast, battery state and your priorities, this drives the recommendation and, later, the control.\n\nThe setup then guides you step by step through your devices: PV forecasts, storage, hot water, plus switchable and modulated loads. Every step can be skipped and every entry can be edited at any time later via **Configure**.",
         "data": {
           "meter_entity": "Meter (power at grid connection)",
           "invert_meter": "Invert sign",
@@ -17,18 +17,6 @@
           "baseline_load_w": "Typical continuous consumption of the house during the day without large consumers (fridge, network, standby).",
           "night_load_w": "Initial value for night-time consumption. HEMS learns the real value automatically from meter statistics after a few days.",
           "priority_mode": "Where should surplus go first? \"Automatic\" fills the battery first when yield is scarce so the night is covered; with plenty of yield the EV may charge first. Hot-water base heating always has top priority."
-        }
-      },
-      "devices": {
-        "title": "Add devices",
-        "description": "Add your devices now: PV forecast, storage (battery), hot water, switchable loads (e.g. heat pump) and modulated loads (e.g. wallbox for the EV).\n\nDevices added so far: {count}. Via **Configure** you can add, edit or remove devices at any time later.",
-        "menu_options": {
-          "add_forecast": "Add PV forecast plane",
-          "add_storage": "Add storage (battery)",
-          "add_thermal": "Add hot water storage",
-          "add_switchable": "Add switchable load (e.g. heat pump)",
-          "add_modulated": "Add modulated load (e.g. wallbox)",
-          "finish": "Finish setup"
         }
       },
       "add_forecast": {
@@ -107,6 +95,46 @@
           "current_entity": "Number entity used to set the current setpoint.",
           "min_a": "The device cannot operate below this current (wallbox minimum is usually 6 A).",
           "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
+        }
+      },
+      "forecast_menu": {
+        "title": "PV forecast planes (step 2 of 6)",
+        "description": "A **PV forecast plane** provides the expected solar production, e.g. from the Forecast.Solar or Solcast integration. Add multiple planes (east/west roof) separately — HEMS sums them automatically.\n\nAdded so far: {count}",
+        "menu_options": {
+          "add_forecast": "Add PV forecast plane",
+          "storage_menu": "Continue to storage"
+        }
+      },
+      "storage_menu": {
+        "title": "Storage / battery (step 3 of 6)",
+        "description": "A **storage** (home battery) buffers PV surplus for the night. HEMS derives a target state of charge from night consumption and reserve and schedules charging within the solar window.\n\nAdded so far: {count}",
+        "menu_options": {
+          "add_storage": "Add storage (battery)",
+          "thermal_menu": "Continue to hot water"
+        }
+      },
+      "thermal_menu": {
+        "title": "Hot water (step 4 of 6)",
+        "description": "A **hot water storage** stores surplus as heat. The base target is always maintained — from the grid if necessary. Heating up to the comfort target happens only on PV surplus.\n\nAdded so far: {count}",
+        "menu_options": {
+          "add_thermal": "Add hot water storage",
+          "switchable_menu": "Continue to switchable loads"
+        }
+      },
+      "switchable_menu": {
+        "title": "Switchable loads (step 5 of 6)",
+        "description": "**Switchable (sheddable) loads** are devices HEMS can only turn on or off — their power cannot be modulated. Examples: heat pump (SG-Ready/blocking contact), heating rod, pool pump. Minimum runtime and minimum pause protect the device from frequent cycling.\n\nAdded so far: {count}",
+        "menu_options": {
+          "add_switchable": "Add switchable load (e.g. heat pump)",
+          "modulated_menu": "Continue to modulated loads"
+        }
+      },
+      "modulated_menu": {
+        "title": "Modulated loads (step 6 of 6)",
+        "description": "**Modulated loads** can adjust their power consumption continuously. The typical example is a wallbox whose charging current (in amperes) can be regulated between a minimum and maximum. HEMS continuously tracks the setpoint to the available surplus.\n\nAdded so far: {count}",
+        "menu_options": {
+          "add_modulated": "Add modulated load (e.g. wallbox)",
+          "finish": "Finish setup"
         }
       }
     },

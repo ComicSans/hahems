@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "HEMS einrichten",
-        "description": "HEMS verteilt deinen PV-Überschuss automatisch auf Warmwasser, Hausakku und flexible Verbraucher.\n\n**So funktioniert es:** Der Zähler am Netzanschluss meldet, ob du gerade einspeist (Überschuss) oder Strom beziehst. Aus PV-Prognose, Speicherstand und deinen Prioritäten entsteht daraus die Empfehlung bzw. Steuerung.\n\nIm nächsten Schritt fügst du direkt deine Geräte hinzu: PV-Prognosen, Speicher, Warmwasser sowie schaltbare und modulierbare Lasten. Jeder Eintrag lässt sich später über **Konfigurieren** jederzeit bearbeiten.",
+        "description": "HEMS verteilt deinen PV-Überschuss automatisch auf Warmwasser, Hausakku und flexible Verbraucher.\n\n**So funktioniert es:** Der Zähler am Netzanschluss meldet, ob du gerade einspeist (Überschuss) oder Strom beziehst. Aus PV-Prognose, Speicherstand und deinen Prioritäten entsteht daraus die Empfehlung bzw. Steuerung.\n\nAnschließend führt dich die Einrichtung Schritt für Schritt durch deine Geräte: PV-Prognosen, Speicher, Warmwasser sowie schaltbare und modulierbare Lasten. Jeder Schritt lässt sich überspringen und jeder Eintrag später über **Konfigurieren** jederzeit bearbeiten.",
         "data": {
           "meter_entity": "Zähler (Leistung am Netzanschluss)",
           "invert_meter": "Vorzeichen invertieren",
@@ -17,18 +17,6 @@
           "baseline_load_w": "Typischer Dauerverbrauch des Hauses tagsüber ohne große Verbraucher (Kühlschrank, Netzwerk, Standby).",
           "night_load_w": "Startwert für den Verbrauch in der Nacht. HEMS lernt den echten Wert nach einigen Tagen automatisch aus der Zählerstatistik.",
           "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ sichert bei knappem Ertrag zuerst den Akku für die Nacht ab, bei reichlich Ertrag darf das E-Auto zuerst laden. Die Warmwasser-Basisladung hat immer Vorrang."
-        }
-      },
-      "devices": {
-        "title": "Geräte hinzufügen",
-        "description": "Lege jetzt deine Geräte an: PV-Prognose, Speicher (Akku), Warmwasser, schaltbare Lasten (z.B. Wärmepumpe) und modulierbare Lasten (z.B. Wallbox fürs E-Auto).\n\nBisher angelegte Geräte: {count}. Über **Konfigurieren** kannst du später jederzeit Geräte hinzufügen, bearbeiten oder entfernen.",
-        "menu_options": {
-          "add_forecast": "PV-Prognosefläche hinzufügen",
-          "add_storage": "Speicher (Akku) hinzufügen",
-          "add_thermal": "Warmwasserspeicher hinzufügen",
-          "add_switchable": "Schaltbare Last hinzufügen (z.B. Wärmepumpe)",
-          "add_modulated": "Modulierbare Last hinzufügen (z.B. Wallbox)",
-          "finish": "Einrichtung abschließen"
         }
       },
       "add_forecast": {
@@ -107,6 +95,46 @@
           "current_entity": "Number-Entität, über die der Strom-Sollwert gesetzt wird.",
           "min_a": "Unterhalb dieses Stroms kann das Gerät nicht arbeiten (Wallbox-Minimum meist 6 A).",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
+        }
+      },
+      "forecast_menu": {
+        "title": "PV-Prognoseflächen (Schritt 2 von 6)",
+        "description": "Eine **PV-Prognosefläche** liefert die erwartete Solarerzeugung, z.B. aus der Forecast.Solar- oder Solcast-Integration. Mehrere Flächen (etwa Ost- und Westdach) legst du einzeln an – HEMS summiert sie automatisch.\n\nBisher angelegt: {count}",
+        "menu_options": {
+          "add_forecast": "PV-Prognosefläche hinzufügen",
+          "storage_menu": "Weiter zu Speicher"
+        }
+      },
+      "storage_menu": {
+        "title": "Speicher / Akku (Schritt 3 von 6)",
+        "description": "Ein **Speicher** (Hausakku) puffert PV-Überschuss für die Nacht. HEMS berechnet aus Nachtverbrauch und Reserve einen Ziel-Ladestand und plant die Ladung in das Sonnenfenster.\n\nBisher angelegt: {count}",
+        "menu_options": {
+          "add_storage": "Speicher (Akku) hinzufügen",
+          "thermal_menu": "Weiter zu Warmwasser"
+        }
+      },
+      "thermal_menu": {
+        "title": "Warmwasser (Schritt 4 von 6)",
+        "description": "Ein **Warmwasserspeicher** speichert Überschuss als Wärme. Das Basis-Soll wird immer gehalten – notfalls mit Netzstrom. Auf das Komfort-Soll wird nur bei PV-Überschuss aufgeheizt.\n\nBisher angelegt: {count}",
+        "menu_options": {
+          "add_thermal": "Warmwasserspeicher hinzufügen",
+          "switchable_menu": "Weiter zu schaltbaren Lasten"
+        }
+      },
+      "switchable_menu": {
+        "title": "Schaltbare Lasten (Schritt 5 von 6)",
+        "description": "**Schaltbare (abschaltbare) Lasten** sind Geräte, die HEMS nur ein- oder ausschalten kann – ihre Leistung lässt sich nicht stufenlos regeln. Beispiele: Wärmepumpe (SG-Ready/Sperrkontakt), Heizstab, Poolpumpe. Mindestlaufzeit und Mindestpause schützen das Gerät vor häufigem Takten.\n\nBisher angelegt: {count}",
+        "menu_options": {
+          "add_switchable": "Schaltbare Last hinzufügen (z.B. Wärmepumpe)",
+          "modulated_menu": "Weiter zu modulierbaren Lasten"
+        }
+      },
+      "modulated_menu": {
+        "title": "Modulierbare Lasten (Schritt 6 von 6)",
+        "description": "**Modulierbare Lasten** können ihre Leistungsaufnahme stufenlos anpassen. Typisches Beispiel ist eine Wallbox, deren Ladestrom (in Ampere) sich zwischen Minimum und Maximum regeln lässt. HEMS führt den Sollwert laufend dem verfügbaren Überschuss nach.\n\nBisher angelegt: {count}",
+        "menu_options": {
+          "add_modulated": "Modulierbare Last hinzufügen (z.B. Wallbox)",
+          "finish": "Einrichtung abschließen"
         }
       }
     },

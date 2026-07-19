@@ -146,6 +146,15 @@ ROLE_SCHEMAS = {
     ROLE_MODULATED: MODULATED_SCHEMA,
 }
 
+# Onboarding-Assistent: Reihenfolge der Kategorie-Schritte
+WIZARD_MENUS = {
+    ROLE_FORECAST: ("forecast_menu", "add_forecast", "storage_menu"),
+    ROLE_STORAGE: ("storage_menu", "add_storage", "thermal_menu"),
+    ROLE_THERMAL: ("thermal_menu", "add_thermal", "switchable_menu"),
+    ROLE_SWITCHABLE: ("switchable_menu", "add_switchable", "modulated_menu"),
+    ROLE_MODULATED: ("modulated_menu", "add_modulated", "finish"),
+}
+
 EDIT_STEPS = {
     ROLE_FORECAST: "edit_forecast",
     ROLE_STORAGE: "edit_storage",
@@ -180,28 +189,39 @@ class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
         if user_input is not None:
             self._general = user_input
-            return await self.async_step_devices()
+            return await self.async_step_forecast_menu()
         return self.async_show_form(step_id="user", data_schema=GENERAL_SCHEMA)
 
-    async def async_step_devices(self, user_input=None):
-        """Geräte direkt bei der Einrichtung anlegen (jederzeit erweiterbar)."""
+    # -- Geführter Assistent: eine Kategorie pro Schritt -------------------
+
+    def _wizard_menu(self, role: str):
+        step_id, add_step, next_step = WIZARD_MENUS[role]
+        count = sum(1 for d in self._devices if d["role"] == role)
         return self.async_show_menu(
-            step_id="devices",
-            menu_options=[
-                "add_forecast",
-                "add_storage",
-                "add_thermal",
-                "add_switchable",
-                "add_modulated",
-                "finish",
-            ],
-            description_placeholders={"count": str(len(self._devices))},
+            step_id=step_id,
+            menu_options=[add_step, next_step],
+            description_placeholders={"count": str(count)},
         )
+
+    async def async_step_forecast_menu(self, user_input=None):
+        return self._wizard_menu(ROLE_FORECAST)
+
+    async def async_step_storage_menu(self, user_input=None):
+        return self._wizard_menu(ROLE_STORAGE)
+
+    async def async_step_thermal_menu(self, user_input=None):
+        return self._wizard_menu(ROLE_THERMAL)
+
+    async def async_step_switchable_menu(self, user_input=None):
+        return self._wizard_menu(ROLE_SWITCHABLE)
+
+    async def async_step_modulated_menu(self, user_input=None):
+        return self._wizard_menu(ROLE_MODULATED)
 
     async def _async_add_step(self, role: str, step_id: str, user_input):
         if user_input is not None:
             self._devices.append({"id": uuid4().hex, "role": role, **user_input})
-            return await self.async_step_devices()
+            return self._wizard_menu(role)
         return self.async_show_form(step_id=step_id, data_schema=ROLE_SCHEMAS[role])
 
     async def async_step_add_forecast(self, user_input=None):
