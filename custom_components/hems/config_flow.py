@@ -25,6 +25,7 @@ from .const import (
     DEFAULT_FREE_H,
     DEFAULT_FREE_KWH,
     DEFAULT_MAX_CHARGE_W,
+    DEFAULT_MAX_DISCHARGE_W,
     DEFAULT_NIGHT_W,
     DEFAULT_RESERVE_SOC,
     DOMAIN,
@@ -98,9 +99,14 @@ STORAGE_SCHEMA = vol.Schema(
         # Integrationen haben keine device_class "battery".
         vol.Required("soc_entity"): _entity(),
         vol.Optional("power_entity"): _entity(device_class="power"),
+        vol.Optional("charge_setpoint_entity"): _entity(["number", "input_number"]),
+        vol.Optional("discharge_setpoint_entity"): _entity(["number", "input_number"]),
         vol.Required("capacity_kwh"): _number(0.1, 100, "kWh", 0.01),
         vol.Required("reserve_soc", default=DEFAULT_RESERVE_SOC): _number(0, 100, "%"),
         vol.Required("max_charge_w", default=DEFAULT_MAX_CHARGE_W): _number(
+            100, 20000, "W"
+        ),
+        vol.Required("max_discharge_w", default=DEFAULT_MAX_DISCHARGE_W): _number(
             100, 20000, "W"
         ),
     }
@@ -135,10 +141,12 @@ MODULATED_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
         vol.Required("current_entity"): _entity(["number", "input_number"]),
+        vol.Optional("switch_entity"): _entity(["switch", "input_boolean"]),
         vol.Optional("power_entity"): _entity(device_class="power"),
         vol.Required("min_a", default=6): _number(1, 32, "A"),
         vol.Required("max_a", default=16): _number(1, 32, "A"),
         vol.Required("phases", default=3): _number(1, 3, ""),
+        vol.Required("min_on_min", default=10): _number(0, 240, "min"),
         vol.Required("priority", default=1): _number(1, 10, ""),
     }
 )

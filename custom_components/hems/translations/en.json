@@ -44,13 +44,19 @@
           "name": "Name",
           "soc_entity": "SoC entity (%)",
           "power_entity": "Power entity (W, optional)",
+          "charge_setpoint_entity": "Charge setpoint entity (W, optional)",
+          "discharge_setpoint_entity": "Feed-in setpoint entity (W, optional)",
           "capacity_kwh": "Capacity (kWh)",
           "reserve_soc": "Reserve SoC (%)",
-          "max_charge_w": "Max. charging power (W)"
+          "max_charge_w": "Max. charging power (W)",
+          "max_discharge_w": "Max. discharge power (W)"
         },
         "data_description": {
+          "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
+          "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge/feed-in power (e.g. “feed in 500 W now”).",
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
-          "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window."
+          "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
+          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house."
         }
       },
       "add_thermal": {
@@ -92,14 +98,18 @@
         "data": {
           "name": "Name",
           "current_entity": "Current setpoint entity (A)",
+          "switch_entity": "Switch entity (optional)",
           "power_entity": "Power entity (W, optional)",
           "min_a": "Minimum current (A)",
           "max_a": "Maximum current (A)",
           "phases": "Phases",
+          "min_on_min": "Minimum runtime (min)",
           "priority": "Priority"
         },
         "data_description": {
           "current_entity": "Number entity used to set the current setpoint.",
+          "switch_entity": "Optional switch HEMS can use to turn the device on and off entirely (e.g. wallbox charging enable).",
+          "min_on_min": "Once started, the device runs for at least this long before HEMS stops it (e.g. charge the EV for at least 10 minutes).",
           "min_a": "The device cannot operate below this current (wallbox minimum is usually 6 A).",
           "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
         }
@@ -182,13 +192,19 @@
           "name": "Name",
           "soc_entity": "SoC entity (%)",
           "power_entity": "Power entity (W, optional)",
+          "charge_setpoint_entity": "Charge setpoint entity (W, optional)",
+          "discharge_setpoint_entity": "Feed-in setpoint entity (W, optional)",
           "capacity_kwh": "Capacity (kWh)",
           "reserve_soc": "Reserve SoC (%)",
-          "max_charge_w": "Max. charging power (W)"
+          "max_charge_w": "Max. charging power (W)",
+          "max_discharge_w": "Max. discharge power (W)"
         },
         "data_description": {
+          "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
+          "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge/feed-in power (e.g. “feed in 500 W now”).",
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
-          "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window."
+          "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
+          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house."
         }
       },
       "add_thermal": {
@@ -230,14 +246,18 @@
         "data": {
           "name": "Name",
           "current_entity": "Current setpoint entity (A)",
+          "switch_entity": "Switch entity (optional)",
           "power_entity": "Power entity (W, optional)",
           "min_a": "Minimum current (A)",
           "max_a": "Maximum current (A)",
           "phases": "Phases",
+          "min_on_min": "Minimum runtime (min)",
           "priority": "Priority"
         },
         "data_description": {
           "current_entity": "Number entity used to set the current setpoint.",
+          "switch_entity": "Optional switch HEMS can use to turn the device on and off entirely (e.g. wallbox charging enable).",
+          "min_on_min": "Once started, the device runs for at least this long before HEMS stops it (e.g. charge the EV for at least 10 minutes).",
           "min_a": "The device cannot operate below this current (wallbox minimum is usually 6 A).",
           "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
         }
@@ -266,13 +286,19 @@
           "name": "Name",
           "soc_entity": "SoC entity (%)",
           "power_entity": "Power entity (W, optional)",
+          "charge_setpoint_entity": "Charge setpoint entity (W, optional)",
+          "discharge_setpoint_entity": "Feed-in setpoint entity (W, optional)",
           "capacity_kwh": "Capacity (kWh)",
           "reserve_soc": "Reserve SoC (%)",
-          "max_charge_w": "Max. charging power (W)"
+          "max_charge_w": "Max. charging power (W)",
+          "max_discharge_w": "Max. discharge power (W)"
         },
         "data_description": {
+          "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
+          "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge/feed-in power (e.g. “feed in 500 W now”).",
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
-          "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window."
+          "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
+          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house."
         }
       },
       "edit_thermal": {
@@ -314,14 +340,18 @@
         "data": {
           "name": "Name",
           "current_entity": "Current setpoint entity (A)",
+          "switch_entity": "Switch entity (optional)",
           "power_entity": "Power entity (W, optional)",
           "min_a": "Minimum current (A)",
           "max_a": "Maximum current (A)",
           "phases": "Phases",
+          "min_on_min": "Minimum runtime (min)",
           "priority": "Priority"
         },
         "data_description": {
           "current_entity": "Number entity used to set the current setpoint.",
+          "switch_entity": "Optional switch HEMS can use to turn the device on and off entirely (e.g. wallbox charging enable).",
+          "min_on_min": "Once started, the device runs for at least this long before HEMS stops it (e.g. charge the EV for at least 10 minutes).",
           "min_a": "The device cannot operate below this current (wallbox minimum is usually 6 A).",
           "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
         }

@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import HemsCoordinator, HemsData
@@ -123,6 +124,40 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         name="Speicher Ziel-SoC",
         native_unit_of_measurement="%",
         value_fn=lambda d: d.plan.speicher_ziel_soc,
+    ),
+    HemsSensorDescription(
+        key="einspeiseplan",
+        name="Einspeiseplan",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        # Zustand = geplante Einspeise-Obergrenze jetzt; tagsüber unbekannt
+        value_fn=lambda d: d.plan.einspeise_w_jetzt,
+        attr_fn=lambda d: {
+            "budget_kwh": d.plan.einspeise_budget_kwh,
+            "slots": [
+                {
+                    "von": dt_util.as_local(s.start).isoformat(),
+                    "bis": dt_util.as_local(s.end).isoformat(),
+                    "watt": s.watt,
+                    "soc_erwartet": s.soc_erwartet,
+                }
+                for s in d.plan.einspeiseplan
+            ],
+            # Daten für die hems-plan-card
+            "pv_kurve": [
+                {
+                    "von": dt_util.as_local(s.start).isoformat(),
+                    "bis": dt_util.as_local(s.end).isoformat(),
+                    "watt": s.watt,
+                }
+                for s in d.plan.pv_kurve
+            ],
+            "pv_rest_heute_kwh": d.pv_remaining_kwh,
+            "pv_morgen_kwh": d.pv_tomorrow_kwh,
+            "speicher_soc": d.plan.speicher_soc,
+            "wetter_morgen": d.wetter_morgen,
+        },
     ),
     HemsSensorDescription(
         key="empfehlung",

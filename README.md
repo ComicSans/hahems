@@ -33,6 +33,8 @@ Variante manuell: den Ordner `custom_components/hems/` in das
 - `sensor.hems_speicher_soc` / `hems_speicher_verfuegbar` / `hems_speicher_ziel_soc`
 - `sensor.hems_empfehlung` (Text; Details als Attribute)
 - `sensor.hems_lastfluss` (W, Hausverbrauch; alle Flusswerte als Attribute)
+- `sensor.hems_einspeiseplan` (W, geplante Einspeisung jetzt; Stunden-Slots,
+  SoC-Verlauf und PV-Stundenkurve als Attribute)
 - `select.hems_modus` (beobachten / aus)
 
 ## Lastfluss-Karte
@@ -55,3 +57,21 @@ Merit-Order des Planners (PV → Haus → Akku → Einspeisung).
 Konventionen: `netz_w` positiv = Netzbezug, `batterie_w` positiv = Entladen.
 Liefert der Speicher ein umgekehrtes Vorzeichen, hilft ein Template-Sensor.
 Die PV-Leistung stammt aus der Prognose und ist als "geschätzt" markiert.
+
+## Einspeiseplan-Karte
+
+Zweite mitgelieferte Karte ("HEMS Einspeiseplan" im Karten-Picker):
+
+```yaml
+type: custom:hems-plan-card
+entity: sensor.hems_einspeiseplan   # optional, das ist der Default
+title: Einspeiseplan                # optional
+```
+
+Der Zeitstrahl reicht von jetzt bis zum morgigen Sonnenuntergang: orange die
+geschätzte PV-Stundenkurve (Tagesenergie sinusförmig über das Sonnenfenster
+verteilt), grün die geplante nächtliche Einspeisung, blau der erwartete
+SoC-Verlauf bis zum Reserve-SoC. Die Nachtlast je Stunde stammt aus einem
+gelernten Lastprofil (14 Tage Zähler-Statistik); reicht das Akku-Budget nicht
+für die ganze Nacht, werden alle Stunden proportional reduziert, damit der
+Speicher bis Sonnenaufgang durchhält.

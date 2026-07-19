@@ -75,6 +75,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self.mode: str = MODE_OBSERVE
         self._night_load_w: float | None = None
         self._night_load_fetched: datetime | None = None
+        self._load_profile: dict[int, float] | None = None  # UTC-Stunde → W
         self._weather_cache: tuple[str | None, float | None] = (None, None)
         self._weather_fetched: datetime | None = None
         self._unit_warned: set[str] = set()
@@ -158,9 +159,11 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         return round(sum(vals), 0) if vals else None
 
     async def _night_load(self) -> float:
-        """Mittlere Nachtlast aus den Langzeitstatistiken des Zählers lernen.
+        """Nachtlast und Stunden-Lastprofil aus den Zähler-Statistiken lernen.
 
-        Fallback: konfigurierter Wert, falls (noch) keine Statistik vorliegt.
+        Nebenprodukt `self._load_profile`: mittlere Last je UTC-Stunde über die
+        letzten 14 Tage — nur für Nachtstunden, tagsüber verfälscht PV den
+        Zählerwert. Fallback: konfigurierter Wert, falls Statistik fehlt.
         """
         fallback = float(self._opt(CONF_NIGHT_W, DEFAULT_NIGHT_W))
         now = dt_util.utcnow()
@@ -173,6 +176,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
 
         meter = self._opt(CONF_METER, None)
         learned: float | None = None
+        by_hour: dict[int, list[float]] = {}
         try:
             from homeassistant.components.recorder import get_instance
             from homeassistant.components.recorder.statistics import (
@@ -196,15 +200,22 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 mean = row.get("mean")
                 if ts is None or mean is None:
                     continue
-                local = dt_util.as_local(dt_util.utc_from_timestamp(ts))
-                if local.hour in NIGHT_HOURS_LOCAL:
+                utc = dt_util.utc_from_timestamp(ts)
+                if dt_util.as_local(utc).hour in NIGHT_HOURS_LOCAL:
                     # Nur Bezug zählt; ein evtl. gedeckelter Zähler liefert eh >= 0
-                    means.append(max(0.0, float(mean)))
+                    val = max(0.0, float(mean))
+                    means.append(val)
+                    by_hour.setdefault(utc.hour, []).append(val)
             if means:
                 learned = sum(means) / len(means)
         except Exception as err:  # Statistik ist optional, nie fatal
             _LOGGER.debug("Nachtlast-Statistik nicht verfügbar: %s", err)
 
+        self._load_profile = (
+            {h: round(sum(v) / len(v), 1) for h, v in by_hour.items()}
+            if by_hour
+            else None
+        )
         self._night_load_w = learned if learned and learned > 0 else fallback
         self._night_load_fetched = now
         return self._night_load_w
@@ -337,6 +348,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 capacity_kwh=s.capacity_kwh,
                 reserve_soc=s.reserve_soc,
                 max_charge_w=s.max_charge_w,
+                max_discharge_w=s.max_discharge_w,
             )
             for s in reg.storages
         ]
@@ -364,6 +376,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 weather_factor_tomorrow=data.wetter_faktor_morgen,
                 free_kwh=float(self._opt(CONF_FREE_KWH, DEFAULT_FREE_KWH)),
                 free_h=float(self._opt(CONF_FREE_H, DEFAULT_FREE_H)),
+                next_sunrise=next_sunrise,
+                load_profile_w=self._load_profile,
             )
         )
 

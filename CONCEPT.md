@@ -31,10 +31,10 @@ Der Planner kennt keine Hersteller, nur abstrakte Rollen:
 |---|---|---|
 | Meter (genau 1) | Zähler 16.7.0 | Entity, Vorzeichen-Invertierung |
 | ForecastSource (0..n) | PV-Fläche Ost/Süd/West | Energie heute/Rest/morgen, Leistung jetzt |
-| Storage (0..n) | Hyper 2000 | SoC, Kapazität, Reserve-SoC, max. Ladeleistung |
+| Storage (0..n) | Hyper 2000 | SoC, Kapazität, Reserve-SoC, max. Lade-/Entladeleistung, Sollwert-Entitäten für Laden/Einspeisen |
 | ThermalStore (0..n) | Warmwasserspeicher | Temperatur, Basis-Soll, Komfort-Soll |
 | SwitchableLoad (0..n) | Wärmepumpe | Switch, Taktschutz (min. Lauf/Pause, max. Sperre/Tag) |
-| ModulatedLoad (0..n) | Wallbox | Ampere-Entity, min/max A, Phasen |
+| ModulatedLoad (0..n) | Wallbox | Ampere-Entity, min/max A, Phasen, optionaler Schalter, min. Laufzeit |
 
 Storages werden zu einem virtuellen Gesamtspeicher aggregiert; Sollwerte werden
 proportional zu freier Kapazität/Leistung verteilt. Reserven (z.B. L3) bleiben
@@ -95,6 +95,13 @@ Parameter des einzelnen Geräts. Ein vierter Akku = neue Storage-Instanz, fertig
 
 1. **Beobachten** (dieses Repo, jetzt): Forecast-Fusion + Prognose-Sensoren,
    Planner loggt nur, fasst nichts an. 2-3 Wochen Validierung.
+   Dazu der Sensor **Einspeiseplan**: verteilt das Akku-Budget (verfügbar minus
+   Reserve) als stündliche Einspeise-Obergrenzen über die Nacht ("gleichmäßig
+   strecken", damit der Akku bis Sonnenaufgang reicht); live soll die
+   Einspeisung später saldo-geführt darunter bleiben. Die Stundenwerte kommen
+   aus einem gelernten Nacht-Lastprofil (14 Tage Zähler-Statistik je Stunde),
+   die zugehörige **hems-plan-card** zeigt Plan, SoC-Verlauf und die
+   PV-Stundenkurve für heute und morgen.
    Nebenbei: Vorzeichenverhalten der 16.7.0 gegen Historie klären
    (Verdacht: bei 0 gedeckelt, dann Saldo-Rekonstruktion über Einspeise-Sensor).
 2. **WW + Akku steuern**: Zwei-Sollwert-WW, Zendure-Zielladung

@@ -44,13 +44,19 @@
           "name": "Name",
           "soc_entity": "SoC-Entität (%)",
           "power_entity": "Leistungs-Entität (W, optional)",
+          "charge_setpoint_entity": "Lade-Sollwert-Entität (W, optional)",
+          "discharge_setpoint_entity": "Einspeise-Sollwert-Entität (W, optional)",
           "capacity_kwh": "Kapazität (kWh)",
           "reserve_soc": "Reserve-SoC (%)",
-          "max_charge_w": "Max. Ladeleistung (W)"
+          "max_charge_w": "Max. Ladeleistung (W)",
+          "max_discharge_w": "Max. Entladeleistung (W)"
         },
         "data_description": {
+          "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
+          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entlade-/Einspeiseleistung setzen kann (z. B. „jetzt mit 500 W einspeisen“).",
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
-          "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird."
+          "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
+          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern."
         }
       },
       "add_thermal": {
@@ -92,14 +98,18 @@
         "data": {
           "name": "Name",
           "current_entity": "Strom-Sollwert-Entität (A)",
+          "switch_entity": "Schalter-Entität (optional)",
           "power_entity": "Leistungs-Entität (W, optional)",
           "min_a": "Minimalstrom (A)",
           "max_a": "Maximalstrom (A)",
           "phases": "Phasen",
+          "min_on_min": "Mindestlaufzeit (min)",
           "priority": "Priorität"
         },
         "data_description": {
           "current_entity": "Number-Entität, über die der Strom-Sollwert gesetzt wird.",
+          "switch_entity": "Optionaler Schalter, über den HEMS das Gerät zusätzlich komplett ein- und ausschalten kann (z. B. Ladefreigabe der Wallbox).",
+          "min_on_min": "Einmal gestartet, läuft das Gerät mindestens so lange, bevor HEMS es stoppt (z. B. E-Auto mindestens 10 Minuten laden).",
           "min_a": "Unterhalb dieses Stroms kann das Gerät nicht arbeiten (Wallbox-Minimum meist 6 A).",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
         }
@@ -182,13 +192,19 @@
           "name": "Name",
           "soc_entity": "SoC-Entität (%)",
           "power_entity": "Leistungs-Entität (W, optional)",
+          "charge_setpoint_entity": "Lade-Sollwert-Entität (W, optional)",
+          "discharge_setpoint_entity": "Einspeise-Sollwert-Entität (W, optional)",
           "capacity_kwh": "Kapazität (kWh)",
           "reserve_soc": "Reserve-SoC (%)",
-          "max_charge_w": "Max. Ladeleistung (W)"
+          "max_charge_w": "Max. Ladeleistung (W)",
+          "max_discharge_w": "Max. Entladeleistung (W)"
         },
         "data_description": {
+          "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
+          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entlade-/Einspeiseleistung setzen kann (z. B. „jetzt mit 500 W einspeisen“).",
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
-          "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird."
+          "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
+          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern."
         }
       },
       "add_thermal": {
@@ -230,14 +246,18 @@
         "data": {
           "name": "Name",
           "current_entity": "Strom-Sollwert-Entität (A)",
+          "switch_entity": "Schalter-Entität (optional)",
           "power_entity": "Leistungs-Entität (W, optional)",
           "min_a": "Minimalstrom (A)",
           "max_a": "Maximalstrom (A)",
           "phases": "Phasen",
+          "min_on_min": "Mindestlaufzeit (min)",
           "priority": "Priorität"
         },
         "data_description": {
           "current_entity": "Number-Entität, über die der Strom-Sollwert gesetzt wird.",
+          "switch_entity": "Optionaler Schalter, über den HEMS das Gerät zusätzlich komplett ein- und ausschalten kann (z. B. Ladefreigabe der Wallbox).",
+          "min_on_min": "Einmal gestartet, läuft das Gerät mindestens so lange, bevor HEMS es stoppt (z. B. E-Auto mindestens 10 Minuten laden).",
           "min_a": "Unterhalb dieses Stroms kann das Gerät nicht arbeiten (Wallbox-Minimum meist 6 A).",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
         }
@@ -266,13 +286,19 @@
           "name": "Name",
           "soc_entity": "SoC-Entität (%)",
           "power_entity": "Leistungs-Entität (W, optional)",
+          "charge_setpoint_entity": "Lade-Sollwert-Entität (W, optional)",
+          "discharge_setpoint_entity": "Einspeise-Sollwert-Entität (W, optional)",
           "capacity_kwh": "Kapazität (kWh)",
           "reserve_soc": "Reserve-SoC (%)",
-          "max_charge_w": "Max. Ladeleistung (W)"
+          "max_charge_w": "Max. Ladeleistung (W)",
+          "max_discharge_w": "Max. Entladeleistung (W)"
         },
         "data_description": {
+          "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
+          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entlade-/Einspeiseleistung setzen kann (z. B. „jetzt mit 500 W einspeisen“).",
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
-          "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird."
+          "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
+          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern."
         }
       },
       "edit_thermal": {
@@ -314,14 +340,18 @@
         "data": {
           "name": "Name",
           "current_entity": "Strom-Sollwert-Entität (A)",
+          "switch_entity": "Schalter-Entität (optional)",
           "power_entity": "Leistungs-Entität (W, optional)",
           "min_a": "Minimalstrom (A)",
           "max_a": "Maximalstrom (A)",
           "phases": "Phasen",
+          "min_on_min": "Mindestlaufzeit (min)",
           "priority": "Priorität"
         },
         "data_description": {
           "current_entity": "Number-Entität, über die der Strom-Sollwert gesetzt wird.",
+          "switch_entity": "Optionaler Schalter, über den HEMS das Gerät zusätzlich komplett ein- und ausschalten kann (z. B. Ladefreigabe der Wallbox).",
+          "min_on_min": "Einmal gestartet, läuft das Gerät mindestens so lange, bevor HEMS es stoppt (z. B. E-Auto mindestens 10 Minuten laden).",
           "min_a": "Unterhalb dieses Stroms kann das Gerät nicht arbeiten (Wallbox-Minimum meist 6 A).",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
         }

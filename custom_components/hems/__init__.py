@@ -20,7 +20,7 @@ FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Die hems-flow-card als Lovelace-Ressource ausliefern (einmalig)."""
+    """Die HEMS-Karten als Lovelace-Ressourcen ausliefern (einmalig)."""
     if hass.data.get(FRONTEND_REGISTERED):
         return
     hass.data[FRONTEND_REGISTERED] = True
@@ -34,9 +34,8 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         ]
     )
     integration = await async_get_integration(hass, DOMAIN)
-    add_extra_js_url(
-        hass, f"{FRONTEND_URL}/hems-flow-card.js?v={integration.version}"
-    )
+    for card in ("hems-flow-card.js", "hems-plan-card.js"):
+        add_extra_js_url(hass, f"{FRONTEND_URL}/{card}?v={integration.version}")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

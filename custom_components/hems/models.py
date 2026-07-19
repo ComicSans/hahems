@@ -11,6 +11,7 @@ from .const import (
     DEFAULT_BASE_TARGET,
     DEFAULT_COMFORT_TARGET,
     DEFAULT_MAX_CHARGE_W,
+    DEFAULT_MAX_DISCHARGE_W,
     DEFAULT_RESERVE_SOC,
     ROLE_FORECAST,
     ROLE_MODULATED,
@@ -37,7 +38,12 @@ class Storage:
     capacity_kwh: float
     reserve_soc: float = DEFAULT_RESERVE_SOC
     max_charge_w: float = DEFAULT_MAX_CHARGE_W
+    max_discharge_w: float = DEFAULT_MAX_DISCHARGE_W
     power_entity: str | None = None
+    # Stellgrößen: aktuelle Lade-/Einspeiseleistung in W setzen (z. B. Zendure
+    # Input/Output-Limit). Ohne diese Entitäten wird der Speicher nur beobachtet.
+    charge_setpoint_entity: str | None = None
+    discharge_setpoint_entity: str | None = None
 
 
 @dataclass
@@ -66,10 +72,12 @@ class ModulatedLoad:
     id: str
     name: str
     current_entity: str
+    switch_entity: str | None = None
     power_entity: str | None = None
     min_a: float = 6
     max_a: float = 16
     phases: int = 3
+    min_on_min: int = 10
     priority: int = 1
 
 
