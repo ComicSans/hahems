@@ -5,10 +5,10 @@
   "config_flow": true,
   "dependencies": ["sun", "http", "frontend"],
   "after_dependencies": ["recorder"],
-  "documentation": "https://github.com/tobiasreithmeier/hems",
+  "documentation": "https://github.com/ComicSans/hahems",
   "integration_type": "hub",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/tobiasreithmeier/hems/issues",
+  "issue_tracker": "https://github.com/ComicSans/hahems/issues",
   "requirements": [],
   "version": "0.1.0"
 }

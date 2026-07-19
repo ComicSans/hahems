@@ -8,10 +8,10 @@ Ziel: Autarkie zuerst. Netz ist Rückfallebene, nie Optimierungsziel.
 - **PV**: 3 Prognose-Flächen (Ost, Süd, West) via Forecast-Integration, stündlich + 7 Tage voraus
 - **Speicher**: 3x Zendure Hyper 2000 (je Phase, gesamt 11,52 kWh), Manager-Integration
 - **Wärmepumpe**: LG Luft-Wasser, climate-Entität + Power-Switch, getrennte Sensorik Heizen/Warmwasser
-- **Wallbox**: "Charger" (eve01), nur Ampere-Steuerung, fix 3-phasig (min. ~4,1 kW), kein SoC-Zugriff aufs Auto
-- **Zähler**: `sensor.stromzahler_lk13be_power` (OBIS 16.7.0) als einzige Regelgröße.
-  `sensor.fehlleistung_einspeisung` wird bewusst komplett ignoriert.
-- **Strompreis**: fest (input_number, aktuell 0,265 €/kWh), kein dynamischer Tarif geplant
+- **Wallbox**: nur Ampere-Steuerung, fix 3-phasig (min. ~4,1 kW), kein SoC-Zugriff aufs Auto
+- **Zähler**: Hauptzähler-Leistung (OBIS 16.7.0) als einzige Regelgröße.
+  Ein separater Einspeise-Fehlleistungssensor wird bewusst komplett ignoriert.
+- **Strompreis**: fest (input_number), kein dynamischer Tarif geplant
 
 ## Entscheidungen
 
@@ -103,5 +103,5 @@ Parameter des einzelnen Geräts. Ein vierter Akku = neue Storage-Instanz, fertig
 
 ## Offene Punkte
 
-- Repo öffentlich oder privat (noch unentschieden, keine Lizenz bis dahin)
+- Lizenz wählen (Repo ist inzwischen öffentlich)
 - 16.7.0-Vorzeichenfrage (wird in Phase 1 mit echten Daten beantwortet)
