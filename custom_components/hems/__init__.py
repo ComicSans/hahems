@@ -1,6 +1,7 @@
 """HEMS - Home Energy Management System."""
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 
 from homeassistant.components.frontend import add_extra_js_url
@@ -23,7 +24,14 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     """Die HEMS-Karten als Lovelace-Ressourcen ausliefern (einmalig)."""
     if hass.data.get(FRONTEND_REGISTERED):
         return
-    hass.data[FRONTEND_REGISTERED] = True
+
+    # .js zwingend als text/javascript ausliefern. Auf Systemen, deren
+    # mimetypes-Datenbank .js nicht (korrekt) kennt, liefert der Static-
+    # Handler sonst text/plain o. Ä.; der Browser blockt dann das ES-Modul
+    # ("Strict MIME type checking"), sodass customElements.define nie läuft
+    # und die Karten als "Custom element doesn't exist" scheitern.
+    mimetypes.add_type("text/javascript", ".js")
+
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(
@@ -36,6 +44,10 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     integration = await async_get_integration(hass, DOMAIN)
     for card in ("hems-flow-card.js", "hems-plan-card.js"):
         add_extra_js_url(hass, f"{FRONTEND_URL}/{card}?v={integration.version}")
+
+    # Erst nach erfolgreicher Registrierung markieren, damit ein Fehler oben
+    # beim nächsten Setup-Versuch erneut registriert (statt still zu blockieren).
+    hass.data[FRONTEND_REGISTERED] = True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
