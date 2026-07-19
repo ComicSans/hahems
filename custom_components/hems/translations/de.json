@@ -7,16 +7,24 @@
         "data": {
           "meter_entity": "Zähler (Leistung am Netzanschluss)",
           "invert_meter": "Vorzeichen invertieren",
+          "pv_power_entity": "PV-Leistung jetzt (W, optional)",
+          "weather_entity": "Wettervorhersage (optional)",
           "baseline_load_w": "Grundlast tagsüber (W)",
           "night_load_w": "Grundlast nachts (W)",
-          "priority_mode": "Prioritäten bei Überschuss"
+          "priority_mode": "Prioritäten bei Überschuss",
+          "free_capacity_kwh": "Kapazität frei: Bedarf (kWh)",
+          "free_capacity_h": "Kapazität frei: Dauer (h)"
         },
         "data_description": {
           "meter_entity": "Sensor mit der momentanen Leistung am Netzanschlusspunkt in Watt. Erwartet wird: positiv = Netzbezug, negativ = Einspeisung.",
           "invert_meter": "Aktivieren, falls dein Zähler Einspeisung als positiven Wert meldet.",
+          "pv_power_entity": "Sensor mit der aktuellen PV-Gesamtleistung über alle Flächen. Wird für den Lastfluss und die Empfehlung genutzt.",
+          "weather_entity": "Wetter-Entität, deren Tagesvorhersage in die Planung einfließt: Bei trübem Folgetag lädt HEMS den Speicher voll statt nur den Nachtbedarf zu sichern.",
           "baseline_load_w": "Typischer Dauerverbrauch des Hauses tagsüber ohne große Verbraucher (Kühlschrank, Netzwerk, Standby).",
           "night_load_w": "Startwert für den Verbrauch in der Nacht. HEMS lernt den echten Wert nach einigen Tagen automatisch aus der Zählerstatistik.",
-          "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ sichert bei knappem Ertrag zuerst den Akku für die Nacht ab, bei reichlich Ertrag darf das E-Auto zuerst laden. Die Warmwasser-Basisladung hat immer Vorrang."
+          "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ sichert bei knappem Ertrag zuerst den Akku für die Nacht ab, bei reichlich Ertrag darf das E-Auto zuerst laden. Die Warmwasser-Basisladung hat immer Vorrang.",
+          "free_capacity_kwh": "Der Binärsensor „Kapazität frei“ schaltet ein, wenn diese Energiemenge über die angegebene Dauer verfügbar ist, ohne Reserve und Nachtdeckung anzutasten.",
+          "free_capacity_h": "Dauer, über die der Bedarf gedeckt sein muss. PV-Überschuss, der in dieses Zeitfenster fällt, zählt zur freien Kapazität."
         }
       },
       "add_forecast": {
@@ -26,8 +34,7 @@
           "name": "Name",
           "energy_today": "Energie heute (kWh)",
           "energy_remaining": "Energie heute verbleibend (kWh)",
-          "energy_tomorrow": "Energie morgen (kWh)",
-          "power_now": "Leistung jetzt (W, optional)"
+          "energy_tomorrow": "Energie morgen (kWh)"
         }
       },
       "add_storage": {
@@ -165,8 +172,7 @@
           "name": "Name",
           "energy_today": "Energie heute (kWh)",
           "energy_remaining": "Energie heute verbleibend (kWh)",
-          "energy_tomorrow": "Energie morgen (kWh)",
-          "power_now": "Leistung jetzt (W, optional)"
+          "energy_tomorrow": "Energie morgen (kWh)"
         }
       },
       "add_storage": {
@@ -250,8 +256,7 @@
           "name": "Name",
           "energy_today": "Energie heute (kWh)",
           "energy_remaining": "Energie heute verbleibend (kWh)",
-          "energy_tomorrow": "Energie morgen (kWh)",
-          "power_now": "Leistung jetzt (W, optional)"
+          "energy_tomorrow": "Energie morgen (kWh)"
         }
       },
       "edit_storage": {
@@ -334,16 +339,24 @@
         "data": {
           "meter_entity": "Zähler (Leistung am Netzanschluss)",
           "invert_meter": "Vorzeichen invertieren",
+          "pv_power_entity": "PV-Leistung jetzt (W, optional)",
+          "weather_entity": "Wettervorhersage (optional)",
           "baseline_load_w": "Grundlast tagsüber (W)",
           "night_load_w": "Grundlast nachts (W)",
-          "priority_mode": "Prioritäten bei Überschuss"
+          "priority_mode": "Prioritäten bei Überschuss",
+          "free_capacity_kwh": "Kapazität frei: Bedarf (kWh)",
+          "free_capacity_h": "Kapazität frei: Dauer (h)"
         },
         "data_description": {
           "meter_entity": "Sensor mit der momentanen Leistung am Netzanschlusspunkt in Watt. Erwartet wird: positiv = Netzbezug, negativ = Einspeisung.",
           "invert_meter": "Aktivieren, falls dein Zähler Einspeisung als positiven Wert meldet.",
+          "pv_power_entity": "Sensor mit der aktuellen PV-Gesamtleistung über alle Flächen. Wird für den Lastfluss und die Empfehlung genutzt.",
+          "weather_entity": "Wetter-Entität, deren Tagesvorhersage in die Planung einfließt: Bei trübem Folgetag lädt HEMS den Speicher voll statt nur den Nachtbedarf zu sichern.",
           "baseline_load_w": "Typischer Dauerverbrauch des Hauses tagsüber ohne große Verbraucher.",
           "night_load_w": "Fallback für den nächtlichen Verbrauch, bis HEMS ihn aus der Statistik gelernt hat.",
-          "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ sichert bei knappem Ertrag zuerst den Akku für die Nacht ab, bei reichlich Ertrag darf das E-Auto zuerst laden. Die Warmwasser-Basisladung hat immer Vorrang."
+          "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ sichert bei knappem Ertrag zuerst den Akku für die Nacht ab, bei reichlich Ertrag darf das E-Auto zuerst laden. Die Warmwasser-Basisladung hat immer Vorrang.",
+          "free_capacity_kwh": "Der Binärsensor „Kapazität frei“ schaltet ein, wenn diese Energiemenge über die angegebene Dauer verfügbar ist, ohne Reserve und Nachtdeckung anzutasten.",
+          "free_capacity_h": "Dauer, über die der Bedarf gedeckt sein muss. PV-Überschuss, der in dieses Zeitfenster fällt, zählt zur freien Kapazität."
         }
       }
     },

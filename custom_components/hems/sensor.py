@@ -51,7 +51,7 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
     ),
     HemsSensorDescription(
         key="pv_leistung_jetzt",
-        name="PV Leistung jetzt (geschätzt)",
+        name="PV Leistung jetzt",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -81,7 +81,7 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "wp_w": d.wp_w,
             "wallbox_w": d.wallbox_w,
             "speicher_soc": d.plan.speicher_soc,
-            "pv_geschaetzt": True,
+            "pv_geschaetzt": d.pv_power_estimated,
         },
     ),
     HemsSensorDescription(
@@ -132,6 +132,9 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "prioritaeten": d.plan.prioritaeten,
             "speicher_bedarf_kwh": d.plan.speicher_bedarf_kwh,
             "speicher_kapazitaet_kwh": d.plan.speicher_kapazitaet_kwh,
+            "wetter_morgen": d.wetter_morgen,
+            "wetter_faktor_morgen": d.wetter_faktor_morgen,
+            "morgen_knapp": d.plan.morgen_knapp,
         },
     ),
 )

@@ -7,16 +7,24 @@
         "data": {
           "meter_entity": "Meter (power at grid connection)",
           "invert_meter": "Invert sign",
+          "pv_power_entity": "PV power now (W, optional)",
+          "weather_entity": "Weather forecast (optional)",
           "baseline_load_w": "Baseline load daytime (W)",
           "night_load_w": "Baseline load at night (W)",
-          "priority_mode": "Priorities for surplus"
+          "priority_mode": "Priorities for surplus",
+          "free_capacity_kwh": "Free capacity: energy needed (kWh)",
+          "free_capacity_h": "Free capacity: duration (h)"
         },
         "data_description": {
           "meter_entity": "Sensor with the current power at the grid connection point in watts. Expected: positive = import, negative = export.",
           "invert_meter": "Enable if your meter reports export as a positive value.",
+          "pv_power_entity": "Sensor with the current total PV production across all planes. Used for the load flow and to refine the recommendation.",
+          "weather_entity": "Weather entity whose daily forecast feeds the planning: on an overcast next day HEMS fully charges the battery instead of covering only the night.",
           "baseline_load_w": "Typical continuous consumption of the house during the day without large consumers (fridge, network, standby).",
           "night_load_w": "Initial value for night-time consumption. HEMS learns the real value automatically from meter statistics after a few days.",
-          "priority_mode": "Where should surplus go first? \"Automatic\" fills the battery first when yield is scarce so the night is covered; with plenty of yield the EV may charge first. Hot-water base heating always has top priority."
+          "priority_mode": "Where should surplus go first? \"Automatic\" fills the battery first when yield is scarce so the night is covered; with plenty of yield the EV may charge first. Hot-water base heating always has top priority.",
+          "free_capacity_kwh": "The \"Capacity free\" binary sensor turns on when this much energy is available over the given duration without touching the reserve or the night coverage.",
+          "free_capacity_h": "Duration over which the energy demand must be covered. PV surplus expected within this window counts towards the free capacity."
         }
       },
       "add_forecast": {
@@ -26,8 +34,7 @@
           "name": "Name",
           "energy_today": "Energy today (kWh)",
           "energy_remaining": "Energy remaining today (kWh)",
-          "energy_tomorrow": "Energy tomorrow (kWh)",
-          "power_now": "Power now (W, optional)"
+          "energy_tomorrow": "Energy tomorrow (kWh)"
         }
       },
       "add_storage": {
@@ -165,8 +172,7 @@
           "name": "Name",
           "energy_today": "Energy today (kWh)",
           "energy_remaining": "Energy remaining today (kWh)",
-          "energy_tomorrow": "Energy tomorrow (kWh)",
-          "power_now": "Power now (W, optional)"
+          "energy_tomorrow": "Energy tomorrow (kWh)"
         }
       },
       "add_storage": {
@@ -250,8 +256,7 @@
           "name": "Name",
           "energy_today": "Energy today (kWh)",
           "energy_remaining": "Energy remaining today (kWh)",
-          "energy_tomorrow": "Energy tomorrow (kWh)",
-          "power_now": "Power now (W, optional)"
+          "energy_tomorrow": "Energy tomorrow (kWh)"
         }
       },
       "edit_storage": {
@@ -334,16 +339,24 @@
         "data": {
           "meter_entity": "Meter (power at grid connection)",
           "invert_meter": "Invert sign",
+          "pv_power_entity": "PV power now (W, optional)",
+          "weather_entity": "Weather forecast (optional)",
           "baseline_load_w": "Baseline load daytime (W)",
           "night_load_w": "Baseline load at night (W)",
-          "priority_mode": "Priorities for surplus"
+          "priority_mode": "Priorities for surplus",
+          "free_capacity_kwh": "Free capacity: energy needed (kWh)",
+          "free_capacity_h": "Free capacity: duration (h)"
         },
         "data_description": {
           "meter_entity": "Sensor with the current power at the grid connection point in watts. Expected: positive = import, negative = export.",
           "invert_meter": "Enable if your meter reports export as a positive value.",
+          "pv_power_entity": "Sensor with the current total PV production across all planes. Used for the load flow and to refine the recommendation.",
+          "weather_entity": "Weather entity whose daily forecast feeds the planning: on an overcast next day HEMS fully charges the battery instead of covering only the night.",
           "baseline_load_w": "Typical continuous consumption of the house during the day without large consumers.",
           "night_load_w": "Fallback for night-time consumption until HEMS has learned it from statistics.",
-          "priority_mode": "Where should surplus go first? \"Automatic\" fills the battery first when yield is scarce so the night is covered; with plenty of yield the EV may charge first. Hot-water base heating always has top priority."
+          "priority_mode": "Where should surplus go first? \"Automatic\" fills the battery first when yield is scarce so the night is covered; with plenty of yield the EV may charge first. Hot-water base heating always has top priority.",
+          "free_capacity_kwh": "The \"Capacity free\" binary sensor turns on when this much energy is available over the given duration without touching the reserve or the night coverage.",
+          "free_capacity_h": "Duration over which the energy demand must be covered. PV surplus expected within this window counts towards the free capacity."
         }
       }
     },

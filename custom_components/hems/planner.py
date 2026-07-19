@@ -37,6 +37,9 @@ class PlanInput:
     thermal_base: float
     thermal_comfort: float
     priority_mode: str = PRIORITY_AUTO
+    weather_factor_tomorrow: float | None = None  # 0 = trüb, 1 = klar
+    free_kwh: float = 0.0  # Energiebedarf für "Kapazität frei"
+    free_h: float = 1.0  # Dauer, über die der Bedarf gedeckt sein soll
 
 
 @dataclass
@@ -49,6 +52,9 @@ class PlanResult:
     speicher_ziel_soc: float | None = None
     speicher_bedarf_kwh: float = 0.0
     sonnenfenster_h: float = 0.0
+    morgen_knapp: bool = False
+    kapazitaet_frei: bool = False
+    kapazitaet_frei_kwh: float = 0.0
     empfehlung: str = "keine Daten"
     prioritaeten: list[str] = field(default_factory=list)
 
@@ -63,23 +69,50 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     night_h = max(0.0, (inp.sunrise - inp.sunset).total_seconds() / 3600)
     result.nachtdefizit_kwh = round(inp.night_load_w * night_h / 1000, 2)
 
+    # Folgetag einpreisen: Meldet das Wetter dichte Bewölkung oder deckt die
+    # Morgen-Prognose nicht einmal das Nachtdefizit, wird der Speicher heute
+    # voll geladen statt nur bis zum Nachtbedarf.
+    result.morgen_knapp = (
+        inp.weather_factor_tomorrow is not None
+        and inp.weather_factor_tomorrow < 0.35
+    ) or (0 < inp.pv_tomorrow_kwh < result.nachtdefizit_kwh)
+
     # Virtueller Gesamtspeicher aus allen Storages
     cap = sum(s.capacity_kwh for s in inp.storages)
     result.speicher_kapazitaet_kwh = round(cap, 2)
     known = [s for s in inp.storages if s.soc is not None]
+    speicher_frei_kwh = 0.0
     if known and cap > 0:
         available = sum(s.soc / 100 * s.capacity_kwh for s in known)
         reserve = sum(s.reserve_soc / 100 * s.capacity_kwh for s in inp.storages)
         result.speicher_verfuegbar_kwh = round(available, 2)
         result.speicher_soc = round(available / cap * 100, 1)
-        ziel_kwh = min(cap, result.nachtdefizit_kwh + reserve)
+        ziel_kwh = (
+            cap if result.morgen_knapp else min(cap, result.nachtdefizit_kwh + reserve)
+        )
         result.speicher_ziel_soc = round(ziel_kwh / cap * 100, 1)
         result.speicher_bedarf_kwh = round(max(0.0, ziel_kwh - available), 2)
+        speicher_frei_kwh = max(0.0, available - ziel_kwh)
 
     # Erwarteter Restverbrauch des Tages (v1: Grundlast; lernendes Profil folgt)
     expected_day_kwh = inp.baseline_load_w * result.sonnenfenster_h / 1000
     result.ueberschuss_rest_kwh = round(
         max(0.0, inp.pv_remaining_kwh - expected_day_kwh), 2
+    )
+
+    # Kapazität frei: Kann ein zusätzlicher Verbraucher free_kwh über free_h
+    # ziehen, ohne Reserve und Nachtdeckung anzutasten? Anrechenbar sind der
+    # Speicherstand oberhalb des Ziel-SoC und der Anteil des PV-Rest-
+    # überschusses, der in die Dauer fällt.
+    if result.sonnenfenster_h > 0:
+        pv_anteil = min(inp.free_h / result.sonnenfenster_h, 1.0)
+    else:
+        pv_anteil = 0.0
+    result.kapazitaet_frei_kwh = round(
+        speicher_frei_kwh + result.ueberschuss_rest_kwh * pv_anteil, 2
+    )
+    result.kapazitaet_frei = (
+        inp.free_kwh > 0 and result.kapazitaet_frei_kwh >= inp.free_kwh
     )
 
     result.prioritaeten = _priorities(inp, result)
@@ -112,8 +145,10 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     if ww_comfort_pending:
         prio.append(f"WW-Komfort ({inp.thermal_comfort:.0f} °C)")
 
+    grund = " – morgen wenig Ertrag" if res.morgen_knapp else ""
     akku = (
-        f"Akku laden bis {res.speicher_ziel_soc:.0f} % (+{res.speicher_bedarf_kwh} kWh)"
+        f"Akku laden bis {res.speicher_ziel_soc:.0f} %"
+        f" (+{res.speicher_bedarf_kwh} kWh{grund})"
         if res.speicher_bedarf_kwh > 0
         else None
     )

@@ -27,7 +27,6 @@ class ForecastSource:
     energy_today: str
     energy_remaining: str
     energy_tomorrow: str
-    power_now: str | None = None
 
 
 @dataclass

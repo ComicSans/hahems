@@ -11,13 +11,19 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_BASELINE_W,
     CONF_DEVICES,
+    CONF_FREE_H,
+    CONF_FREE_KWH,
     CONF_INVERT,
     CONF_METER,
     CONF_NIGHT_W,
     CONF_PRIORITY_MODE,
+    CONF_PV_POWER,
+    CONF_WEATHER,
     DEFAULT_BASE_TARGET,
     DEFAULT_BASELINE_W,
     DEFAULT_COMFORT_TARGET,
+    DEFAULT_FREE_H,
+    DEFAULT_FREE_KWH,
     DEFAULT_MAX_CHARGE_W,
     DEFAULT_NIGHT_W,
     DEFAULT_RESERVE_SOC,
@@ -82,7 +88,6 @@ FORECAST_SCHEMA = vol.Schema(
         vol.Required("energy_today"): _entity(),
         vol.Required("energy_remaining"): _entity(),
         vol.Required("energy_tomorrow"): _entity(),
-        vol.Optional("power_now"): _entity(device_class="power"),
     }
 )
 
@@ -168,11 +173,17 @@ GENERAL_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_METER): _entity(device_class="power"),
         vol.Required(CONF_INVERT, default=False): selector.BooleanSelector(),
+        vol.Optional(CONF_PV_POWER): _entity(device_class="power"),
+        vol.Optional(CONF_WEATHER): _entity("weather"),
         vol.Required(CONF_BASELINE_W, default=DEFAULT_BASELINE_W): _number(
             50, 5000, "W"
         ),
         vol.Required(CONF_NIGHT_W, default=DEFAULT_NIGHT_W): _number(50, 5000, "W"),
         vol.Required(CONF_PRIORITY_MODE, default=PRIORITY_AUTO): _priority_mode(),
+        vol.Required(CONF_FREE_KWH, default=DEFAULT_FREE_KWH): _number(
+            0.1, 50, "kWh", 0.1
+        ),
+        vol.Required(CONF_FREE_H, default=DEFAULT_FREE_H): _number(0.25, 24, "h", 0.25),
     }
 )
 
