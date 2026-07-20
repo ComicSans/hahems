@@ -47,6 +47,11 @@ const WP_MODUS_LABEL = {
   aus: "aus",
   unbekannt: "unbekannt",
 };
+const REGELUNG_MODUS_LABEL = {
+  laden: "Laden",
+  entladen: "Entladen",
+  pausiert: "Pausiert",
+};
 
 // Muss mit CARD_HEIGHT in hems-flow-card.js übereinstimmen, damit beide
 // Karten nebeneinander gleich hoch sind. Per `height:` überschreibbar.
@@ -264,15 +269,17 @@ class HemsPlanCard extends HTMLElement {
 
     // Status der drei Regelungen: WW-Sollwert, Speicher-Saldo-Regelung
     // und Heizkreis-Empfehlung, sofern konfiguriert bzw. Daten vorliegen.
+    // "aus (Sperrzeit)" zeigt nur den vom Nutzer selbst konfigurierten
+    // Zustand ohne neue Information — Chip bleibt dafür weg.
     const wwChip =
-      a.ww_status && a.ww_status !== ""
+      a.ww_status && a.ww_status !== "" && a.ww_status !== "aus"
         ? a.ww_soll_c != null
           ? `🚿 WW ${Math.round(a.ww_soll_c)} °C · ${WW_STATUS_LABEL[a.ww_status] ?? a.ww_status}`
           : `🚿 WW ${WW_STATUS_LABEL[a.ww_status] ?? a.ww_status}`
         : null;
     const regelungChip =
       a.regelung_modus != null
-        ? `🔋 Regelung ${a.regelung_modus}${
+        ? `🔋 Akku-Empfehlung: ${REGELUNG_MODUS_LABEL[a.regelung_modus] ?? a.regelung_modus}${
             a.regelung_modus !== "pausiert" && a.regelung_w != null
               ? ` ${Math.round(Math.abs(a.regelung_w))} W`
               : ""

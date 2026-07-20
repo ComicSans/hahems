@@ -178,11 +178,11 @@ class HemsFlowCard extends HTMLElement {
       .join("");
 
     const wwLabel = {
-      aus: "aus (Sperrzeit)",
       legionellenschutz: "Legionellenschutz",
       pv_boost: "PV-Boost",
       basis: "Basis",
     };
+    const regelungLabel = { laden: "Laden", entladen: "Entladen", pausiert: "Pausiert" };
     const chips = [
       a.wp_w != null ? `♨️ Wärmepumpe ${fmtW(a.wp_w)}` : null,
       a.wp_modus != null && a.wp_vlt_c != null
@@ -190,13 +190,15 @@ class HemsFlowCard extends HTMLElement {
         : null,
       a.wallbox_w != null ? `🚗 Wallbox ${fmtW(a.wallbox_w)}` : null,
       a.regelung_modus != null
-        ? `🔋 Regelung ${a.regelung_modus}${
+        ? `🔋 Akku-Empfehlung: ${regelungLabel[a.regelung_modus] ?? a.regelung_modus}${
             a.regelung_modus !== "pausiert" && a.regelung_w != null
               ? ` ${fmtW(a.regelung_w)}`
               : ""
           }`
         : null,
-      a.ww_status
+      // "aus (Sperrzeit)" zeigt nur den vom Nutzer selbst konfigurierten
+      // Zustand ohne neue Information — Chip bleibt dafür weg.
+      a.ww_status && a.ww_status !== "aus"
         ? a.ww_soll_c != null
           ? `🚿 WW ${Math.round(a.ww_soll_c)} °C · ${wwLabel[a.ww_status] ?? a.ww_status}`
           : `🚿 WW ${wwLabel[a.ww_status] ?? a.ww_status}`
