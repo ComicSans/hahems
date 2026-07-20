@@ -183,6 +183,29 @@ bis zu 5 K an — ohne Anforderung fällt der Vorlauf auf das Minimum
 nie empfohlen. Bei niedrigem Vorlauf-Soll meldet das Attribut
 `leise_empfohlen`, dass der Flüsterbetrieb der Anlage reicht.
 
+## Wärmepumpe in der Bedarfsprognose
+
+Ist ein Heizkreis konfiguriert und hat die Wärmepumpe (schaltbare Last)
+eine Leistungs-Entität, lernt HEMS ein temperaturabhängiges
+WP-Verbrauchsmodell aus 45 Tagen Langzeitstatistik:
+`P = Basis + k × (Heizgrenze − Außentemperatur)`. Die Basis ist die
+mittlere WP-Leistung oberhalb der Heizgrenze (Warmwasser, Standby), k die
+gelernte Steigung in W/K; gedeckelt auf die historisch beobachtete
+Spitzenleistung. Solange die Historie nicht reicht, überbrückt ein
+Richtwert (40 W/K, Attribut `quelle: richtwert` statt `gelernt`).
+
+Das Lastprofil wird dann WP-bereinigt gelernt und die WP stattdessen
+explizit je Stunde aufgeschlagen — mit der Temperatur aus der stündlichen
+Wettervorhersage (Fallback: aktuelle Außentemperatur). Damit reagieren
+Nachtdefizit, Ziel-SoC, Entladeplan und SoC-Prognose sofort auf
+Kälteeinbrüche, statt dem 28-Tage-Mittel wochenlang hinterherzulaufen.
+Während der Sommersperre zählt nur die Basisleistung.
+
+Transparenz: `sensor.hems_nachtdefizit` weist den WP-Anteil als Attribut
+`wp_anteil_kwh` aus, `sensor.hems_heizkreis` das gelernte Modell unter
+`verbrauchsmodell`. Ohne Heizkreis oder ohne WP-Leistungs-Entität bleibt
+alles beim alten Verhalten (WP implizit im Lastprofil).
+
 ## E-Auto: Mindestladeleistung der Wallbox
 
 Die Empfehlung "E-Auto mit Überschuss" prüft, ob der Momentanüberschuss die

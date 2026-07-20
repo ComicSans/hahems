@@ -83,6 +83,22 @@ class HeatingState:
 
 
 @dataclass
+class WpModel:
+    """Verbrauchsmodell der Wärmepumpe: P = base_w + k × (Heizgrenze − T).
+
+    Vom Coordinator aus der Langzeitstatistik gelernt (oder Richtwert-
+    Fallback). base_w deckt Warmwasser und Standby oberhalb der Heizgrenze,
+    der k-Term den witterungsabhängigen Heizanteil. max_w deckelt auf die
+    historisch beobachtete Spitzenleistung.
+    """
+
+    base_w: float
+    k_w_per_k: float
+    limit_c: float  # Heizgrenze (heat_off_c des Heizkreises)
+    max_w: float | None = None
+
+
+@dataclass
 class EvState:
     """Mindestladeleistung der Wallbox für die 'E-Auto laden'-Empfehlung.
 
@@ -249,6 +265,16 @@ class PlanInput:
     # Wallbox-Mindestladeleistung für die "E-Auto laden"-Empfehlung
     # (optional; ohne Konfiguration gilt die alte, ungeprüfte Empfehlung).
     ev: EvState | None = None
+    # Wärmepumpen-Verbrauchsmodell. Ist es gesetzt, ist das Lastprofil
+    # WP-bereinigt (der Coordinator zieht die WP-Statistik beim Lernen ab)
+    # und die WP wird hier explizit temperaturabhängig aufgeschlagen —
+    # so folgt die Bedarfsprognose der Wettervorhersage statt dem
+    # 28-Tage-Mittel hinterherzulaufen.
+    wp_model: WpModel | None = None
+    # Stündliche Temperaturvorhersage (UTC-Stundenanfang → °C) aus der
+    # Wetterintegration; fehlende Stunden fallen auf die aktuelle
+    # Außentemperatur des Heizkreises zurück.
+    temp_forecast_c: dict[datetime, float] | None = None
     # Schmitt-Trigger-Zustand des vorigen Laufs; siehe PlanFlags.
     flags: PlanFlags = field(default_factory=PlanFlags)
 
@@ -283,6 +309,9 @@ class SocPoint:
 @dataclass
 class PlanResult:
     nachtdefizit_kwh: float = 0.0
+    # Anteil der Wärmepumpe am Nachtdefizit (bereits darin enthalten),
+    # nur zur Transparenz separat ausgewiesen.
+    wp_nacht_kwh: float = 0.0
     ueberschuss_rest_kwh: float = 0.0
     speicher_soc: float | None = None
     speicher_verfuegbar_kwh: float = 0.0
@@ -425,6 +454,13 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         else _window_load_kwh(inp, inp.sunset, inp.sunrise),
         2,
     )
+    # WP-Anteil am Nachtdefizit separat ausweisen (Transparenz).
+    result.wp_nacht_kwh = round(
+        _wp_window_kwh(inp, inp.now, inp.next_sunrise)
+        if ist_nacht
+        else _wp_window_kwh(inp, inp.sunset, inp.sunrise),
+        2,
+    )
 
     # Folgetag einpreisen: Meldet das Wetter dichte Bewölkung oder deckt die
     # Morgen-Prognose nicht einmal das Nachtdefizit, wird der Speicher heute
@@ -465,10 +501,19 @@ def compute_plan(inp: PlanInput) -> PlanResult:
 
     # Erwarteter Restverbrauch bis Sonnenuntergang: aus dem gelernten Profil,
     # sofern es die Tagesstunden abdeckt, sonst die konfigurierte Grundlast.
+    # Die WP kommt in beiden Pfaden aus dem Modell obendrauf (im Profilpfad
+    # steckt sie bereits in _window_load_kwh).
     if _profile_covers(inp, inp.now, inp.sunset):
         expected_day_kwh = _window_load_kwh(inp, inp.now, inp.sunset)
     else:
-        expected_day_kwh = inp.baseline_load_w * result.sonnenfenster_h / 1000
+        expected_day_kwh = (
+            inp.baseline_load_w * result.sonnenfenster_h / 1000
+            + (
+                _wp_window_kwh(inp, inp.now, inp.sunset)
+                if not ist_nacht
+                else 0.0
+            )
+        )
     result.ueberschuss_rest_kwh = round(
         max(0.0, inp.pv_remaining_kwh - expected_day_kwh), 2
     )
@@ -589,6 +634,48 @@ def _expected_load_w(inp: PlanInput, t: datetime) -> float:
     return inp.night_load_w
 
 
+def _forecast_temp_at(inp: PlanInput, t: datetime) -> float | None:
+    """Außentemperatur der Stunde von t: Vorhersage, sonst aktueller Wert."""
+    if inp.temp_forecast_c:
+        temp = inp.temp_forecast_c.get(
+            t.replace(minute=0, second=0, microsecond=0)
+        )
+        if temp is not None:
+            return temp
+    return inp.heating.outdoor_temp_c if inp.heating is not None else None
+
+
+def _wp_expected_w(inp: PlanInput, t: datetime) -> float:
+    """Erwartete WP-Leistung zur Stunde von t aus dem Verbrauchsmodell.
+
+    Ohne Modell 0 (die WP steckt dann implizit im Lastprofil). Während der
+    Sommersperre und ohne Temperaturwert zählt nur die Basisleistung
+    (Warmwasser/Standby), sonst kommt der Heizgradstunden-Term dazu.
+    """
+    m = inp.wp_model
+    if m is None:
+        return 0.0
+    watt = m.base_w
+    heat_locked = inp.heating is not None and inp.heating.heat_locked
+    temp = _forecast_temp_at(inp, t)
+    if temp is not None and not heat_locked:
+        watt += m.k_w_per_k * max(0.0, m.limit_c - temp)
+    return min(watt, m.max_w) if m.max_w else watt
+
+
+def _total_load_w(inp: PlanInput, t: datetime) -> float:
+    """Gesamtlast der Stunde: Profil (WP-bereinigt) plus WP-Modell."""
+    return _expected_load_w(inp, t) + _wp_expected_w(inp, t)
+
+
+def _wp_window_kwh(inp: PlanInput, start: datetime, end: datetime) -> float:
+    """Erwartete WP-Energie im Fenster, stundenweise aus dem Modell."""
+    return sum(
+        _wp_expected_w(inp, t) * (nxt - t).total_seconds() / 3600 / 1000
+        for t, nxt in _hour_slots(start, end)
+    )
+
+
 def _profile_covers(inp: PlanInput, start: datetime, end: datetime) -> bool:
     """True, wenn das Profil jede Stunde des Fensters (in einem Tagtyp) kennt."""
     prof = inp.load_profile_w
@@ -611,9 +698,9 @@ def _hour_slots(start: datetime, end: datetime) -> list[tuple[datetime, datetime
 
 
 def _window_load_kwh(inp: PlanInput, start: datetime, end: datetime) -> float:
-    """Erwartete Verbrauchsenergie im Fenster, stundenweise aus dem Profil."""
+    """Erwartete Verbrauchsenergie im Fenster: Profil plus WP-Modell."""
     return sum(
-        _expected_load_w(inp, t) * (nxt - t).total_seconds() / 3600 / 1000
+        _total_load_w(inp, t) * (nxt - t).total_seconds() / 3600 / 1000
         for t, nxt in _hour_slots(start, end)
     )
 
@@ -660,7 +747,7 @@ def _discharge_plan(
     # Wunschleistung je Slot aus dem Lastprofil, gedeckelt auf die
     # Entladeleistung; bei knappem Budget alle Slots proportional strecken.
     raw = [
-        (t, nxt, min(_expected_load_w(inp, t), max_discharge_w))
+        (t, nxt, min(_total_load_w(inp, t), max_discharge_w))
         for t, nxt in _hour_slots(start, end)
     ]
     need_kwh = sum(w * (nxt - t).total_seconds() / 3600 / 1000 for t, nxt, w in raw)
@@ -750,7 +837,7 @@ def _soc_forecast(
     points = [SocPoint(zeit=inp.now, soc=round(energy / cap_kwh * 100, 1))]
     for t, nxt in _hour_slots(inp.now, end):
         hours = (nxt - t).total_seconds() / 3600
-        balance_w = _pv_power_at(res.pv_kurve, t) - _expected_load_w(inp, t)
+        balance_w = _pv_power_at(res.pv_kurve, t) - _total_load_w(inp, t)
         if balance_w >= 0:
             charge_w = min(balance_w, max_charge_w)
             energy = min(cap_kwh, energy + charge_w * hours / 1000)

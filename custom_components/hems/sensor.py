@@ -109,6 +109,10 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         value_fn=lambda d: d.plan.nachtdefizit_kwh,
+        attr_fn=lambda d: {
+            # WP-Anteil ist bereits im Nachtdefizit enthalten
+            "wp_anteil_kwh": d.plan.wp_nacht_kwh,
+        },
     ),
     HemsSensorDescription(
         key="ueberschuss_rest_heute",
@@ -260,6 +264,8 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "aussentemperatur_c": d.plan.heizung.t_aussen_c,
             "sommersperre": d.plan.heizung.sommer_sperre,
             "leise_empfohlen": d.plan.heizung.leise_empfohlen,
+            # Gelerntes Verbrauchsmodell für die Bedarfsprognose
+            "verbrauchsmodell": d.wp_modell,
         }
         if d.plan.heizung
         else {},

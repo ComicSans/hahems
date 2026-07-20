@@ -98,6 +98,16 @@ SILENT_VLT_OFF_C = 37
 EV_VOLTAGE_PER_PHASE_V = 230.0
 EV_SURPLUS_MARGIN_W = 200.0
 
+# Wärmepumpen-Verbrauchsmodell für die Bedarfsprognose (Tag und Nacht):
+# P(Stunde) = Basis + k × max(0, Heizgrenze − Außentemperatur). Basis ist die
+# mittlere WP-Leistung oberhalb der Heizgrenze (Warmwasser, Standby), k wird
+# aus der Langzeitstatistik der WP-Leistung gegen die Außentemperatur gelernt
+# (Heizgradstunden-Regression). Die Heizgrenze ist heat_off_c des Heizkreises.
+# Solange die Historie nicht reicht, greift der grobe Richtwert.
+WP_MODEL_DAYS = 45
+WP_MODEL_MIN_HOURS = 24  # Mindest-Stunden unter der Heizgrenze fürs Lernen
+DEFAULT_WP_W_PER_K = 40.0  # W elektrisch je K unter Heizgrenze (Richtwert EFH)
+
 # PV-Ertragsfaktor (0–1) je Wetterlage, falls die Vorhersage keinen
 # Bewölkungsgrad liefert. Diffuses Licht bringt auch bedeckt noch Ertrag.
 WEATHER_CONDITION_FACTORS = {
