@@ -385,12 +385,24 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     # ohne die Eingabe zu verändern.
     result.flags = replace(inp.flags)
 
-    # Sonnenfenster und Nachtdefizit
-    result.sonnenfenster_h = max(
-        0.0, (inp.sunset - inp.now).total_seconds() / 3600
+    # Sonnenfenster und Nachtdefizit. Ist es bereits Nacht, zeigt inp.sunset
+    # schon auf morgen Abend (get_astral_event_next liefert den nächsten noch
+    # bevorstehenden Sonnenuntergang) — ohne Sonderfall würde "Sonnenfenster"
+    # 24 h lang linear runterzählen und dabei den dazwischenliegenden
+    # Sonnenaufgang ignorieren, und "Nachtdefizit" das Fenster der
+    # übernächsten statt der laufenden Nacht berechnen. Dieselbe
+    # Nacht-Erkennung wie in _discharge_plan.
+    ist_nacht = inp.next_sunrise is not None and inp.next_sunrise < inp.sunset
+    result.sonnenfenster_h = (
+        0.0
+        if ist_nacht
+        else max(0.0, (inp.sunset - inp.now).total_seconds() / 3600)
     )
     result.nachtdefizit_kwh = round(
-        _window_load_kwh(inp, inp.sunset, inp.sunrise), 2
+        _window_load_kwh(inp, inp.now, inp.next_sunrise)
+        if ist_nacht
+        else _window_load_kwh(inp, inp.sunset, inp.sunrise),
+        2,
     )
 
     # Folgetag einpreisen: Meldet das Wetter dichte Bewölkung oder deckt die
