@@ -243,7 +243,7 @@ class PvSlot:
 
 @dataclass
 class DischargeSlot:
-    """Ein Stunden-Slot des Einspeiseplans (watt = geplante Obergrenze)."""
+    """Ein Stunden-Slot des Entladeplans (watt = geplante Obergrenze)."""
 
     start: datetime
     end: datetime
@@ -272,9 +272,9 @@ class PlanResult:
     morgen_knapp: bool = False
     kapazitaet_frei: bool = False
     kapazitaet_frei_kwh: float = 0.0
-    einspeise_budget_kwh: float = 0.0
-    einspeise_w_jetzt: float | None = None
-    einspeiseplan: list[DischargeSlot] = field(default_factory=list)
+    entlade_budget_kwh: float = 0.0
+    entlade_w_jetzt: float | None = None
+    entladeplan: list[DischargeSlot] = field(default_factory=list)
     pv_kurve: list[PvSlot] = field(default_factory=list)
     soc_prognose: list[SocPoint] = field(default_factory=list)
     ww_gesperrt: bool = False
@@ -455,9 +455,10 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         inp.free_kwh > 0 and result.kapazitaet_frei_kwh >= inp.free_kwh
     )
 
-    # Einspeiseplan: verfügbare Akku-Energie als stündliche Obergrenzen über
-    # die Nacht verteilen. Live folgt die Einspeisung dem Saldo (Nulleinspeisung);
-    # die Slot-Werte deckeln sie, damit der Akku bis Sonnenaufgang reicht.
+    # Entladeplan: verfügbare Akku-Energie als stündliche Obergrenzen über
+    # die Nacht verteilen. Live folgt die Entladung dem Saldo (Ziel:
+    # Nulleinspeisung, kein Netzexport); die Slot-Werte deckeln sie, damit
+    # der Akku bis Sonnenaufgang reicht.
     if known and cap > 0:
         _discharge_plan(inp, result, available, reserve, ziel_kwh, cap)
 
@@ -592,7 +593,7 @@ def _discharge_plan(
     ziel_kwh: float,
     cap_kwh: float,
 ) -> None:
-    """Stunden-Slots für die nächtliche Einspeisung berechnen.
+    """Stunden-Slots für die nächtliche Entladung berechnen.
 
     Strategie "gleichmäßig strecken": Reicht das Budget nicht für die volle
     Nachtlast, werden alle Slots proportional reduziert, damit der Akku bis
@@ -621,7 +622,7 @@ def _discharge_plan(
         return
 
     budget_kwh = max(0.0, start_kwh - reserve_kwh)
-    res.einspeise_budget_kwh = round(budget_kwh, 2)
+    res.entlade_budget_kwh = round(budget_kwh, 2)
 
     # Wunschleistung je Slot aus dem Lastprofil, gedeckelt auf die
     # Entladeleistung; bei knappem Budget alle Slots proportional strecken.
@@ -647,8 +648,8 @@ def _discharge_plan(
             )
         )
         if t <= inp.now < nxt:
-            res.einspeise_w_jetzt = watt
-    res.einspeiseplan = slots
+            res.entlade_w_jetzt = watt
+    res.entladeplan = slots
 
 
 def _pv_curve(inp: PlanInput) -> list[PvSlot]:

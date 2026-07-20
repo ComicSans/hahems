@@ -9,6 +9,13 @@ als Rollen über die UI konfiguriert, keine Entity-IDs im Code.
 **Status: Phase 1 (Beobachten).** Die Integration rechnet Prognosen und
 Empfehlungen, steuert aber noch nichts. Konzept und Phasenplan: [CONCEPT.md](CONCEPT.md).
 
+> **Breaking Change (0.6.0):** `sensor.hems_einspeiseplan` heißt jetzt
+> `sensor.hems_entladeplan` — „Einspeisung" meinte fälschlich Netzeinspeisung,
+> gemeint war aber immer die Akku-Entladung ins Haus. Wer die Entität in
+> Lovelace-Karten, Templates oder Automationen referenziert, muss den Namen
+> nach dem Update manuell anpassen; die alte Entität bleibt sonst als
+> „nicht verfügbar" in der Entity-Registry zurück und sollte gelöscht werden.
+
 ## Installation
 
 Variante HACS: dieses Repo als Custom Repository (Typ "Integration") hinzufügen.
@@ -35,9 +42,10 @@ Variante manuell: den Ordner `custom_components/hems/` in das
 - `sensor.hems_empfehlung` (Text; Details als Attribute, u.a. das gelernte
   24-h-Lastprofil je Wochentagstyp und dessen Quelle `lastprofil_quelle`)
 - `sensor.hems_lastfluss` (W, Hausverbrauch; alle Flusswerte als Attribute)
-- `sensor.hems_einspeiseplan` (W, geplante Einspeisung jetzt; Stunden-Slots,
-  SoC-Prognose, PV-Stundenkurve, Warmwasser-Sperr- und Legionellen-Fenster
-  sowie die Status der Regelungen als Attribute)
+- `sensor.hems_entladeplan` (W, geplante Speicher-Entladung ins Haus jetzt —
+  nicht zu verwechseln mit echter Netzeinspeisung, siehe `hems_saldo`;
+  Stunden-Slots, SoC-Prognose, PV-Stundenkurve, Warmwasser-Sperr- und
+  Legionellen-Fenster sowie die Status der Regelungen als Attribute)
 - `sensor.hems_warmwasser_soll` (°C, empfohlener WW-Sollwert; Status
   aus/legionellenschutz/pv_boost/basis als Attribut)
 - `sensor.hems_speicher_regelung` (Modus der Saldo-Regelung
@@ -69,15 +77,15 @@ Konventionen: `netz_w` positiv = Netzbezug, `batterie_w` positiv = Entladen.
 Liefert der Speicher ein umgekehrtes Vorzeichen, hilft ein Template-Sensor.
 Die PV-Leistung stammt aus der Prognose und ist als "geschätzt" markiert.
 
-## Einspeiseplan-Karte
+## Entladeplan-Karte
 
-Zweite mitgelieferte Karte ("HEMS Einspeiseplan" im Karten-Picker):
+Zweite mitgelieferte Karte ("HEMS Entladeplan" im Karten-Picker):
 
 ```yaml
 type: custom:hems-plan-card
-entity: sensor.hems_einspeiseplan   # optional, das ist der Default
-title: Einspeiseplan                # optional
-height: 440                         # optional, px; "auto" = inhaltsabhängig
+entity: sensor.hems_entladeplan   # optional, das ist der Default
+title: Entladeplan                # optional
+height: 440                       # optional, px; "auto" = inhaltsabhängig
 ```
 
 Beide Karten haben dieselbe Standardhöhe (440 px) und sind damit in jedem
@@ -87,8 +95,9 @@ nach ihrem eigenen Seitenverhältnis richten. Wer das nicht will, setzt
 
 Der Zeitstrahl umfasst den kompletten heutigen und den kompletten morgigen
 Kalendertag: orange die geschätzte PV-Stundenkurve (Tagesenergie sinusförmig
-über das Sonnenfenster verteilt), grün die geplante nächtliche Einspeisung.
-Eine rote Linie markiert "jetzt".
+über das Sonnenfenster verteilt), grün die geplante nächtliche Entladung
+(Akku-Abgabe ins Haus, nicht Netzeinspeisung). Eine rote Linie markiert
+"jetzt".
 
 Der bereits vergangene Teil des heutigen Tages bleibt leer und ist grau
 hinterlegt ("keine Verlaufsdaten"): Alle Kurven sind Prognosen ab jetzt, und
@@ -106,7 +115,7 @@ freigegeben, grau eine konfigurierte Sperrzeit (siehe unten), violett das
 wöchentliche Legionellenschutz-Fenster mit erhöhtem Sollwert.
 
 Unter dem Diagramm fassen Chips die aktuellen Empfehlungen zusammen:
-PV-Rest und Morgen-Prognose, Einspeise-Budget, der empfohlene
+PV-Rest und Morgen-Prognose, Entlade-Budget, der empfohlene
 WW-Sollwert samt Status (Basis / PV-Boost / Legionellenschutz / aus), der
 Modus der Speicher-Saldo-Regelung (inkl. Hinweis "Kaltreserve", wenn ein
 Reserve-Speicher mit entlädt) und die Heizkreis-Empfehlung mit

@@ -45,7 +45,7 @@
           "soc_entity": "SoC entity (%)",
           "power_entity": "Power entity (W, optional)",
           "charge_setpoint_entity": "Charge setpoint entity (W, optional)",
-          "discharge_setpoint_entity": "Feed-in setpoint entity (W, optional)",
+          "discharge_setpoint_entity": "Discharge setpoint entity (W, optional)",
           "capacity_kwh": "Capacity (kWh)",
           "reserve_soc": "Reserve SoC (%)",
           "max_charge_w": "Max. charging power (W)",
@@ -54,10 +54,10 @@
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
-          "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge/feed-in power (e.g. “feed in 500 W now”).",
+          "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge power (e.g. “discharge at 500 W now”).",
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
           "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
-          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house.",
+          "max_discharge_w": "Limit of the discharge power; the battery cannot deliver more than this to the house.",
           "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity."
         }
       },
@@ -261,7 +261,7 @@
           "soc_entity": "SoC entity (%)",
           "power_entity": "Power entity (W, optional)",
           "charge_setpoint_entity": "Charge setpoint entity (W, optional)",
-          "discharge_setpoint_entity": "Feed-in setpoint entity (W, optional)",
+          "discharge_setpoint_entity": "Discharge setpoint entity (W, optional)",
           "capacity_kwh": "Capacity (kWh)",
           "reserve_soc": "Reserve SoC (%)",
           "max_charge_w": "Max. charging power (W)",
@@ -270,10 +270,10 @@
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
-          "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge/feed-in power (e.g. “feed in 500 W now”).",
+          "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge power (e.g. “discharge at 500 W now”).",
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
           "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
-          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house.",
+          "max_discharge_w": "Limit of the discharge power; the battery cannot deliver more than this to the house.",
           "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity."
         }
       },
@@ -377,7 +377,7 @@
           "soc_entity": "SoC entity (%)",
           "power_entity": "Power entity (W, optional)",
           "charge_setpoint_entity": "Charge setpoint entity (W, optional)",
-          "discharge_setpoint_entity": "Feed-in setpoint entity (W, optional)",
+          "discharge_setpoint_entity": "Discharge setpoint entity (W, optional)",
           "capacity_kwh": "Capacity (kWh)",
           "reserve_soc": "Reserve SoC (%)",
           "max_charge_w": "Max. charging power (W)",
@@ -386,10 +386,10 @@
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
-          "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge/feed-in power (e.g. “feed in 500 W now”).",
+          "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge power (e.g. “discharge at 500 W now”).",
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
           "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
-          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house.",
+          "max_discharge_w": "Limit of the discharge power; the battery cannot deliver more than this to the house.",
           "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity."
         }
       },

@@ -133,22 +133,24 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         value_fn=lambda d: d.plan.speicher_ziel_soc,
     ),
     HemsSensorDescription(
-        key="einspeiseplan",
-        name="Einspeiseplan",
+        key="entladeplan",
+        name="Entladeplan",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
-        # Zustand = geplante Einspeise-Obergrenze jetzt; tagsüber unbekannt
-        value_fn=lambda d: d.plan.einspeise_w_jetzt,
+        # Zustand = geplante Entlade-Obergrenze jetzt; tagsüber unbekannt.
+        # "Entladung" meint die Akku-Abgabe ins Haus (Nulleinspeisung-Ziel),
+        # nicht die Einspeisung ins öffentliche Netz (dafür: hems_netzsaldo).
+        value_fn=lambda d: d.plan.entlade_w_jetzt,
         attr_fn=lambda d: {
-            "budget_kwh": d.plan.einspeise_budget_kwh,
+            "budget_kwh": d.plan.entlade_budget_kwh,
             "slots": [
                 {
                     "von": dt_util.as_local(s.start).isoformat(),
                     "bis": dt_util.as_local(s.end).isoformat(),
                     "watt": s.watt,
                 }
-                for s in d.plan.einspeiseplan
+                for s in d.plan.entladeplan
             ],
             # Daten für die hems-plan-card
             "pv_kurve": [

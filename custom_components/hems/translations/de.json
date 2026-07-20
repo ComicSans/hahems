@@ -45,7 +45,7 @@
           "soc_entity": "SoC-Entität (%)",
           "power_entity": "Leistungs-Entität (W, optional)",
           "charge_setpoint_entity": "Lade-Sollwert-Entität (W, optional)",
-          "discharge_setpoint_entity": "Einspeise-Sollwert-Entität (W, optional)",
+          "discharge_setpoint_entity": "Entlade-Sollwert-Entität (W, optional)",
           "capacity_kwh": "Kapazität (kWh)",
           "reserve_soc": "Reserve-SoC (%)",
           "max_charge_w": "Max. Ladeleistung (W)",
@@ -54,10 +54,10 @@
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
-          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entlade-/Einspeiseleistung setzen kann (z. B. „jetzt mit 500 W einspeisen“).",
+          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entladeleistung setzen kann (z. B. „jetzt mit 500 W entladen“).",
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
           "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
-          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern.",
+          "max_discharge_w": "Begrenzung der Entladeleistung; mehr kann der Akku nicht ins Haus liefern.",
           "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität."
         }
       },
@@ -261,7 +261,7 @@
           "soc_entity": "SoC-Entität (%)",
           "power_entity": "Leistungs-Entität (W, optional)",
           "charge_setpoint_entity": "Lade-Sollwert-Entität (W, optional)",
-          "discharge_setpoint_entity": "Einspeise-Sollwert-Entität (W, optional)",
+          "discharge_setpoint_entity": "Entlade-Sollwert-Entität (W, optional)",
           "capacity_kwh": "Kapazität (kWh)",
           "reserve_soc": "Reserve-SoC (%)",
           "max_charge_w": "Max. Ladeleistung (W)",
@@ -270,10 +270,10 @@
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
-          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entlade-/Einspeiseleistung setzen kann (z. B. „jetzt mit 500 W einspeisen“).",
+          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entladeleistung setzen kann (z. B. „jetzt mit 500 W entladen“).",
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
           "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
-          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern.",
+          "max_discharge_w": "Begrenzung der Entladeleistung; mehr kann der Akku nicht ins Haus liefern.",
           "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität."
         }
       },
@@ -377,7 +377,7 @@
           "soc_entity": "SoC-Entität (%)",
           "power_entity": "Leistungs-Entität (W, optional)",
           "charge_setpoint_entity": "Lade-Sollwert-Entität (W, optional)",
-          "discharge_setpoint_entity": "Einspeise-Sollwert-Entität (W, optional)",
+          "discharge_setpoint_entity": "Entlade-Sollwert-Entität (W, optional)",
           "capacity_kwh": "Kapazität (kWh)",
           "reserve_soc": "Reserve-SoC (%)",
           "max_charge_w": "Max. Ladeleistung (W)",
@@ -386,10 +386,10 @@
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
-          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entlade-/Einspeiseleistung setzen kann (z. B. „jetzt mit 500 W einspeisen“).",
+          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entladeleistung setzen kann (z. B. „jetzt mit 500 W entladen“).",
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
           "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
-          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern.",
+          "max_discharge_w": "Begrenzung der Entladeleistung; mehr kann der Akku nicht ins Haus liefern.",
           "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität."
         }
       },

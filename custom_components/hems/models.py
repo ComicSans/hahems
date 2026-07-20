@@ -58,7 +58,7 @@ class Storage:
     max_charge_w: float = DEFAULT_MAX_CHARGE_W
     max_discharge_w: float = DEFAULT_MAX_DISCHARGE_W
     power_entity: str | None = None
-    # Stellgrößen: aktuelle Lade-/Einspeiseleistung in W setzen (z. B. Zendure
+    # Stellgrößen: aktuelle Lade-/Entladeleistung in W setzen (z. B. Zendure
     # Input/Output-Limit). Ohne diese Entitäten wird der Speicher nur beobachtet.
     charge_setpoint_entity: str | None = None
     discharge_setpoint_entity: str | None = None

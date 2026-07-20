@@ -1,9 +1,13 @@
 /**
- * hems-plan-card — Einspeiseplan und PV-Prognose als Zeitstrahl.
+ * hems-plan-card — Entladeplan und PV-Prognose als Zeitstrahl.
+ *
+ * "Entladung" meint die Akku-Abgabe ins Haus zur Nachtdeckung (Ziel:
+ * Nulleinspeisung), nicht die Einspeisung ins öffentliche Netz — die zeigt
+ * die Lastfluss-Karte über sensor.hems_netzsaldo.
  *
  * Dependency-frei (kein Lit, kein Build). Datenquelle ist der Sensor
- * sensor.hems_einspeiseplan mit den Attributen:
- *   slots           [{von, bis, watt, soc_erwartet}]  geplante Einspeisung (Nacht)
+ * sensor.hems_entladeplan mit den Attributen:
+ *   slots           [{von, bis, watt, soc_erwartet}]  geplante Entladung (Nacht)
  *   pv_kurve        [{von, bis, watt}]                geschätzte PV-Leistung
  *   ww_sperren      [{von, bis}]                      WW-Sperrzeiten
  *   ww_legionellen  [{von, bis}]                      Legionellenschutz-Fenster
@@ -12,7 +16,7 @@
  *   wp_modus, wp_vlt_c                                Heizkreis-Empfehlung
  *   budget_kwh, pv_rest_heute_kwh, pv_morgen_kwh, speicher_soc, wetter_morgen
  *
- * Balken: PV (orange) und geplante Einspeisung (grün); Linie: erwarteter
+ * Balken: PV (orange) und geplante Entladung (grün); Linie: erwarteter
  * Speicher-SoC (rechte Achse). Unten: WW-Band (verfügbar/gesperrt/
  * Legionellenschutz) und Status-Chips der drei Regelungen.
  */
@@ -62,12 +66,12 @@ function fmtKwh(v) {
 
 class HemsPlanCard extends HTMLElement {
   static getStubConfig() {
-    return { entity: "sensor.hems_einspeiseplan" };
+    return { entity: "sensor.hems_entladeplan" };
   }
 
   setConfig(config) {
     this._config = {
-      entity: config.entity || "sensor.hems_einspeiseplan",
+      entity: config.entity || "sensor.hems_entladeplan",
       title: config.title,
       height: config.height ?? CARD_HEIGHT,
     };
@@ -93,7 +97,7 @@ class HemsPlanCard extends HTMLElement {
 
     if (!state) {
       this.shadowRoot.innerHTML = `
-        <ha-card header="${this._config.title ?? "Einspeiseplan"}">
+        <ha-card header="${this._config.title ?? "Entladeplan"}">
           <div style="padding:16px;color:var(--secondary-text-color)">
             Entität <code>${this._config.entity}</code> nicht gefunden.
           </div>
@@ -117,7 +121,7 @@ class HemsPlanCard extends HTMLElement {
     const all = [...plan, ...pv];
     if (!all.length) {
       this.shadowRoot.innerHTML = `
-        <ha-card header="${this._config.title ?? "Einspeiseplan"}">
+        <ha-card header="${this._config.title ?? "Entladeplan"}">
           <div style="padding:16px;color:var(--secondary-text-color)">
             Noch keine Plandaten (Speicher-SoC oder Prognose fehlt).
           </div>
@@ -379,10 +383,10 @@ class HemsPlanCard extends HTMLElement {
           width: 12px;
         }
       </style>
-      <ha-card ${this._config.title ? `header="${this._config.title}"` : `header="Einspeiseplan"`}>
+      <ha-card ${this._config.title ? `header="${this._config.title}"` : `header="Entladeplan"`}>
         <div class="legend">
           <span><i class="swatch" style="background:${COLOR_PV}"></i>PV-Prognose</span>
-          <span><i class="swatch" style="background:${COLOR_PLAN}"></i>Einspeisung geplant</span>
+          <span><i class="swatch" style="background:${COLOR_PLAN}"></i>Entladung geplant</span>
           <span><i class="swatch soc-swatch"></i>SoC-Prognose</span>
           <span><i class="swatch" style="background:${COLOR_WW_OK}"></i>WW verfügbar</span>
           <span><i class="swatch" style="background:${COLOR_WW_BLOCK}"></i>WW gesperrt</span>
@@ -390,7 +394,7 @@ class HemsPlanCard extends HTMLElement {
         </div>
         <div class="container">
           <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"
-               role="img" aria-label="Einspeiseplan">
+               role="img" aria-label="Entladeplan">
             ${pastZone}
             ${yTicks}
             ${sep}
@@ -427,8 +431,8 @@ window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === "hems-plan-card")) {
   window.customCards.push({
     type: "hems-plan-card",
-    name: "HEMS Einspeiseplan",
-    description: "Nächtlicher Einspeiseplan mit SoC-Verlauf und PV-Prognose für heute und morgen.",
+    name: "HEMS Entladeplan",
+    description: "Nächtlicher Entladeplan mit SoC-Verlauf und PV-Prognose für heute und morgen.",
     preview: true,
   });
 }
