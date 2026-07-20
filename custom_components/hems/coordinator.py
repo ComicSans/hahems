@@ -118,6 +118,10 @@ class HemsData:
         self.lastprofil_quelle: str = ""
         self.lastprofil: list[dict] = []
         self.wp_modell: dict | None = None
+        # Eigene Entity-IDs, aus denen die Plankarte den gemessenen Verlauf
+        # des laufenden Tages nachlädt (Slugs sind instanzabhängig).
+        self.verlauf_pv_entity: str | None = None
+        self.verlauf_soc_entity: str | None = None
         self.plan: PlanResult = PlanResult()
 
 
@@ -283,6 +287,20 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         """Summe in W; None statt 0, wenn kein einziger Wert verfügbar ist."""
         vals = [v for e in entity_ids if e and (v := self._power_w(e)) is not None]
         return round(sum(vals), 0) if vals else None
+
+    def _own_entity_id(self, key: str) -> str | None:
+        """Entity-ID einer eigenen Entität über die Registry auflösen.
+
+        Die Karte kann die IDs nicht raten: Der Slug hängt an der beim
+        Anlegen vergebenen Bezeichnung und lässt sich vom Nutzer umbenennen.
+        Nach einer Umbenennung greift der neue Name mit dem nächsten
+        Update-Zyklus.
+        """
+        from homeassistant.helpers import entity_registry as er
+
+        return er.async_get(self.hass).async_get_entity_id(
+            "sensor", DOMAIN, f"{self.entry.entry_id}_{key}"
+        )
 
     async def _refresh_load_model(self) -> float:
         """Lastmodell lernen: Nacht-Grundlast (Skalar) und 24-h-Lastprofil.
@@ -493,12 +511,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         WP-Statistik wird stundenweise abgezogen (die WP kommt dann aus dem
         Modell).
         """
-        from homeassistant.helpers import entity_registry as er
-
-        ent_reg = er.async_get(self.hass)
-        stat_id = ent_reg.async_get_entity_id(
-            "sensor", DOMAIN, f"{self.entry.entry_id}_lastfluss"
-        )
+        stat_id = self._own_entity_id("lastfluss")
         if not stat_id:
             return None
         rows = await self._statistics_hourly_mean(stat_id, now - PROFILE_DAYS)
@@ -829,6 +842,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
 
         data.lastprofil_quelle = self._profile_source
         data.lastprofil = _profile_rows(self._load_profile, now)
+        data.verlauf_pv_entity = self._own_entity_id("pv_leistung_jetzt")
+        data.verlauf_soc_entity = self._own_entity_id("speicher_soc")
 
         if self.mode == MODE_OBSERVE:
             _LOGGER.info("HEMS-Empfehlung: %s", data.plan.empfehlung)

@@ -212,6 +212,10 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "pv_morgen_kwh": d.pv_tomorrow_kwh,
             "speicher_soc": d.plan.speicher_soc,
             "wetter_morgen": d.wetter_morgen,
+            # Quellen, aus denen die Plankarte den gemessenen Tagesverlauf
+            # nachlädt (Slugs sind instanzabhängig, daher nicht ratbar)
+            "verlauf_pv_entity": d.verlauf_pv_entity,
+            "verlauf_soc_entity": d.verlauf_soc_entity,
         },
     ),
     HemsSensorDescription(

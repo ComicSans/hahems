@@ -88,7 +88,13 @@ type: custom:hems-plan-card
 entity: sensor.hems_entladeplan   # optional, das ist der Default
 title: Entladeplan                # optional
 height: 440                       # optional, px; "auto" = inhaltsabhängig
+pv_entity: sensor.…               # optional, Verlaufsquelle PV-Leistung
+soc_entity: sensor.…              # optional, Verlaufsquelle Speicher-SoC
 ```
+
+`pv_entity`/`soc_entity` sind nur nötig, wenn der gemessene Verlauf aus
+anderen Entitäten kommen soll als den HEMS-eigenen — die meldet die
+Integration der Karte von selbst.
 
 Beide Karten haben dieselbe Standardhöhe (440 px) und sind damit in jedem
 Dashboard-Layout gleich hoch — auch im Masonry-Layout, wo sich Karten sonst
@@ -101,16 +107,24 @@ Kalendertag: orange die geschätzte PV-Stundenkurve (Tagesenergie sinusförmig
 (Akku-Abgabe ins Haus, nicht Netzeinspeisung). Eine rote Linie markiert
 "jetzt".
 
-Der bereits vergangene Teil des heutigen Tages bleibt leer und ist grau
-hinterlegt ("keine Verlaufsdaten"): Alle Kurven sind Prognosen ab jetzt, und
-für die zurückliegenden Stunden liest die Integration keine Messwerte aus der
-Historie. Statt dort eine rückwirkend geschätzte Kurve zu zeichnen, zeigt die
-Karte offen, dass sie nichts weiß.
+Für die bereits vergangenen Stunden des heutigen Tages holt die Karte den
+tatsächlich **gemessenen** Verlauf von PV-Leistung und Speicher-SoC per
+WebSocket aus dem Recorder nach (alle 5 Minuten, ab lokal 00:00). Die
+PV-Messwerte werden dabei zeitgewichtet auf Stundenmittel verdichtet, damit
+sie im selben Raster wie die Prognosebalken stehen; zeitgewichtet deshalb,
+weil der Recorder bei Zustandsänderung schreibt und ein ungewichtetes Mittel
+ruhige Phasen unterschlagen würde.
 
-Gestrichelt darüber liegt die SoC-Prognose: ein stündlicher Vorwärtslauf ab
+Messwerte sind kräftiger gezeichnet als die Prognose, der SoC durchgezogen
+statt gestrichelt — so bleibt Prognose und Realität nebeneinander ablesbar.
+Der Vergangenheitsbereich bleibt dezent hinterlegt. Ist der Verlauf nicht
+abrufbar (Recorder deaktiviert, Quellen nicht auflösbar, ältere HA-Version
+ohne die WebSocket-API), bleibt der Bereich leer und die Karte sagt "Verlauf
+nicht verfügbar" — die Prognosedarstellung funktioniert unabhängig davon.
+
+Gestrichelt liegt darüber die SoC-Prognose: ein stündlicher Vorwärtslauf ab
 jetzt, bei dem Überschuss lädt (begrenzt durch Ladeleistung und Kapazität) und
-Defizit bis zur Reserve entlädt. Sie beginnt bewusst erst bei "jetzt" — für die
-Vergangenheit ist nur der aktuelle Stand bekannt, alles davor wäre erfunden.
+Defizit bis zur Reserve entlädt.
 
 Das Band am unteren Rand zeigt die Warmwasser-Verfügbarkeit: türkis heißt
 freigegeben, grau eine konfigurierte Sperrzeit (siehe unten), violett das

@@ -15,10 +15,19 @@
  *   regelung_modus, regelung_w, reserve_aktiv         Speicher-Saldo-Regelung
  *   wp_modus, wp_vlt_c                                Heizkreis-Empfehlung
  *   budget_kwh, pv_rest_heute_kwh, pv_morgen_kwh, speicher_soc, wetter_morgen
+ *   verlauf_pv_entity, verlauf_soc_entity             Quellen für den Verlauf
  *
  * Balken: PV (orange) und geplante Entladung (grün); Linie: erwarteter
  * Speicher-SoC (rechte Achse). Unten: WW-Band (verfügbar/gesperrt/
  * Legionellenschutz) und Status-Chips der drei Regelungen.
+ *
+ * Für die bereits vergangenen Stunden des heutigen Tages holt die Karte den
+ * tatsächlich gemessenen Verlauf von PV-Leistung und Speicher-SoC per
+ * WebSocket aus dem Recorder nach. Messwerte sind kräftiger gezeichnet als
+ * die Prognose (SoC durchgezogen statt gestrichelt), damit der Vergleich
+ * Prognose/Realität ablesbar bleibt. Die Entitäten liefert die Integration
+ * über die Attribute oben; `pv_entity:`/`soc_entity:` in der Karten-
+ * konfiguration überschreiben sie.
  */
 
 const W = 480;
@@ -57,6 +66,12 @@ const REGELUNG_MODUS_LABEL = {
 // Karten nebeneinander gleich hoch sind. Per `height:` überschreibbar.
 const CARD_HEIGHT = 440;
 
+// Der Verlauf ändert sich nur am rechten Rand; die Plan-Entität aktualisiert
+// im Minutentakt. Ohne eigenen Takt liefe je Minute eine Recorder-Abfrage.
+const HISTORY_REFRESH_MS = 5 * 60 * 1000;
+// Schutz gegen riesige Polylines an Tagen mit sehr vielen Zustandswechseln.
+const HISTORY_MAX_SOC_POINTS = 600;
+
 function cssLength(value) {
   return typeof value === "number" ? `${value}px` : String(value);
 }
@@ -69,6 +84,81 @@ function fmtKwh(v) {
   })} kWh`;
 }
 
+/** Zeitstempel eines Recorder-Punkts in ms. WebSocket liefert `lu` als
+ *  Unix-Sekunden, ältere/REST-Formate einen ISO-String. */
+function histTime(p) {
+  const raw = p.lu ?? p.last_updated ?? p.last_changed;
+  if (typeof raw === "number") return raw * 1000;
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/** Zahlenwert eines Recorder-Punkts; "unknown"/"unavailable" → null. */
+function histValue(p) {
+  const v = Number(p.s ?? p.state);
+  return Number.isFinite(v) ? v : null;
+}
+
+/** Recorder-Rohpunkte in aufsteigend sortierte [ms, wert]-Paare wandeln. */
+function histPoints(series) {
+  if (!Array.isArray(series)) return [];
+  const pts = [];
+  for (const p of series) {
+    const t = histTime(p);
+    const v = histValue(p);
+    if (t !== null && v !== null) pts.push([t, v]);
+  }
+  return pts.sort((a, b) => a[0] - b[0]);
+}
+
+/**
+ * Zustandspunkte zu Stundenmitteln verdichten, passend zu den Stunden-Balken
+ * der Prognose. Zeitgewichtet, weil der Recorder bei Zustandsänderung
+ * schreibt: Ein ungewichtetes Mittel überginge ruhige Phasen und zöge den
+ * Wert zu Phasen schneller Änderung hin. Ein Zustand gilt bis zum nächsten
+ * Punkt (Stufenfunktion), der letzte bis `until`.
+ */
+function hourlyMeans(points, until) {
+  const buckets = new Map(); // Stundenbeginn (ms) → {sum, dur}
+  for (let i = 0; i < points.length; i++) {
+    const [t, v] = points[i];
+    const segEnd = Math.min(i + 1 < points.length ? points[i + 1][0] : until, until);
+    let cur = t;
+    while (cur < segEnd) {
+      const hour = new Date(cur);
+      hour.setMinutes(0, 0, 0);
+      const hourStart = hour.getTime();
+      const chunkEnd = Math.min(segEnd, hourStart + 3600000);
+      const dur = chunkEnd - cur;
+      if (dur > 0) {
+        const b = buckets.get(hourStart) ?? { sum: 0, dur: 0 };
+        b.sum += v * dur;
+        b.dur += dur;
+        buckets.set(hourStart, b);
+      }
+      cur = chunkEnd;
+    }
+  }
+  return [...buckets.entries()]
+    .filter(([, b]) => b.dur > 0)
+    .map(([hourStart, b]) => ({
+      von: new Date(hourStart),
+      bis: new Date(Math.min(hourStart + 3600000, until)),
+      watt: Math.round(b.sum / b.dur),
+    }))
+    .sort((a, b) => a.von - b.von);
+}
+
+/** Gleichmäßig ausdünnen, Endpunkte bleiben erhalten. */
+function thin(points, max) {
+  if (points.length <= max) return points;
+  const step = Math.ceil(points.length / max);
+  const out = points.filter((_p, i) => i % step === 0);
+  const last = points[points.length - 1];
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
+}
+
 class HemsPlanCard extends HTMLElement {
   static getStubConfig() {
     return { entity: "sensor.hems_entladeplan" };
@@ -79,8 +169,13 @@ class HemsPlanCard extends HTMLElement {
       entity: config.entity || "sensor.hems_entladeplan",
       title: config.title,
       height: config.height ?? CARD_HEIGHT,
+      // Überschreiben die von der Integration gemeldeten Verlaufsquellen
+      pvEntity: config.pv_entity,
+      socEntity: config.soc_entity,
     };
     this._lastUpdated = null;
+    this._history = null;
+    this._historyFetched = 0;
   }
 
   getCardSize() {
@@ -95,6 +190,53 @@ class HemsPlanCard extends HTMLElement {
     if (stamp === this._lastUpdated) return;
     this._lastUpdated = stamp;
     this._render(state);
+    // Nachgelagert: zeichnet bei Erfolg ein zweites Mal, mit Verlauf.
+    this._refreshHistory(state);
+  }
+
+  /**
+   * Gemessenen Tagesverlauf aus dem Recorder nachladen (ab lokal 00:00).
+   *
+   * Bewusst nach dem ersten Rendern: Die Karte steht sofort mit den
+   * Prognosedaten, der Verlauf kommt nach. Fehler sind nicht fatal — dann
+   * bleibt der Vergangenheitsbereich eben leer, wie vor dieser Erweiterung.
+   */
+  async _refreshHistory(state) {
+    if (!this._hass || !state || typeof this._hass.callWS !== "function") return;
+    const now = Date.now();
+    if (this._history && now - this._historyFetched < HISTORY_REFRESH_MS) return;
+
+    const a = state.attributes;
+    const pvEntity = this._config.pvEntity ?? a.verlauf_pv_entity;
+    const socEntity = this._config.socEntity ?? a.verlauf_soc_entity;
+    const ids = [pvEntity, socEntity].filter(Boolean);
+    if (!ids.length) return;
+
+    // Vor dem await setzen, damit ein Fehlschlag nicht jede Minute erneut
+    // eine Abfrage auslöst.
+    this._historyFetched = now;
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+
+    try {
+      const res = await this._hass.callWS({
+        type: "history/history_during_period",
+        start_time: dayStart.toISOString(),
+        end_time: new Date().toISOString(),
+        entity_ids: ids,
+        minimal_response: true,
+        no_attributes: true,
+      });
+      this._history = {
+        bis: Date.now(),
+        pv: histPoints(res?.[pvEntity]),
+        soc: histPoints(res?.[socEntity]),
+      };
+    } catch (err) {
+      console.warn("hems-plan-card: Verlauf nicht abrufbar", err);
+      return;
+    }
+    this._render(this._hass.states[this._config.entity]);
   }
 
   _render(state) {
@@ -142,7 +284,25 @@ class HemsPlanCard extends HTMLElement {
     dayEnd.setDate(dayEnd.getDate() + 2);
     const t0 = dayStart.getTime();
     const t1 = dayEnd.getTime();
-    const maxW = Math.max(100, ...all.map((s) => s.watt));
+
+    // Gemessener Verlauf des laufenden Tages (falls schon geladen). Die
+    // PV-Messwerte werden auf Stundenmittel verdichtet, damit sie im selben
+    // Raster wie die Prognosebalken stehen.
+    const histPv = this._history
+      ? hourlyMeans(this._history.pv, this._history.bis).filter(
+          (s) => s.bis.getTime() > t0 && s.von.getTime() < t1
+        )
+      : [];
+    const histSoc = this._history
+      ? thin(
+          this._history.soc.filter(([t]) => t >= t0 && t <= t1),
+          HISTORY_MAX_SOC_POINTS
+        )
+      : [];
+    const hasHistory = histPv.length > 0 || histSoc.length > 0;
+
+    // Messwerte in die Skalierung einbeziehen, sonst ragen sie aus dem Bild.
+    const maxW = Math.max(100, ...all.map((s) => s.watt), ...histPv.map((s) => s.watt));
     const yMax = Math.ceil(maxW / 500) * 500;
 
     const x = (t) => PAD.left + ((t - t0) / (t1 - t0)) * (W - PAD.left - PAD.right);
@@ -154,30 +314,38 @@ class HemsPlanCard extends HTMLElement {
     const fmtTime = (d) =>
       d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 
-    const bar = (s, color, cls) => {
+    const bar = (s, color, cls, titlePrefix = "") => {
       const bx = x(s.von.getTime());
       const bw = Math.max(1, x(s.bis.getTime()) - bx - 1);
       const by = y(s.watt);
-      const past = s.bis.getTime() <= now ? " past" : "";
+      const past = !cls.includes("hist") && s.bis.getTime() <= now ? " past" : "";
       return `<rect class="${cls}${past}" x="${bx.toFixed(1)}" y="${by.toFixed(1)}"
         width="${bw.toFixed(1)}" height="${Math.max(0, y0 - by).toFixed(1)}"
-        fill="${color}"><title>${fmtTime(s.von)} · ${s.watt} W</title></rect>`;
+        fill="${color}"><title>${titlePrefix}${fmtTime(s.von)} · ${s.watt} W</title></rect>`;
     };
 
+    // Gemessene PV-Stunden zuerst, damit die blasse Prognose sie überlagert
+    // statt sie zu verdecken, falls beide dieselbe Stunde belegen.
+    const histPvBars = histPv
+      .map((s) => bar(s, COLOR_PV, "pv hist", "gemessen: "))
+      .join("");
     const pvBars = pv.map((s) => bar(s, COLOR_PV, "pv")).join("");
     const planBars = plan.map((s) => bar(s, COLOR_PLAN, "plan")).join("");
 
-    // SoC-Prognose ab jetzt, gestrichelt: die Linie zeigt eine Erwartung,
-    // keinen gemessenen Verlauf. Für die Vergangenheit gibt es bewusst keine
-    // Kurve — bekannt ist nur der aktuelle Stand.
+    const polyline = (pts, cls) =>
+      pts.length
+        ? `<polyline class="${cls}" points="${pts
+            .map(([t, p]) => `${x(t).toFixed(1)},${ySoc(p).toFixed(1)}`)
+            .join(" ")}"/>`
+        : "";
+
+    // SoC: gemessener Verlauf durchgezogen, Prognose ab jetzt gestrichelt —
+    // so bleibt unterscheidbar, was gemessen und was erwartet ist.
+    const histSocLine = polyline(histSoc, "soc hist");
     const socPts = (a.soc_prognose || [])
       .map((p) => [new Date(p.zeit).getTime(), p.soc])
       .filter(([t, p]) => p != null && t >= t0 && t <= t1);
-    const socLine = socPts.length
-      ? `<polyline class="soc" points="${socPts
-          .map(([t, p]) => `${x(t).toFixed(1)},${ySoc(p).toFixed(1)}`)
-          .join(" ")}"/>`
-      : "";
+    const socLine = polyline(socPts, "soc");
 
     // Warmwasser-Band: durchgehend "verfügbar", darüber Sperrfenster (grau)
     // und Legionellenschutz-Fenster (violett, erhöhter Sollwert).
@@ -222,19 +390,20 @@ class HemsPlanCard extends HTMLElement {
       .map(([dx, label]) => `<text class="day" x="${dx}" y="${PAD.top - 2}">${label}</text>`)
       .join("");
 
-    // Bereits vergangener Teil des heutigen Tages: Für ihn liegen keine
-    // Verlaufsdaten vor (die Kurven sind Prognosen ab jetzt), deshalb bleibt
-    // er leer und wird nur ausgegraut.
+    // Bereits vergangener Teil des heutigen Tages: dezent hinterlegt, damit
+    // Messung und Prognose auf einen Blick auseinandergehen.
     const pastZone =
       now > t0
         ? `<rect class="past-zone" x="${PAD.left}" y="${PAD.top}"
              width="${(x(Math.min(now, t1)) - PAD.left).toFixed(1)}"
              height="${(y0 - PAD.top).toFixed(1)}"/>`
         : "";
+    // Hinweis nur, wenn der Verlauf tatsächlich fehlt (Recorder aus, Quellen
+    // nicht aufgelöst, Abruf fehlgeschlagen) — nicht als pauschale Aussage.
     const pastLabel =
-      x(Math.min(now, t1)) - PAD.left > 70
+      !hasHistory && x(Math.min(now, t1)) - PAD.left > 70
         ? `<text class="past-label" x="${((PAD.left + x(Math.min(now, t1))) / 2).toFixed(1)}"
-             y="${((PAD.top + y0) / 2).toFixed(1)}">keine Verlaufsdaten</text>`
+             y="${((PAD.top + y0) / 2).toFixed(1)}">Verlauf nicht verfügbar</text>`
         : "";
 
     // Jetzt-Marker
@@ -341,6 +510,9 @@ class HemsPlanCard extends HTMLElement {
           stroke-dasharray: 5 4;
           stroke-linejoin: round;
         }
+        /* Messwerte: kräftiger als die Prognose, SoC durchgezogen */
+        .pv.hist { opacity: 0.95; }
+        .soc.hist { stroke-dasharray: none; }
         .ww-ok { opacity: 0.8; }
         .ww-block { opacity: 0.9; }
         .ww-legio { opacity: 0.95; }
@@ -389,12 +561,21 @@ class HemsPlanCard extends HTMLElement {
           border-radius: 0;
           width: 12px;
         }
+        .soc-swatch.solid { border-top-style: solid; }
+        .swatch.faded { opacity: 0.55; }
       </style>
       <ha-card ${this._config.title ? `header="${this._config.title}"` : `header="Entladeplan"`}>
         <div class="legend">
-          <span><i class="swatch" style="background:${COLOR_PV}"></i>PV-Prognose</span>
+          ${
+            hasHistory
+              ? `<span><i class="swatch" style="background:${COLOR_PV}"></i>PV gemessen</span>
+                 <span><i class="swatch faded" style="background:${COLOR_PV}"></i>PV-Prognose</span>
+                 <span><i class="swatch soc-swatch solid"></i>SoC gemessen</span>
+                 <span><i class="swatch soc-swatch"></i>SoC-Prognose</span>`
+              : `<span><i class="swatch" style="background:${COLOR_PV}"></i>PV-Prognose</span>
+                 <span><i class="swatch soc-swatch"></i>SoC-Prognose</span>`
+          }
           <span><i class="swatch" style="background:${COLOR_PLAN}"></i>Entladung geplant</span>
-          <span><i class="swatch soc-swatch"></i>SoC-Prognose</span>
           <span><i class="swatch" style="background:${COLOR_WW_OK}"></i>WW verfügbar</span>
           <span><i class="swatch" style="background:${COLOR_WW_BLOCK}"></i>WW gesperrt</span>
           <span><i class="swatch" style="background:${COLOR_WW_LEGIO}"></i>Legionellenschutz</span>
@@ -406,8 +587,10 @@ class HemsPlanCard extends HTMLElement {
             ${yTicks}
             ${sep}
             ${dayLabels}
+            ${histPvBars}
             ${pvBars}
             ${planBars}
+            ${histSocLine}
             ${socLine}
             ${nowMark}
             ${ticks}
