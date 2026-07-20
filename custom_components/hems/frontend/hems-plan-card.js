@@ -3,12 +3,18 @@
  *
  * Dependency-frei (kein Lit, kein Build). Datenquelle ist der Sensor
  * sensor.hems_einspeiseplan mit den Attributen:
- *   slots      [{von, bis, watt, soc_erwartet}]  geplante Einspeisung (Nacht)
- *   pv_kurve   [{von, bis, watt}]                geschätzte PV-Leistung
+ *   slots           [{von, bis, watt, soc_erwartet}]  geplante Einspeisung (Nacht)
+ *   pv_kurve        [{von, bis, watt}]                geschätzte PV-Leistung
+ *   ww_sperren      [{von, bis}]                      WW-Sperrzeiten
+ *   ww_legionellen  [{von, bis}]                      Legionellenschutz-Fenster
+ *   ww_soll_c, ww_status                              WW-Sollwert-Empfehlung
+ *   regelung_modus, regelung_w, reserve_aktiv         Speicher-Saldo-Regelung
+ *   wp_modus, wp_vlt_c                                Heizkreis-Empfehlung
  *   budget_kwh, pv_rest_heute_kwh, pv_morgen_kwh, speicher_soc, wetter_morgen
  *
  * Balken: PV (orange) und geplante Einspeisung (grün); Linie: erwarteter
- * Speicher-SoC (rechte Achse). Zeitraum: jetzt bis morgen Sonnenuntergang.
+ * Speicher-SoC (rechte Achse). Unten: WW-Band (verfügbar/gesperrt/
+ * Legionellenschutz) und Status-Chips der drei Regelungen.
  */
 
 const W = 480;
@@ -22,6 +28,21 @@ const COLOR_PLAN = "#4caf50";
 const COLOR_SOC = "#488fc2";
 const COLOR_WW_OK = "#26a69a";
 const COLOR_WW_BLOCK = "#b0bec5";
+const COLOR_WW_LEGIO = "#7e57c2";
+
+// Anzeigetexte für den WW-Status aus dem Planner
+const WW_STATUS_LABEL = {
+  aus: "aus (Sperrzeit)",
+  legionellenschutz: "Legionellenschutz",
+  pv_boost: "PV-Boost",
+  basis: "Basis",
+};
+const WP_MODUS_LABEL = {
+  heizen: "heizen",
+  kuehlen: "kühlen",
+  aus: "aus",
+  unbekannt: "unbekannt",
+};
 
 // Muss mit CARD_HEIGHT in hems-flow-card.js übereinstimmen, damit beide
 // Karten nebeneinander gleich hoch sind. Per `height:` überschreibbar.
@@ -149,24 +170,33 @@ class HemsPlanCard extends HTMLElement {
           .join(" ")}"/>`
       : "";
 
-    // Warmwasser-Band: durchgehend "verfügbar", darüber die Sperrfenster.
-    const ww = (a.ww_sperren || [])
-      .map((s) => ({ von: new Date(s.von), bis: new Date(s.bis) }))
-      .filter((s) => s.bis.getTime() > t0 && s.von.getTime() < t1);
-    const wwBlocks = ww
-      .map((s) => {
-        const bx = x(Math.max(t0, s.von.getTime()));
-        const bw = Math.max(1, x(Math.min(t1, s.bis.getTime())) - bx);
-        return `<rect class="ww-block" x="${bx.toFixed(1)}" y="${WW_BAND.y}"
-          width="${bw.toFixed(1)}" height="${WW_BAND.h}" fill="${COLOR_WW_BLOCK}"
-          ><title>Warmwasser gesperrt ${fmtTime(s.von)} – ${fmtTime(s.bis)}</title></rect>`;
-      })
+    // Warmwasser-Band: durchgehend "verfügbar", darüber Sperrfenster (grau)
+    // und Legionellenschutz-Fenster (violett, erhöhter Sollwert).
+    const wwWindows = (key) =>
+      (a[key] || [])
+        .map((s) => ({ von: new Date(s.von), bis: new Date(s.bis) }))
+        .filter((s) => s.bis.getTime() > t0 && s.von.getTime() < t1);
+    const wwSegment = (s, color, cls, title) => {
+      const bx = x(Math.max(t0, s.von.getTime()));
+      const bw = Math.max(1, x(Math.min(t1, s.bis.getTime())) - bx);
+      return `<rect class="${cls}" x="${bx.toFixed(1)}" y="${WW_BAND.y}"
+        width="${bw.toFixed(1)}" height="${WW_BAND.h}" fill="${color}"
+        ><title>${title} ${fmtTime(s.von)} – ${fmtTime(s.bis)}</title></rect>`;
+    };
+    const wwBlocks = wwWindows("ww_sperren")
+      .map((s) => wwSegment(s, COLOR_WW_BLOCK, "ww-block", "Warmwasser gesperrt"))
+      .join("");
+    const wwLegio = wwWindows("ww_legionellen")
+      .map((s) =>
+        wwSegment(s, COLOR_WW_LEGIO, "ww-legio", "Legionellenschutz")
+      )
       .join("");
     const wwBand = `
       <rect class="ww-ok" x="${PAD.left}" y="${WW_BAND.y}"
         width="${W - PAD.left - PAD.right}" height="${WW_BAND.h}"
         fill="${COLOR_WW_OK}"><title>Warmwasser verfügbar</title></rect>
       ${wwBlocks}
+      ${wwLegio}
       <text class="ylabel" x="${PAD.left - 4}" y="${WW_BAND.y + WW_BAND.h - 2}">WW</text>`;
 
     // Mitternachts-Trenner + Tageslabels
@@ -228,6 +258,29 @@ class HemsPlanCard extends HTMLElement {
       )
       .join("");
 
+    // Status der drei Regelungen: WW-Sollwert, Speicher-Saldo-Regelung
+    // und Heizkreis-Empfehlung, sofern konfiguriert bzw. Daten vorliegen.
+    const wwChip =
+      a.ww_status && a.ww_status !== ""
+        ? a.ww_soll_c != null
+          ? `🚿 WW ${Math.round(a.ww_soll_c)} °C · ${WW_STATUS_LABEL[a.ww_status] ?? a.ww_status}`
+          : `🚿 WW ${WW_STATUS_LABEL[a.ww_status] ?? a.ww_status}`
+        : null;
+    const regelungChip =
+      a.regelung_modus != null
+        ? `🔋 Regelung ${a.regelung_modus}${
+            a.regelung_modus !== "pausiert" && a.regelung_w != null
+              ? ` ${Math.round(Math.abs(a.regelung_w))} W`
+              : ""
+          }${a.reserve_aktiv ? " · Kaltreserve" : ""}`
+        : null;
+    const wpChip =
+      a.wp_modus != null
+        ? `♨️ WP ${WP_MODUS_LABEL[a.wp_modus] ?? a.wp_modus}${
+            a.wp_vlt_c != null ? ` · VLT ${Math.round(a.wp_vlt_c)} °C` : ""
+          }`
+        : null;
+
     const chips = [
       `☀️ Heute Rest ${fmtKwh(a.pv_rest_heute_kwh)}`,
       `🌤 Morgen ${fmtKwh(a.pv_morgen_kwh)}${a.wetter_morgen ? ` · ${a.wetter_morgen}` : ""}`,
@@ -235,6 +288,9 @@ class HemsPlanCard extends HTMLElement {
       state.state !== "unknown" && state.state !== "unavailable" && state.state !== ""
         ? `⚡ Jetzt ${Math.round(Number(state.state))} W`
         : null,
+      wwChip,
+      regelungChip,
+      wpChip,
     ]
       .filter(Boolean)
       .map((c) => `<span class="chip">${c}</span>`)
@@ -276,6 +332,7 @@ class HemsPlanCard extends HTMLElement {
         }
         .ww-ok { opacity: 0.8; }
         .ww-block { opacity: 0.9; }
+        .ww-legio { opacity: 0.95; }
         .grid { stroke: var(--divider-color, #e0e0e0); stroke-width: 1; }
         .grid.mid { stroke-dasharray: 4 4; }
         .now { stroke: var(--error-color, #f44336); stroke-width: 1.5; }
@@ -329,6 +386,7 @@ class HemsPlanCard extends HTMLElement {
           <span><i class="swatch soc-swatch"></i>SoC-Prognose</span>
           <span><i class="swatch" style="background:${COLOR_WW_OK}"></i>WW verfügbar</span>
           <span><i class="swatch" style="background:${COLOR_WW_BLOCK}"></i>WW gesperrt</span>
+          <span><i class="swatch" style="background:${COLOR_WW_LEGIO}"></i>Legionellenschutz</span>
         </div>
         <div class="container">
           <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"

@@ -6,6 +6,8 @@
  * Attribute trägt:
  *   pv_w, netz_w (positiv = Bezug), batterie_w (positiv = Entladen),
  *   haus_w, wp_w, wallbox_w, speicher_soc, pv_geschaetzt
+ * plus Status der Regelungen für die Chips:
+ *   regelung_modus, regelung_w, ww_soll_c, ww_status, wp_modus, wp_vlt_c
  *
  * Die Aufteilung auf die Kanten folgt derselben Merit-Order wie der
  * Planner: PV deckt zuerst das Haus, dann die Akkus, der Rest speist ein.
@@ -175,9 +177,30 @@ class HemsFlowCard extends HTMLElement {
       )
       .join("");
 
+    const wwLabel = {
+      aus: "aus (Sperrzeit)",
+      legionellenschutz: "Legionellenschutz",
+      pv_boost: "PV-Boost",
+      basis: "Basis",
+    };
     const chips = [
       a.wp_w != null ? `♨️ Wärmepumpe ${fmtW(a.wp_w)}` : null,
+      a.wp_modus != null && a.wp_vlt_c != null
+        ? `🌡 WP ${a.wp_modus === "kuehlen" ? "kühlt" : a.wp_modus} · VLT ${Math.round(a.wp_vlt_c)} °C`
+        : null,
       a.wallbox_w != null ? `🚗 Wallbox ${fmtW(a.wallbox_w)}` : null,
+      a.regelung_modus != null
+        ? `🔋 Regelung ${a.regelung_modus}${
+            a.regelung_modus !== "pausiert" && a.regelung_w != null
+              ? ` ${fmtW(a.regelung_w)}`
+              : ""
+          }`
+        : null,
+      a.ww_status
+        ? a.ww_soll_c != null
+          ? `🚿 WW ${Math.round(a.ww_soll_c)} °C · ${wwLabel[a.ww_status] ?? a.ww_status}`
+          : `🚿 WW ${wwLabel[a.ww_status] ?? a.ww_status}`
+        : null,
     ]
       .filter(Boolean)
       .map((c) => `<span class="chip">${c}</span>`)

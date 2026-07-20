@@ -83,6 +83,13 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "wallbox_w": d.wallbox_w,
             "speicher_soc": d.plan.speicher_soc,
             "pv_geschaetzt": d.pv_power_estimated,
+            # Status-Chips der Flow-Card
+            "regelung_modus": d.plan.regelung.modus if d.plan.regelung else None,
+            "regelung_w": d.plan.regelung.soll_w if d.plan.regelung else None,
+            "ww_soll_c": d.plan.ww_soll_c,
+            "ww_status": d.plan.ww_status,
+            "wp_modus": d.plan.heizung.modus if d.plan.heizung else None,
+            "wp_vlt_c": d.plan.heizung.vlt_ziel_c if d.plan.heizung else None,
         },
     ),
     HemsSensorDescription(
@@ -166,11 +173,83 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
                 for start, end in d.plan.ww_sperrfenster
             ],
             "ww_gesperrt": d.plan.ww_gesperrt,
+            # Legionellenschutz-Fenster im Darstellungshorizont
+            "ww_legionellen": [
+                {
+                    "von": dt_util.as_local(start).isoformat(),
+                    "bis": dt_util.as_local(end).isoformat(),
+                }
+                for start, end in d.plan.ww_legionellen_fenster
+            ],
+            "ww_soll_c": d.plan.ww_soll_c,
+            "ww_status": d.plan.ww_status,
+            # Status-Chips: Heizkreis und Saldo-Regelung
+            "wp_modus": d.plan.heizung.modus if d.plan.heizung else None,
+            "wp_vlt_c": d.plan.heizung.vlt_ziel_c if d.plan.heizung else None,
+            "regelung_modus": d.plan.regelung.modus if d.plan.regelung else None,
+            "regelung_w": d.plan.regelung.soll_w if d.plan.regelung else None,
+            "reserve_aktiv": d.plan.regelung.reserve_aktiv
+            if d.plan.regelung
+            else None,
             "pv_rest_heute_kwh": d.pv_remaining_kwh,
             "pv_morgen_kwh": d.pv_tomorrow_kwh,
             "speicher_soc": d.plan.speicher_soc,
             "wetter_morgen": d.wetter_morgen,
         },
+    ),
+    HemsSensorDescription(
+        key="ww_soll",
+        name="Warmwasser-Soll",
+        native_unit_of_measurement="°C",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        # Empfohlener Sollwert; in der Sperrzeit None ("aus", siehe Status)
+        value_fn=lambda d: d.plan.ww_soll_c,
+        attr_fn=lambda d: {
+            "status": d.plan.ww_status,
+            "gesperrt": d.plan.ww_gesperrt,
+            "legionellenschutz_aktiv": d.plan.ww_legionelle_aktiv,
+            "legionellen_fenster": [
+                {
+                    "von": dt_util.as_local(start).isoformat(),
+                    "bis": dt_util.as_local(end).isoformat(),
+                }
+                for start, end in d.plan.ww_legionellen_fenster
+            ],
+            "boost_speicher_ok": d.plan.flags.ww_boost_soc,
+            "boost_einspeisung_ok": d.plan.flags.ww_boost_saldo,
+        },
+    ),
+    HemsSensorDescription(
+        key="speicher_regelung",
+        name="Speicher-Regelung",
+        # Zustand = Modus-Empfehlung der Saldo-Regelung
+        value_fn=lambda d: d.plan.regelung.modus if d.plan.regelung else None,
+        attr_fn=lambda d: {
+            "soll_w": d.plan.regelung.soll_w,
+            "fehler_w": d.plan.regelung.fehler_w,
+            "zuteilung": [
+                {"name": z.name, "watt": z.watt}
+                for z in d.plan.regelung.zuteilung
+            ],
+            "kaltreserve_aktiv": d.plan.regelung.reserve_aktiv,
+            "kaltreserve_speicher": d.plan.regelung.reserve_namen,
+        }
+        if d.plan.regelung
+        else {},
+    ),
+    HemsSensorDescription(
+        key="heizkreis",
+        name="Heizkreis",
+        # Zustand = Modus-Empfehlung (heizen/kuehlen/aus)
+        value_fn=lambda d: d.plan.heizung.modus if d.plan.heizung else None,
+        attr_fn=lambda d: {
+            "vorlauf_ziel_c": d.plan.heizung.vlt_ziel_c,
+            "aussentemperatur_c": d.plan.heizung.t_aussen_c,
+            "sommersperre": d.plan.heizung.sommer_sperre,
+            "leise_empfohlen": d.plan.heizung.leise_empfohlen,
+        }
+        if d.plan.heizung
+        else {},
     ),
     HemsSensorDescription(
         key="empfehlung",

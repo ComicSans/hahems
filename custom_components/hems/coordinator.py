@@ -36,11 +36,14 @@ from .const import (
 )
 from .models import DeviceRegistry, parse_devices
 from .planner import (
+    HeatingState,
+    PlanFlags,
     PlanInput,
     PlanResult,
     StorageState,
     block_windows,
     compute_plan,
+    weekly_windows,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,6 +60,17 @@ MIN_PROFILE_BUCKETS = 6  # darunter gilt das Profil als zu dünn, Fallback greif
 # Umrechnung nach W bzw. kWh; Sensoren ohne Einheit werden als W/kWh gelesen.
 POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
+
+
+def _parse_weekday(value: str | int | None) -> int | None:
+    """Wochentag aus den Optionen (Select liefert Strings) nach 0–6 wandeln."""
+    if value is None or value == "" or value == "none":
+        return None
+    try:
+        day = int(value)
+    except (TypeError, ValueError):
+        return None
+    return day if 0 <= day <= 6 else None
 
 
 def _profile_rows(
@@ -119,6 +133,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._weather_cache: tuple[str | None, float | None] = (None, None)
         self._weather_fetched: datetime | None = None
         self._unit_warned: set[str] = set()
+        # Hysterese-Zustand des Planners, über die Update-Zyklen fortgeschrieben.
+        self._plan_flags = PlanFlags()
 
     # -- Konfiguration -----------------------------------------------------
 
@@ -148,6 +164,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         for t in reg.thermals:
             if t.temp_entity:
                 ids.add(t.temp_entity)
+        for h in reg.heatings:
+            ids.update(e for e in (h.outdoor_temp_entity, h.demand_entity) if e)
         for s in reg.switchables:
             ids.update(e for e in (s.switch_entity, s.power_entity) if e)
         for m in reg.modulateds:
@@ -523,10 +541,13 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 reserve_soc=s.reserve_soc,
                 max_charge_w=s.max_charge_w,
                 max_discharge_w=s.max_discharge_w,
+                power_w=self._power_w(s.power_entity),
+                cold_reserve=s.cold_reserve,
             )
             for s in reg.storages
         ]
         thermal = reg.thermals[0] if reg.thermals else None
+        heating_cfg = reg.heatings[0] if reg.heatings else None
 
         # Darstellungshorizont der Plankarte: der ganze heutige und der ganze
         # morgige Kalendertag (lokal), plus die Sonnenzeiten beider Tage für
@@ -544,6 +565,37 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             horizon_end,
             dt_util.DEFAULT_TIME_ZONE,
         )
+        ww_legionellen = weekly_windows(
+            _parse_weekday(thermal.legionella_weekday) if thermal else None,
+            thermal.legionella_start if thermal else None,
+            thermal.legionella_end if thermal else None,
+            horizon_start,
+            horizon_end,
+            dt_util.DEFAULT_TIME_ZONE,
+        )
+
+        heating = None
+        if heating_cfg is not None:
+            month = dt_util.now().month
+            lo, hi = heating_cfg.heat_lock_from_month, heating_cfg.heat_lock_to_month
+            # Sperrbereich über den Jahreswechsel (z. B. 11 → 3) zulassen.
+            locked = lo <= month <= hi if lo <= hi else (month >= lo or month <= hi)
+            heating = HeatingState(
+                name=heating_cfg.name,
+                outdoor_temp_c=self._num(heating_cfg.outdoor_temp_entity),
+                demand_pct=self._num(heating_cfg.demand_entity),
+                heat_locked=locked,
+                heat_on_c=heating_cfg.heat_on_c,
+                heat_off_c=heating_cfg.heat_off_c,
+                cool_on_c=heating_cfg.cool_on_c,
+                cool_off_c=heating_cfg.cool_off_c,
+                curve_base_c=heating_cfg.curve_base_c,
+                curve_slope=heating_cfg.curve_slope,
+                vlt_min_c=heating_cfg.vlt_min_c,
+                vlt_min_cold_c=heating_cfg.vlt_min_cold_c,
+                vlt_max_c=heating_cfg.vlt_max_c,
+                cool_vlt_c=heating_cfg.cool_vlt_c,
+            )
 
         data.plan = compute_plan(
             PlanInput(
@@ -563,6 +615,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 thermal_temp=self._num(thermal.temp_entity) if thermal else None,
                 thermal_base=thermal.base_target if thermal else 48,
                 thermal_comfort=thermal.comfort_target if thermal else 60,
+                thermal_present=thermal is not None,
                 priority_mode=self._opt(CONF_PRIORITY_MODE, PRIORITY_AUTO),
                 weather_factor_tomorrow=data.wetter_faktor_morgen,
                 free_kwh=float(self._opt(CONF_FREE_KWH, DEFAULT_FREE_KWH)),
@@ -580,8 +633,23 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     self.hass, "sunset", tomorrow_local
                 ),
                 thermal_block_windows=ww_sperren,
+                thermal_legionella_windows=ww_legionellen,
+                thermal_legionella_target=thermal.legionella_target
+                if thermal
+                else 60,
+                thermal_boost_soc_on=thermal.boost_soc_on if thermal else 80,
+                thermal_boost_soc_off=thermal.boost_soc_off if thermal else 75,
+                thermal_boost_saldo_on_w=thermal.boost_saldo_on_w
+                if thermal
+                else -2800,
+                thermal_boost_saldo_off_w=thermal.boost_saldo_off_w
+                if thermal
+                else 200,
+                heating=heating,
+                flags=self._plan_flags,
             )
         )
+        self._plan_flags = data.plan.flags
 
         data.lastprofil_quelle = self._profile_source
         data.lastprofil = _profile_rows(self._load_profile, now)

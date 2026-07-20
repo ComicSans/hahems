@@ -49,14 +49,16 @@
           "capacity_kwh": "Capacity (kWh)",
           "reserve_soc": "Reserve SoC (%)",
           "max_charge_w": "Max. charging power (W)",
-          "max_discharge_w": "Max. discharge power (W)"
+          "max_discharge_w": "Max. discharge power (W)",
+          "cold_reserve": "Cold reserve"
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
           "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge/feed-in power (e.g. “feed in 500 W now”).",
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
           "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
-          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house."
+          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house.",
+          "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity."
         }
       },
       "add_thermal": {
@@ -68,13 +70,29 @@
           "base_target": "Base target (°C)",
           "comfort_target": "Comfort target (°C)",
           "block_start": "Blocked from",
-          "block_end": "Blocked until"
+          "block_end": "Blocked until",
+          "legionella_weekday": "Legionella protection: weekday",
+          "legionella_start": "Legionella protection: from",
+          "legionella_end": "Legionella protection: until",
+          "legionella_target": "Legionella protection target (°C)",
+          "boost_soc_on": "PV boost: battery SoC to start (%)",
+          "boost_soc_off": "PV boost: battery SoC to stop (%)",
+          "boost_saldo_on_w": "PV boost: grid balance to start (W)",
+          "boost_saldo_off_w": "PV boost: grid balance to stop (W)"
         },
         "data_description": {
           "base_target": "This temperature is always maintained, from the grid if necessary.",
           "comfort_target": "Heating up to this temperature only happens on PV surplus.",
           "block_start": "Start of the daily period in which no hot water is prepared. Leave both empty for no blocking.",
-          "block_end": "End of the blocked period. An end before the start means the window runs over midnight (e.g. 18:00 to 06:00)."
+          "block_end": "End of the blocked period. An end before the start means the window runs over midnight (e.g. 18:00 to 06:00).",
+          "legionella_weekday": "Weekly hygiene window: on this day the target is raised to the legionella target regardless of surplus — from the grid if necessary. \"Disabled\" turns the feature off.",
+          "legionella_start": "Local start time of the weekly legionella window.",
+          "legionella_end": "End of the window. An end before the start runs over midnight.",
+          "legionella_target": "Target temperature held during the legionella window.",
+          "boost_soc_on": "Heating to the comfort target is only recommended once the total storage SoC reaches this level.",
+          "boost_soc_off": "The boost recommendation ends when the SoC falls below this level (hysteresis).",
+          "boost_saldo_on_w": "Grid balance that must be reached to start the boost; negative = export (e.g. -2800 = exporting 2.8 kW).",
+          "boost_saldo_off_w": "Grid balance at which the boost ends (positive = import)."
         }
       },
       "add_switchable": {
@@ -119,7 +137,7 @@
         }
       },
       "forecast_menu": {
-        "title": "PV forecast planes (step 2 of 6)",
+        "title": "PV forecast planes (step 2 of 7)",
         "description": "A **PV forecast plane** provides the expected solar production, e.g. from the Forecast.Solar or Solcast integration. Add multiple planes (east/west roof) separately — HEMS sums them automatically.\n\nAdded so far: {count}",
         "menu_options": {
           "add_forecast": "Add PV forecast plane",
@@ -127,7 +145,7 @@
         }
       },
       "storage_menu": {
-        "title": "Storage / battery (step 3 of 6)",
+        "title": "Storage / battery (step 3 of 7)",
         "description": "A **storage** (home battery) buffers PV surplus for the night. HEMS derives a target state of charge from night consumption and reserve and schedules charging within the solar window.\n\nAdded so far: {count}",
         "menu_options": {
           "add_storage": "Add storage (battery)",
@@ -135,15 +153,23 @@
         }
       },
       "thermal_menu": {
-        "title": "Hot water (step 4 of 6)",
+        "title": "Hot water (step 4 of 7)",
         "description": "A **hot water storage** stores surplus as heat. The base target is always maintained — from the grid if necessary. Heating up to the comfort target happens only on PV surplus.\n\nAdded so far: {count}",
         "menu_options": {
           "add_thermal": "Add hot water storage",
+          "heating_menu": "Continue to heating circuit"
+        }
+      },
+      "heating_menu": {
+        "title": "Heating circuit (step 5 of 7)",
+        "description": "A **heating circuit** (e.g. heat pump) gets a mode recommendation (heat/cool/off) from outdoor-temperature thresholds with hysteresis, plus a weather-compensated flow temperature from the heating curve. Room heat demand raises the curve; without demand the flow drops to the minimum (setback). During the summer lock months heating is never recommended.\n\nAdded so far: {count}",
+        "menu_options": {
+          "add_heating": "Add heating circuit",
           "switchable_menu": "Continue to switchable loads"
         }
       },
       "switchable_menu": {
-        "title": "Switchable loads (step 5 of 6)",
+        "title": "Switchable loads (step 6 of 7)",
         "description": "**Switchable (sheddable) loads** are devices HEMS can only turn on or off — their power cannot be modulated. Examples: heat pump (SG-Ready/blocking contact), heating rod, pool pump. Minimum runtime and minimum pause protect the device from frequent cycling.\n\nAdded so far: {count}",
         "menu_options": {
           "add_switchable": "Add switchable load (e.g. heat pump)",
@@ -151,11 +177,48 @@
         }
       },
       "modulated_menu": {
-        "title": "Modulated loads (step 6 of 6)",
+        "title": "Modulated loads (step 7 of 7)",
         "description": "**Modulated loads** can adjust their power consumption continuously. The typical example is a wallbox whose charging current (in amperes) can be regulated between a minimum and maximum. HEMS continuously tracks the setpoint to the available surplus.\n\nAdded so far: {count}",
         "menu_options": {
           "add_modulated": "Add modulated load (e.g. wallbox)",
           "finish": "Finish setup"
+        }
+      },
+      "add_heating": {
+        "title": "Heating circuit",
+        "description": "A **heating circuit** (e.g. heat pump) gets a mode recommendation (heat/cool/off) from outdoor-temperature thresholds with hysteresis, plus a weather-compensated flow temperature from the heating curve. Room heat demand raises the curve; without demand the flow drops to the minimum (setback). During the summer lock months heating is never recommended.",
+        "data": {
+          "name": "Name",
+          "outdoor_temp_entity": "Outdoor temperature entity",
+          "demand_entity": "Heat demand entity (%, optional)",
+          "heat_on_c": "Heating on below (°C)",
+          "heat_off_c": "Heating off above (°C)",
+          "cool_on_c": "Cooling on above (°C)",
+          "cool_off_c": "Cooling off below (°C)",
+          "heat_lock_from_month": "Heating locked from month",
+          "heat_lock_to_month": "Heating locked until month",
+          "curve_base_c": "Curve: flow target at 0 °C (°C)",
+          "curve_slope": "Curve: slope (K per K)",
+          "vlt_min_c": "Minimum flow temperature (°C)",
+          "vlt_min_cold_c": "Minimum flow in cold weather (°C)",
+          "vlt_max_c": "Maximum flow temperature (°C)",
+          "cool_vlt_c": "Cooling flow temperature (°C)"
+        },
+        "data_description": {
+          "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
+          "demand_entity": "Sensor with the room heat demand in percent (e.g. PID thermostat output, several rooms combined via a template sensor). Raises the flow target by up to 5 K; below 1 % demand the flow drops to the minimum (setback).",
+          "heat_on_c": "Heating is recommended once the outdoor temperature falls to this value.",
+          "heat_off_c": "Heating ends once the outdoor temperature rises to this value (hysteresis).",
+          "cool_on_c": "Cooling is recommended once the outdoor temperature rises to this value.",
+          "cool_off_c": "Cooling ends once the outdoor temperature falls to this value (hysteresis).",
+          "heat_lock_from_month": "During the lock months (inclusive) heating is never recommended, no matter how cold it is (summer lock).",
+          "heat_lock_to_month": "Last month (inclusive) of the summer lock. A start after the end wraps around new year.",
+          "curve_base_c": "Flow temperature target at 0 °C outdoor temperature.",
+          "curve_slope": "Reduction of the flow target per degree of outdoor temperature.",
+          "vlt_min_c": "The flow target never falls below this value while heating.",
+          "vlt_min_cold_c": "Minimum flow target when it is colder than 5 °C outside.",
+          "vlt_max_c": "The flow target never exceeds this value.",
+          "cool_vlt_c": "Fixed flow temperature while cooling."
         }
       }
     },
@@ -172,6 +235,7 @@
           "add_forecast": "Add PV forecast plane",
           "add_storage": "Add storage (battery)",
           "add_thermal": "Add hot water storage",
+          "add_heating": "Add heating circuit",
           "add_switchable": "Add switchable load (e.g. heat pump)",
           "add_modulated": "Add modulated load (e.g. wallbox)",
           "edit_device": "Edit device",
@@ -201,14 +265,16 @@
           "capacity_kwh": "Capacity (kWh)",
           "reserve_soc": "Reserve SoC (%)",
           "max_charge_w": "Max. charging power (W)",
-          "max_discharge_w": "Max. discharge power (W)"
+          "max_discharge_w": "Max. discharge power (W)",
+          "cold_reserve": "Cold reserve"
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
           "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge/feed-in power (e.g. “feed in 500 W now”).",
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
           "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
-          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house."
+          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house.",
+          "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity."
         }
       },
       "add_thermal": {
@@ -220,13 +286,29 @@
           "base_target": "Base target (°C)",
           "comfort_target": "Comfort target (°C)",
           "block_start": "Blocked from",
-          "block_end": "Blocked until"
+          "block_end": "Blocked until",
+          "legionella_weekday": "Legionella protection: weekday",
+          "legionella_start": "Legionella protection: from",
+          "legionella_end": "Legionella protection: until",
+          "legionella_target": "Legionella protection target (°C)",
+          "boost_soc_on": "PV boost: battery SoC to start (%)",
+          "boost_soc_off": "PV boost: battery SoC to stop (%)",
+          "boost_saldo_on_w": "PV boost: grid balance to start (W)",
+          "boost_saldo_off_w": "PV boost: grid balance to stop (W)"
         },
         "data_description": {
           "base_target": "This temperature is always maintained, from the grid if necessary.",
           "comfort_target": "Heating up to this temperature only happens on PV surplus.",
           "block_start": "Start of the daily period in which no hot water is prepared. Leave both empty for no blocking.",
-          "block_end": "End of the blocked period. An end before the start means the window runs over midnight (e.g. 18:00 to 06:00)."
+          "block_end": "End of the blocked period. An end before the start means the window runs over midnight (e.g. 18:00 to 06:00).",
+          "legionella_weekday": "Weekly hygiene window: on this day the target is raised to the legionella target regardless of surplus — from the grid if necessary. \"Disabled\" turns the feature off.",
+          "legionella_start": "Local start time of the weekly legionella window.",
+          "legionella_end": "End of the window. An end before the start runs over midnight.",
+          "legionella_target": "Target temperature held during the legionella window.",
+          "boost_soc_on": "Heating to the comfort target is only recommended once the total storage SoC reaches this level.",
+          "boost_soc_off": "The boost recommendation ends when the SoC falls below this level (hysteresis).",
+          "boost_saldo_on_w": "Grid balance that must be reached to start the boost; negative = export (e.g. -2800 = exporting 2.8 kW).",
+          "boost_saldo_off_w": "Grid balance at which the boost ends (positive = import)."
         }
       },
       "add_switchable": {
@@ -299,14 +381,16 @@
           "capacity_kwh": "Capacity (kWh)",
           "reserve_soc": "Reserve SoC (%)",
           "max_charge_w": "Max. charging power (W)",
-          "max_discharge_w": "Max. discharge power (W)"
+          "max_discharge_w": "Max. discharge power (W)",
+          "cold_reserve": "Cold reserve"
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
           "discharge_setpoint_entity": "Number entity HEMS can use to set the current discharge/feed-in power (e.g. “feed in 500 W now”).",
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
           "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
-          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house."
+          "max_discharge_w": "Limit of the discharge/feed-in power; the battery cannot deliver more than this to the house.",
+          "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity."
         }
       },
       "edit_thermal": {
@@ -318,13 +402,29 @@
           "base_target": "Base target (°C)",
           "comfort_target": "Comfort target (°C)",
           "block_start": "Blocked from",
-          "block_end": "Blocked until"
+          "block_end": "Blocked until",
+          "legionella_weekday": "Legionella protection: weekday",
+          "legionella_start": "Legionella protection: from",
+          "legionella_end": "Legionella protection: until",
+          "legionella_target": "Legionella protection target (°C)",
+          "boost_soc_on": "PV boost: battery SoC to start (%)",
+          "boost_soc_off": "PV boost: battery SoC to stop (%)",
+          "boost_saldo_on_w": "PV boost: grid balance to start (W)",
+          "boost_saldo_off_w": "PV boost: grid balance to stop (W)"
         },
         "data_description": {
           "base_target": "This temperature is always maintained, from the grid if necessary.",
           "comfort_target": "Heating up to this temperature only happens on PV surplus.",
           "block_start": "Start of the daily period in which no hot water is prepared. Leave both empty for no blocking.",
-          "block_end": "End of the blocked period. An end before the start means the window runs over midnight (e.g. 18:00 to 06:00)."
+          "block_end": "End of the blocked period. An end before the start means the window runs over midnight (e.g. 18:00 to 06:00).",
+          "legionella_weekday": "Weekly hygiene window: on this day the target is raised to the legionella target regardless of surplus — from the grid if necessary. \"Disabled\" turns the feature off.",
+          "legionella_start": "Local start time of the weekly legionella window.",
+          "legionella_end": "End of the window. An end before the start runs over midnight.",
+          "legionella_target": "Target temperature held during the legionella window.",
+          "boost_soc_on": "Heating to the comfort target is only recommended once the total storage SoC reaches this level.",
+          "boost_soc_off": "The boost recommendation ends when the SoC falls below this level (hysteresis).",
+          "boost_saldo_on_w": "Grid balance that must be reached to start the boost; negative = export (e.g. -2800 = exporting 2.8 kW).",
+          "boost_saldo_off_w": "Grid balance at which the boost ends (positive = import)."
         }
       },
       "edit_switchable": {
@@ -400,6 +500,80 @@
           "free_capacity_kwh": "The \"Capacity free\" binary sensor turns on when this much energy is available over the given duration without touching the reserve or the night coverage.",
           "free_capacity_h": "Duration over which the energy demand must be covered. PV surplus expected within this window counts towards the free capacity."
         }
+      },
+      "add_heating": {
+        "title": "Heating circuit",
+        "description": "A **heating circuit** (e.g. heat pump) gets a mode recommendation (heat/cool/off) from outdoor-temperature thresholds with hysteresis, plus a weather-compensated flow temperature from the heating curve. Room heat demand raises the curve; without demand the flow drops to the minimum (setback). During the summer lock months heating is never recommended.",
+        "data": {
+          "name": "Name",
+          "outdoor_temp_entity": "Outdoor temperature entity",
+          "demand_entity": "Heat demand entity (%, optional)",
+          "heat_on_c": "Heating on below (°C)",
+          "heat_off_c": "Heating off above (°C)",
+          "cool_on_c": "Cooling on above (°C)",
+          "cool_off_c": "Cooling off below (°C)",
+          "heat_lock_from_month": "Heating locked from month",
+          "heat_lock_to_month": "Heating locked until month",
+          "curve_base_c": "Curve: flow target at 0 °C (°C)",
+          "curve_slope": "Curve: slope (K per K)",
+          "vlt_min_c": "Minimum flow temperature (°C)",
+          "vlt_min_cold_c": "Minimum flow in cold weather (°C)",
+          "vlt_max_c": "Maximum flow temperature (°C)",
+          "cool_vlt_c": "Cooling flow temperature (°C)"
+        },
+        "data_description": {
+          "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
+          "demand_entity": "Sensor with the room heat demand in percent (e.g. PID thermostat output, several rooms combined via a template sensor). Raises the flow target by up to 5 K; below 1 % demand the flow drops to the minimum (setback).",
+          "heat_on_c": "Heating is recommended once the outdoor temperature falls to this value.",
+          "heat_off_c": "Heating ends once the outdoor temperature rises to this value (hysteresis).",
+          "cool_on_c": "Cooling is recommended once the outdoor temperature rises to this value.",
+          "cool_off_c": "Cooling ends once the outdoor temperature falls to this value (hysteresis).",
+          "heat_lock_from_month": "During the lock months (inclusive) heating is never recommended, no matter how cold it is (summer lock).",
+          "heat_lock_to_month": "Last month (inclusive) of the summer lock. A start after the end wraps around new year.",
+          "curve_base_c": "Flow temperature target at 0 °C outdoor temperature.",
+          "curve_slope": "Reduction of the flow target per degree of outdoor temperature.",
+          "vlt_min_c": "The flow target never falls below this value while heating.",
+          "vlt_min_cold_c": "Minimum flow target when it is colder than 5 °C outside.",
+          "vlt_max_c": "The flow target never exceeds this value.",
+          "cool_vlt_c": "Fixed flow temperature while cooling."
+        }
+      },
+      "edit_heating": {
+        "title": "Edit heating circuit",
+        "description": "Adjust settings for \"{name}\".",
+        "data": {
+          "name": "Name",
+          "outdoor_temp_entity": "Outdoor temperature entity",
+          "demand_entity": "Heat demand entity (%, optional)",
+          "heat_on_c": "Heating on below (°C)",
+          "heat_off_c": "Heating off above (°C)",
+          "cool_on_c": "Cooling on above (°C)",
+          "cool_off_c": "Cooling off below (°C)",
+          "heat_lock_from_month": "Heating locked from month",
+          "heat_lock_to_month": "Heating locked until month",
+          "curve_base_c": "Curve: flow target at 0 °C (°C)",
+          "curve_slope": "Curve: slope (K per K)",
+          "vlt_min_c": "Minimum flow temperature (°C)",
+          "vlt_min_cold_c": "Minimum flow in cold weather (°C)",
+          "vlt_max_c": "Maximum flow temperature (°C)",
+          "cool_vlt_c": "Cooling flow temperature (°C)"
+        },
+        "data_description": {
+          "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
+          "demand_entity": "Sensor with the room heat demand in percent (e.g. PID thermostat output, several rooms combined via a template sensor). Raises the flow target by up to 5 K; below 1 % demand the flow drops to the minimum (setback).",
+          "heat_on_c": "Heating is recommended once the outdoor temperature falls to this value.",
+          "heat_off_c": "Heating ends once the outdoor temperature rises to this value (hysteresis).",
+          "cool_on_c": "Cooling is recommended once the outdoor temperature rises to this value.",
+          "cool_off_c": "Cooling ends once the outdoor temperature falls to this value (hysteresis).",
+          "heat_lock_from_month": "During the lock months (inclusive) heating is never recommended, no matter how cold it is (summer lock).",
+          "heat_lock_to_month": "Last month (inclusive) of the summer lock. A start after the end wraps around new year.",
+          "curve_base_c": "Flow temperature target at 0 °C outdoor temperature.",
+          "curve_slope": "Reduction of the flow target per degree of outdoor temperature.",
+          "vlt_min_c": "The flow target never falls below this value while heating.",
+          "vlt_min_cold_c": "Minimum flow target when it is colder than 5 °C outside.",
+          "vlt_max_c": "The flow target never exceeds this value.",
+          "cool_vlt_c": "Fixed flow temperature while cooling."
+        }
       }
     },
     "abort": {
@@ -413,6 +587,18 @@
         "auto": "Automatic – battery first when yield is scarce (recommended)",
         "battery_first": "Battery first – always secure the night",
         "ev_first": "EV first – charging takes precedence"
+      }
+    },
+    "weekday": {
+      "options": {
+        "none": "Disabled",
+        "0": "Monday",
+        "1": "Tuesday",
+        "2": "Wednesday",
+        "3": "Thursday",
+        "4": "Friday",
+        "5": "Saturday",
+        "6": "Sunday"
       }
     }
   }

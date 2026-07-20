@@ -49,14 +49,16 @@
           "capacity_kwh": "Kapazität (kWh)",
           "reserve_soc": "Reserve-SoC (%)",
           "max_charge_w": "Max. Ladeleistung (W)",
-          "max_discharge_w": "Max. Entladeleistung (W)"
+          "max_discharge_w": "Max. Entladeleistung (W)",
+          "cold_reserve": "Kaltreserve"
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
           "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entlade-/Einspeiseleistung setzen kann (z. B. „jetzt mit 500 W einspeisen“).",
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
           "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
-          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern."
+          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern.",
+          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität."
         }
       },
       "add_thermal": {
@@ -68,13 +70,29 @@
           "base_target": "Basis-Soll (°C)",
           "comfort_target": "Komfort-Soll (°C)",
           "block_start": "Sperrzeit ab",
-          "block_end": "Sperrzeit bis"
+          "block_end": "Sperrzeit bis",
+          "legionella_weekday": "Legionellenschutz: Wochentag",
+          "legionella_start": "Legionellenschutz: ab",
+          "legionella_end": "Legionellenschutz: bis",
+          "legionella_target": "Legionellenschutz-Soll (°C)",
+          "boost_soc_on": "PV-Boost: Speicher-SoC ab (%)",
+          "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
+          "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
+          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
           "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt.",
           "block_start": "Beginn der täglichen Sperrzeit, in der kein Warmwasser bereitet wird. Beide Felder leer lassen heißt keine Sperre.",
-          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00)."
+          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00).",
+          "legionella_weekday": "Wöchentliches Hygiene-Fenster: An diesem Tag wird der Sollwert unabhängig vom Überschuss auf das Legionellenschutz-Soll angehoben — notfalls aus dem Netz. \"Deaktiviert\" schaltet die Funktion ab.",
+          "legionella_start": "Lokale Startzeit des wöchentlichen Legionellen-Fensters.",
+          "legionella_end": "Ende des Fensters. Ein Ende vor dem Anfang läuft über Mitternacht.",
+          "legionella_target": "Solltemperatur während des Legionellen-Fensters.",
+          "boost_soc_on": "Die Komfortladung wird erst empfohlen, wenn der Gesamt-Speicher-SoC dieses Niveau erreicht.",
+          "boost_soc_off": "Die Boost-Empfehlung endet, wenn der SoC unter dieses Niveau fällt (Hysterese).",
+          "boost_saldo_on_w": "Netzsaldo, der zum Start des Boosts erreicht sein muss; negativ = Einspeisung (z. B. -2800 = 2,8 kW Einspeisung).",
+          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug)."
         }
       },
       "add_switchable": {
@@ -119,7 +137,7 @@
         }
       },
       "forecast_menu": {
-        "title": "PV-Prognoseflächen (Schritt 2 von 6)",
+        "title": "PV-Prognoseflächen (Schritt 2 von 7)",
         "description": "Eine **PV-Prognosefläche** liefert die erwartete Solarerzeugung, z.B. aus der Forecast.Solar- oder Solcast-Integration. Mehrere Flächen (etwa Ost- und Westdach) legst du einzeln an – HEMS summiert sie automatisch.\n\nBisher angelegt: {count}",
         "menu_options": {
           "add_forecast": "PV-Prognosefläche hinzufügen",
@@ -127,7 +145,7 @@
         }
       },
       "storage_menu": {
-        "title": "Speicher / Akku (Schritt 3 von 6)",
+        "title": "Speicher / Batterie (Schritt 3 von 7)",
         "description": "Ein **Speicher** (Hausakku) puffert PV-Überschuss für die Nacht. HEMS berechnet aus Nachtverbrauch und Reserve einen Ziel-Ladestand und plant die Ladung in das Sonnenfenster.\n\nBisher angelegt: {count}",
         "menu_options": {
           "add_storage": "Speicher (Akku) hinzufügen",
@@ -135,15 +153,23 @@
         }
       },
       "thermal_menu": {
-        "title": "Warmwasser (Schritt 4 von 6)",
+        "title": "Warmwasser (Schritt 4 von 7)",
         "description": "Ein **Warmwasserspeicher** speichert Überschuss als Wärme. Das Basis-Soll wird immer gehalten – notfalls mit Netzstrom. Auf das Komfort-Soll wird nur bei PV-Überschuss aufgeheizt.\n\nBisher angelegt: {count}",
         "menu_options": {
           "add_thermal": "Warmwasserspeicher hinzufügen",
+          "heating_menu": "Weiter zum Heizkreis"
+        }
+      },
+      "heating_menu": {
+        "title": "Heizkreis (Schritt 5 von 7)",
+        "description": "Ein **Heizkreis** (z. B. Wärmepumpe) bekommt eine Modus-Empfehlung (heizen/kühlen/aus) aus Außentemperatur-Schwellen mit Hysterese sowie einen witterungsgeführten Vorlauf-Sollwert aus der Heizkurve. Die Wärmeanforderung der Räume hebt die Kurve an; ohne Anforderung fällt der Vorlauf auf das Minimum (Absenkbetrieb). In den Sperrmonaten wird Heizen nie empfohlen.\n\nBisher angelegt: {count}",
+        "menu_options": {
+          "add_heating": "Heizkreis hinzufügen",
           "switchable_menu": "Weiter zu schaltbaren Lasten"
         }
       },
       "switchable_menu": {
-        "title": "Schaltbare Lasten (Schritt 5 von 6)",
+        "title": "Schaltbare Lasten (Schritt 6 von 7)",
         "description": "**Schaltbare (abschaltbare) Lasten** sind Geräte, die HEMS nur ein- oder ausschalten kann – ihre Leistung lässt sich nicht stufenlos regeln. Beispiele: Wärmepumpe (SG-Ready/Sperrkontakt), Heizstab, Poolpumpe. Mindestlaufzeit und Mindestpause schützen das Gerät vor häufigem Takten.\n\nBisher angelegt: {count}",
         "menu_options": {
           "add_switchable": "Schaltbare Last hinzufügen (z.B. Wärmepumpe)",
@@ -151,11 +177,48 @@
         }
       },
       "modulated_menu": {
-        "title": "Modulierbare Lasten (Schritt 6 von 6)",
+        "title": "Modulierbare Lasten (Schritt 7 von 7)",
         "description": "**Modulierbare Lasten** können ihre Leistungsaufnahme stufenlos anpassen. Typisches Beispiel ist eine Wallbox, deren Ladestrom (in Ampere) sich zwischen Minimum und Maximum regeln lässt. HEMS führt den Sollwert laufend dem verfügbaren Überschuss nach.\n\nBisher angelegt: {count}",
         "menu_options": {
           "add_modulated": "Modulierbare Last hinzufügen (z.B. Wallbox)",
           "finish": "Einrichtung abschließen"
+        }
+      },
+      "add_heating": {
+        "title": "Heizkreis",
+        "description": "Ein **Heizkreis** (z. B. Wärmepumpe) bekommt eine Modus-Empfehlung (heizen/kühlen/aus) aus Außentemperatur-Schwellen mit Hysterese sowie einen witterungsgeführten Vorlauf-Sollwert aus der Heizkurve. Die Wärmeanforderung der Räume hebt die Kurve an; ohne Anforderung fällt der Vorlauf auf das Minimum (Absenkbetrieb). In den Sperrmonaten wird Heizen nie empfohlen.",
+        "data": {
+          "name": "Name",
+          "outdoor_temp_entity": "Außentemperatur-Entität",
+          "demand_entity": "Wärmeanforderungs-Entität (%, optional)",
+          "heat_on_c": "Heizen ein unter (°C)",
+          "heat_off_c": "Heizen aus über (°C)",
+          "cool_on_c": "Kühlen ein über (°C)",
+          "cool_off_c": "Kühlen aus unter (°C)",
+          "heat_lock_from_month": "Heizsperre ab Monat",
+          "heat_lock_to_month": "Heizsperre bis Monat",
+          "curve_base_c": "Kurve: Vorlauf-Soll bei 0 °C (°C)",
+          "curve_slope": "Kurve: Steigung (K je K)",
+          "vlt_min_c": "Minimaler Vorlauf (°C)",
+          "vlt_min_cold_c": "Minimaler Vorlauf bei Kälte (°C)",
+          "vlt_max_c": "Maximaler Vorlauf (°C)",
+          "cool_vlt_c": "Kühl-Vorlauf (°C)"
+        },
+        "data_description": {
+          "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
+          "demand_entity": "Sensor mit der Wärmeanforderung der Räume in Prozent (z. B. PID-Thermostat-Ausgang, mehrere Räume per Template-Sensor kombiniert). Hebt das Vorlauf-Soll um bis zu 5 K an; unter 1 % Anforderung fällt der Vorlauf auf das Minimum (Absenkbetrieb).",
+          "heat_on_c": "Heizen wird empfohlen, sobald die Außentemperatur auf diesen Wert fällt.",
+          "heat_off_c": "Heizen endet, sobald die Außentemperatur auf diesen Wert steigt (Hysterese).",
+          "cool_on_c": "Kühlen wird empfohlen, sobald die Außentemperatur auf diesen Wert steigt.",
+          "cool_off_c": "Kühlen endet, sobald die Außentemperatur auf diesen Wert fällt (Hysterese).",
+          "heat_lock_from_month": "In den Sperrmonaten (einschließlich) wird Heizen nie empfohlen, egal wie kalt es ist (Sommersperre).",
+          "heat_lock_to_month": "Letzter Monat (einschließlich) der Sommersperre. Ein Start nach dem Ende läuft über den Jahreswechsel.",
+          "curve_base_c": "Vorlauf-Soll bei 0 °C Außentemperatur.",
+          "curve_slope": "Absenkung des Vorlauf-Solls je Grad Außentemperatur.",
+          "vlt_min_c": "Das Vorlauf-Soll fällt beim Heizen nie unter diesen Wert.",
+          "vlt_min_cold_c": "Minimales Vorlauf-Soll, wenn es draußen kälter als 5 °C ist.",
+          "vlt_max_c": "Das Vorlauf-Soll übersteigt diesen Wert nie.",
+          "cool_vlt_c": "Fester Vorlauf beim Kühlen."
         }
       }
     },
@@ -172,6 +235,7 @@
           "add_forecast": "PV-Prognosefläche hinzufügen",
           "add_storage": "Speicher (Akku) hinzufügen",
           "add_thermal": "Warmwasserspeicher hinzufügen",
+          "add_heating": "Heizkreis hinzufügen",
           "add_switchable": "Schaltbare Last hinzufügen (z.B. Wärmepumpe)",
           "add_modulated": "Modulierbare Last hinzufügen (z.B. Wallbox)",
           "edit_device": "Gerät bearbeiten",
@@ -201,14 +265,16 @@
           "capacity_kwh": "Kapazität (kWh)",
           "reserve_soc": "Reserve-SoC (%)",
           "max_charge_w": "Max. Ladeleistung (W)",
-          "max_discharge_w": "Max. Entladeleistung (W)"
+          "max_discharge_w": "Max. Entladeleistung (W)",
+          "cold_reserve": "Kaltreserve"
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
           "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entlade-/Einspeiseleistung setzen kann (z. B. „jetzt mit 500 W einspeisen“).",
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
           "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
-          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern."
+          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern.",
+          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität."
         }
       },
       "add_thermal": {
@@ -220,13 +286,29 @@
           "base_target": "Basis-Soll (°C)",
           "comfort_target": "Komfort-Soll (°C)",
           "block_start": "Sperrzeit ab",
-          "block_end": "Sperrzeit bis"
+          "block_end": "Sperrzeit bis",
+          "legionella_weekday": "Legionellenschutz: Wochentag",
+          "legionella_start": "Legionellenschutz: ab",
+          "legionella_end": "Legionellenschutz: bis",
+          "legionella_target": "Legionellenschutz-Soll (°C)",
+          "boost_soc_on": "PV-Boost: Speicher-SoC ab (%)",
+          "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
+          "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
+          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
           "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt.",
           "block_start": "Beginn der täglichen Sperrzeit, in der kein Warmwasser bereitet wird. Beide Felder leer lassen heißt keine Sperre.",
-          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00)."
+          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00).",
+          "legionella_weekday": "Wöchentliches Hygiene-Fenster: An diesem Tag wird der Sollwert unabhängig vom Überschuss auf das Legionellenschutz-Soll angehoben — notfalls aus dem Netz. \"Deaktiviert\" schaltet die Funktion ab.",
+          "legionella_start": "Lokale Startzeit des wöchentlichen Legionellen-Fensters.",
+          "legionella_end": "Ende des Fensters. Ein Ende vor dem Anfang läuft über Mitternacht.",
+          "legionella_target": "Solltemperatur während des Legionellen-Fensters.",
+          "boost_soc_on": "Die Komfortladung wird erst empfohlen, wenn der Gesamt-Speicher-SoC dieses Niveau erreicht.",
+          "boost_soc_off": "Die Boost-Empfehlung endet, wenn der SoC unter dieses Niveau fällt (Hysterese).",
+          "boost_saldo_on_w": "Netzsaldo, der zum Start des Boosts erreicht sein muss; negativ = Einspeisung (z. B. -2800 = 2,8 kW Einspeisung).",
+          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug)."
         }
       },
       "add_switchable": {
@@ -299,14 +381,16 @@
           "capacity_kwh": "Kapazität (kWh)",
           "reserve_soc": "Reserve-SoC (%)",
           "max_charge_w": "Max. Ladeleistung (W)",
-          "max_discharge_w": "Max. Entladeleistung (W)"
+          "max_discharge_w": "Max. Entladeleistung (W)",
+          "cold_reserve": "Kaltreserve"
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
           "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entlade-/Einspeiseleistung setzen kann (z. B. „jetzt mit 500 W einspeisen“).",
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
           "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
-          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern."
+          "max_discharge_w": "Begrenzung der Entlade-/Einspeiseleistung; mehr kann der Akku nicht ins Haus liefern.",
+          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität."
         }
       },
       "edit_thermal": {
@@ -318,13 +402,29 @@
           "base_target": "Basis-Soll (°C)",
           "comfort_target": "Komfort-Soll (°C)",
           "block_start": "Sperrzeit ab",
-          "block_end": "Sperrzeit bis"
+          "block_end": "Sperrzeit bis",
+          "legionella_weekday": "Legionellenschutz: Wochentag",
+          "legionella_start": "Legionellenschutz: ab",
+          "legionella_end": "Legionellenschutz: bis",
+          "legionella_target": "Legionellenschutz-Soll (°C)",
+          "boost_soc_on": "PV-Boost: Speicher-SoC ab (%)",
+          "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
+          "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
+          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
           "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt.",
           "block_start": "Beginn der täglichen Sperrzeit, in der kein Warmwasser bereitet wird. Beide Felder leer lassen heißt keine Sperre.",
-          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00)."
+          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00).",
+          "legionella_weekday": "Wöchentliches Hygiene-Fenster: An diesem Tag wird der Sollwert unabhängig vom Überschuss auf das Legionellenschutz-Soll angehoben — notfalls aus dem Netz. \"Deaktiviert\" schaltet die Funktion ab.",
+          "legionella_start": "Lokale Startzeit des wöchentlichen Legionellen-Fensters.",
+          "legionella_end": "Ende des Fensters. Ein Ende vor dem Anfang läuft über Mitternacht.",
+          "legionella_target": "Solltemperatur während des Legionellen-Fensters.",
+          "boost_soc_on": "Die Komfortladung wird erst empfohlen, wenn der Gesamt-Speicher-SoC dieses Niveau erreicht.",
+          "boost_soc_off": "Die Boost-Empfehlung endet, wenn der SoC unter dieses Niveau fällt (Hysterese).",
+          "boost_saldo_on_w": "Netzsaldo, der zum Start des Boosts erreicht sein muss; negativ = Einspeisung (z. B. -2800 = 2,8 kW Einspeisung).",
+          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug)."
         }
       },
       "edit_switchable": {
@@ -400,6 +500,80 @@
           "free_capacity_kwh": "Der Binärsensor „Kapazität frei“ schaltet ein, wenn diese Energiemenge über die angegebene Dauer verfügbar ist, ohne Reserve und Nachtdeckung anzutasten.",
           "free_capacity_h": "Dauer, über die der Bedarf gedeckt sein muss. PV-Überschuss, der in dieses Zeitfenster fällt, zählt zur freien Kapazität."
         }
+      },
+      "add_heating": {
+        "title": "Heizkreis",
+        "description": "Ein **Heizkreis** (z. B. Wärmepumpe) bekommt eine Modus-Empfehlung (heizen/kühlen/aus) aus Außentemperatur-Schwellen mit Hysterese sowie einen witterungsgeführten Vorlauf-Sollwert aus der Heizkurve. Die Wärmeanforderung der Räume hebt die Kurve an; ohne Anforderung fällt der Vorlauf auf das Minimum (Absenkbetrieb). In den Sperrmonaten wird Heizen nie empfohlen.",
+        "data": {
+          "name": "Name",
+          "outdoor_temp_entity": "Außentemperatur-Entität",
+          "demand_entity": "Wärmeanforderungs-Entität (%, optional)",
+          "heat_on_c": "Heizen ein unter (°C)",
+          "heat_off_c": "Heizen aus über (°C)",
+          "cool_on_c": "Kühlen ein über (°C)",
+          "cool_off_c": "Kühlen aus unter (°C)",
+          "heat_lock_from_month": "Heizsperre ab Monat",
+          "heat_lock_to_month": "Heizsperre bis Monat",
+          "curve_base_c": "Kurve: Vorlauf-Soll bei 0 °C (°C)",
+          "curve_slope": "Kurve: Steigung (K je K)",
+          "vlt_min_c": "Minimaler Vorlauf (°C)",
+          "vlt_min_cold_c": "Minimaler Vorlauf bei Kälte (°C)",
+          "vlt_max_c": "Maximaler Vorlauf (°C)",
+          "cool_vlt_c": "Kühl-Vorlauf (°C)"
+        },
+        "data_description": {
+          "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
+          "demand_entity": "Sensor mit der Wärmeanforderung der Räume in Prozent (z. B. PID-Thermostat-Ausgang, mehrere Räume per Template-Sensor kombiniert). Hebt das Vorlauf-Soll um bis zu 5 K an; unter 1 % Anforderung fällt der Vorlauf auf das Minimum (Absenkbetrieb).",
+          "heat_on_c": "Heizen wird empfohlen, sobald die Außentemperatur auf diesen Wert fällt.",
+          "heat_off_c": "Heizen endet, sobald die Außentemperatur auf diesen Wert steigt (Hysterese).",
+          "cool_on_c": "Kühlen wird empfohlen, sobald die Außentemperatur auf diesen Wert steigt.",
+          "cool_off_c": "Kühlen endet, sobald die Außentemperatur auf diesen Wert fällt (Hysterese).",
+          "heat_lock_from_month": "In den Sperrmonaten (einschließlich) wird Heizen nie empfohlen, egal wie kalt es ist (Sommersperre).",
+          "heat_lock_to_month": "Letzter Monat (einschließlich) der Sommersperre. Ein Start nach dem Ende läuft über den Jahreswechsel.",
+          "curve_base_c": "Vorlauf-Soll bei 0 °C Außentemperatur.",
+          "curve_slope": "Absenkung des Vorlauf-Solls je Grad Außentemperatur.",
+          "vlt_min_c": "Das Vorlauf-Soll fällt beim Heizen nie unter diesen Wert.",
+          "vlt_min_cold_c": "Minimales Vorlauf-Soll, wenn es draußen kälter als 5 °C ist.",
+          "vlt_max_c": "Das Vorlauf-Soll übersteigt diesen Wert nie.",
+          "cool_vlt_c": "Fester Vorlauf beim Kühlen."
+        }
+      },
+      "edit_heating": {
+        "title": "Heizkreis bearbeiten",
+        "description": "Einstellungen für \"{name}\" anpassen.",
+        "data": {
+          "name": "Name",
+          "outdoor_temp_entity": "Außentemperatur-Entität",
+          "demand_entity": "Wärmeanforderungs-Entität (%, optional)",
+          "heat_on_c": "Heizen ein unter (°C)",
+          "heat_off_c": "Heizen aus über (°C)",
+          "cool_on_c": "Kühlen ein über (°C)",
+          "cool_off_c": "Kühlen aus unter (°C)",
+          "heat_lock_from_month": "Heizsperre ab Monat",
+          "heat_lock_to_month": "Heizsperre bis Monat",
+          "curve_base_c": "Kurve: Vorlauf-Soll bei 0 °C (°C)",
+          "curve_slope": "Kurve: Steigung (K je K)",
+          "vlt_min_c": "Minimaler Vorlauf (°C)",
+          "vlt_min_cold_c": "Minimaler Vorlauf bei Kälte (°C)",
+          "vlt_max_c": "Maximaler Vorlauf (°C)",
+          "cool_vlt_c": "Kühl-Vorlauf (°C)"
+        },
+        "data_description": {
+          "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
+          "demand_entity": "Sensor mit der Wärmeanforderung der Räume in Prozent (z. B. PID-Thermostat-Ausgang, mehrere Räume per Template-Sensor kombiniert). Hebt das Vorlauf-Soll um bis zu 5 K an; unter 1 % Anforderung fällt der Vorlauf auf das Minimum (Absenkbetrieb).",
+          "heat_on_c": "Heizen wird empfohlen, sobald die Außentemperatur auf diesen Wert fällt.",
+          "heat_off_c": "Heizen endet, sobald die Außentemperatur auf diesen Wert steigt (Hysterese).",
+          "cool_on_c": "Kühlen wird empfohlen, sobald die Außentemperatur auf diesen Wert steigt.",
+          "cool_off_c": "Kühlen endet, sobald die Außentemperatur auf diesen Wert fällt (Hysterese).",
+          "heat_lock_from_month": "In den Sperrmonaten (einschließlich) wird Heizen nie empfohlen, egal wie kalt es ist (Sommersperre).",
+          "heat_lock_to_month": "Letzter Monat (einschließlich) der Sommersperre. Ein Start nach dem Ende läuft über den Jahreswechsel.",
+          "curve_base_c": "Vorlauf-Soll bei 0 °C Außentemperatur.",
+          "curve_slope": "Absenkung des Vorlauf-Solls je Grad Außentemperatur.",
+          "vlt_min_c": "Das Vorlauf-Soll fällt beim Heizen nie unter diesen Wert.",
+          "vlt_min_cold_c": "Minimales Vorlauf-Soll, wenn es draußen kälter als 5 °C ist.",
+          "vlt_max_c": "Das Vorlauf-Soll übersteigt diesen Wert nie.",
+          "cool_vlt_c": "Fester Vorlauf beim Kühlen."
+        }
       }
     },
     "abort": {
@@ -413,6 +587,18 @@
         "auto": "Automatisch – Akku zuerst, wenn der Ertrag knapp ist (empfohlen)",
         "battery_first": "Akku zuerst – die Nacht immer absichern",
         "ev_first": "E-Auto zuerst – Laden hat Vorrang"
+      }
+    },
+    "weekday": {
+      "options": {
+        "none": "Deaktiviert",
+        "0": "Montag",
+        "1": "Dienstag",
+        "2": "Mittwoch",
+        "3": "Donnerstag",
+        "4": "Freitag",
+        "5": "Samstag",
+        "6": "Sonntag"
       }
     }
   }

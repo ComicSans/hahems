@@ -21,7 +21,8 @@ Variante manuell: den Ordner `custom_components/hems/` in das
 1. Einstellungen → Geräte & Dienste → Integration hinzufügen → "HEMS"
 2. Zähler-Entität (Momentanleistung am Netzanschluss, W) und Grundlast angeben
 3. Danach über "Konfigurieren" die Geräte anlegen:
-   PV-Prognoseflächen, Speicher, Warmwasser, schaltbare/modulierbare Lasten
+   PV-Prognoseflächen, Speicher, Warmwasser, Heizkreis,
+   schaltbare/modulierbare Lasten
 
 ## Entitäten (Phase 1)
 
@@ -35,7 +36,15 @@ Variante manuell: den Ordner `custom_components/hems/` in das
   24-h-Lastprofil je Wochentagstyp und dessen Quelle `lastprofil_quelle`)
 - `sensor.hems_lastfluss` (W, Hausverbrauch; alle Flusswerte als Attribute)
 - `sensor.hems_einspeiseplan` (W, geplante Einspeisung jetzt; Stunden-Slots,
-  SoC-Prognose, PV-Stundenkurve und Warmwasser-Sperrzeiten als Attribute)
+  SoC-Prognose, PV-Stundenkurve, Warmwasser-Sperr- und Legionellen-Fenster
+  sowie die Status der Regelungen als Attribute)
+- `sensor.hems_warmwasser_soll` (°C, empfohlener WW-Sollwert; Status
+  aus/legionellenschutz/pv_boost/basis als Attribut)
+- `sensor.hems_speicher_regelung` (Modus der Saldo-Regelung
+  entladen/laden/pausiert; Soll-Leistung und Zuteilung je Speicher als
+  Attribute)
+- `sensor.hems_heizkreis` (Modus-Empfehlung heizen/kuehlen/aus;
+  Vorlauf-Soll, Außentemperatur und Flüster-Empfehlung als Attribute)
 - `select.hems_modus` (beobachten / aus)
 
 ## Lastfluss-Karte
@@ -93,7 +102,15 @@ Defizit bis zur Reserve entlädt. Sie beginnt bewusst erst bei "jetzt" — für 
 Vergangenheit ist nur der aktuelle Stand bekannt, alles davor wäre erfunden.
 
 Das Band am unteren Rand zeigt die Warmwasser-Verfügbarkeit: türkis heißt
-freigegeben, grau eine konfigurierte Sperrzeit (siehe unten).
+freigegeben, grau eine konfigurierte Sperrzeit (siehe unten), violett das
+wöchentliche Legionellenschutz-Fenster mit erhöhtem Sollwert.
+
+Unter dem Diagramm fassen Chips die aktuellen Empfehlungen zusammen:
+PV-Rest und Morgen-Prognose, Einspeise-Budget, der empfohlene
+WW-Sollwert samt Status (Basis / PV-Boost / Legionellenschutz / aus), der
+Modus der Speicher-Saldo-Regelung (inkl. Hinweis "Kaltreserve", wenn ein
+Reserve-Speicher mit entlädt) und die Heizkreis-Empfehlung mit
+Vorlauf-Soll. Dieselben Status-Chips zeigt auch die Lastfluss-Karte.
 
 Die Nachtlast je Stunde stammt aus einem gelernten Lastprofil (14 Tage
 Zähler-Statistik); reicht das Akku-Budget nicht für die ganze Nacht, werden
@@ -110,3 +127,47 @@ unter die Basistemperatur auskühlen, statt aus dem Netz nachzuheizen.
 Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht: `18:00` bis
 `06:00` sperrt jede Nacht von abends bis morgens. Beide Felder leer (oder zwei
 gleiche Zeiten) bedeutet keine Sperre.
+
+## Warmwasser: PV-Boost und Legionellenschutz
+
+Der Planner orchestriert den WW-Sollwert nach Priorität
+**Legionellenschutz > PV-Boost > Basis**; in der Sperrzeit ist Warmwasser
+aus (`sensor.hems_warmwasser_soll` wird `unbekannt`, Status `aus`).
+
+- **Basis:** Der Basis-Sollwert wird immer gehalten, notfalls aus dem Netz.
+- **PV-Boost:** Aufheizen auf den Komfort-Sollwert wird nur empfohlen, wenn
+  der Gesamt-Speicher fast voll ist **und** kräftig eingespeist wird. Beide
+  Schwellen (Speicher-SoC und Netzsaldo) haben je ein Ein- und ein
+  Aus-Niveau (Hysterese) und sind am Warmwasser-Gerät konfigurierbar.
+- **Legionellenschutz:** Ein wöchentliches Fenster (Wochentag + Uhrzeiten),
+  in dem der Sollwert unabhängig vom Überschuss auf das Legionellen-Soll
+  (Standard 60 °C) angehoben wird — Hygiene geht vor. Das Fenster erscheint
+  violett im WW-Band der Plan-Karte.
+
+## Speicher: Saldo-Regelung (Empfehlung)
+
+Aus Netzsaldo und gemessener Speicherleistung berechnet der Planner eine
+Regel-Empfehlung je Speicher (`sensor.hems_speicher_regelung`):
+Proportionalregler mit Priorität "Bezug minimieren" — schnell gegen teuren
+Netzbezug, gemächlich beim Laden, Sollwert leicht in die Einspeisung
+verschoben, Totband gegen Dauerkorrekturen. Entladen wird proportional zur
+verfügbaren Energie oberhalb der Reserve verteilt, Laden proportional zur
+freien Kapazität. Speicher ohne SoC-Wert fallen aus der Zuteilung.
+
+Ein als **Kaltreserve** markierter Speicher entlädt erst mit, wenn der
+mittlere SoC der übrigen unter 40 % fällt, und scheidet oberhalb von 45 %
+wieder aus (Hysterese); geladen wird er immer mit. In Phase 1 wird die
+Empfehlung nur angezeigt, nicht ausgeführt.
+
+## Heizkreis (Wärmepumpe)
+
+Die Rolle "Heizkreis" liefert eine Modus-Empfehlung aus der Außentemperatur
+(heizen unter / aus über bzw. kühlen über / aus unter, jeweils mit
+Hysterese) plus einen witterungsgeführten Vorlauf-Sollwert
+(`sensor.hems_heizkreis`). Die Heizkurve (Fußpunkt bei 0 °C, Steigung,
+Min/Max) ist konfigurierbar; eine optionale Wärmeanforderungs-Entität
+(0–100 %, z. B. PID-Thermostate per Template kombiniert) hebt die Kurve um
+bis zu 5 K an — ohne Anforderung fällt der Vorlauf auf das Minimum
+(Absenkbetrieb). In den Sperrmonaten (Standard Mai–September) wird Heizen
+nie empfohlen. Bei niedrigem Vorlauf-Soll meldet das Attribut
+`leise_empfohlen`, dass der Flüsterbetrieb der Anlage reicht.

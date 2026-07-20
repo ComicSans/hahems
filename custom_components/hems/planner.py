@@ -6,10 +6,44 @@ testbar bleibt und in Phase 4 unverändert für die Simulation taugt.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta, tzinfo
 
-from .const import PRIORITY_AUTO, PRIORITY_BATTERY_FIRST, PRIORITY_EV_FIRST
+from .const import (
+    CONTROL_DEADBAND_W,
+    CONTROL_GAIN_CHARGE,
+    CONTROL_GAIN_DISCHARGE,
+    CONTROL_MIN_SETPOINT_W,
+    CONTROL_TARGET_OFFSET_W,
+    DEFAULT_BOOST_SALDO_OFF_W,
+    DEFAULT_BOOST_SALDO_ON_W,
+    DEFAULT_BOOST_SOC_OFF,
+    DEFAULT_BOOST_SOC_ON,
+    DEFAULT_LEGIONELLA_TARGET,
+    HEATING_COLD_THRESHOLD_C,
+    HEATING_DEMAND_SHIFT_K,
+    PRIORITY_AUTO,
+    PRIORITY_BATTERY_FIRST,
+    PRIORITY_EV_FIRST,
+    RESERVE_SOC_OFF,
+    RESERVE_SOC_ON,
+    SILENT_VLT_OFF_C,
+    SILENT_VLT_ON_C,
+)
+
+# Hysterese-Schwellen. Jede Ja/Nein-Entscheidung des Planners hat ein Ein- und
+# ein Ausschaltniveau; dazwischen bleibt der vorige Zustand stehen. Ohne das
+# kippt die Empfehlung im Minutentakt, sobald ein Messwert um seine Schwelle
+# pendelt (Wolke, Kühlschranktakt, WP-Zyklus).
+SURPLUS_ON_W = -200.0  # Netzsaldo, ab dem "Überschuss" gilt (negativ = Einspeisung)
+SURPLUS_OFF_W = -50.0  # ... und ab dem er wieder als beendet gilt
+KNAPP_ON = 1.3  # Restertrag/Speicherbedarf, ab dem "knapp" greift
+KNAPP_OFF = 1.7
+THERMAL_HYST_K = 2.0  # Totband unter dem WW-Sollwert, bevor Bedarf gemeldet wird
+WEATHER_ON = 0.30  # Wetterfaktor morgen, ab dem "morgen knapp" greift
+WEATHER_OFF = 0.40
+PV_TOMORROW_ON = 1.0  # PV morgen / Nachtdefizit, ab dem "morgen knapp" greift
+PV_TOMORROW_OFF = 1.15
 
 
 @dataclass
@@ -20,6 +54,120 @@ class StorageState:
     reserve_soc: float
     max_charge_w: float
     max_discharge_w: float
+    # Gemessene Ist-Leistung (positiv = Entladen ins Haus); macht die
+    # Saldo-Regelung selbstkorrigierend, ohne Abschalt-Mess-Zyklus.
+    power_w: float | None = None
+    cold_reserve: bool = False
+
+
+@dataclass
+class HeatingState:
+    """Eingaben für die Heizkreis-Empfehlung (witterungsgeführt)."""
+
+    name: str
+    outdoor_temp_c: float | None
+    demand_pct: float | None  # Wärmeanforderung der Räume, 0–100 %
+    heat_locked: bool  # Sommersperre aktiv (Kalendermonat, vom Aufrufer)
+    heat_on_c: float
+    heat_off_c: float
+    cool_on_c: float
+    cool_off_c: float
+    curve_base_c: float
+    curve_slope: float
+    vlt_min_c: float
+    vlt_min_cold_c: float
+    vlt_max_c: float
+    cool_vlt_c: float
+
+
+@dataclass
+class StorageSetpoint:
+    """Empfohlener Sollwert eines Speichers (watt >= 0, Richtung = modus)."""
+
+    name: str
+    watt: float
+
+
+@dataclass
+class ControlResult:
+    """Empfehlung der Saldo-Regelung über alle Speicher.
+
+    Proportionalregler auf den Netzsaldo: fehler_w = Saldo + Ziel-Offset,
+    soll_w = gemessene Speicherleistung + fehler_w × Gain (asymmetrisch:
+    schnell gegen Bezug, gemächlich beim Laden). Positive soll_w heißt
+    entladen, negative laden; im Totband ruht die Regelung.
+    """
+
+    modus: str  # "entladen" | "laden" | "pausiert"
+    fehler_w: float
+    soll_w: float
+    zuteilung: list[StorageSetpoint] = field(default_factory=list)
+    reserve_aktiv: bool = False
+    reserve_namen: list[str] = field(default_factory=list)
+
+
+@dataclass
+class HeatingResult:
+    """Empfehlung für den Heizkreis: Modus plus Vorlauf-Sollwert."""
+
+    name: str
+    modus: str = "unbekannt"  # "heizen" | "kuehlen" | "aus" | "unbekannt"
+    vlt_ziel_c: float | None = None
+    t_aussen_c: float | None = None
+    sommer_sperre: bool = False
+    leise_empfohlen: bool | None = None  # Flüsterbetrieb reicht (niedriger Vorlauf)
+
+
+@dataclass
+class PlanFlags:
+    """Zustand der Schmitt-Trigger zwischen zwei Planläufen.
+
+    Der Planner bleibt eine reine Funktion: Der Aufrufer reicht die Flags des
+    letzten Laufs in `PlanInput` hinein und übernimmt die neuen aus
+    `PlanResult`. Startwerte sind bewusst konservativ (kein Überschuss, Akku
+    vor Auto), damit der erste Lauf nach einem Neustart nicht zu optimistisch
+    ausfällt.
+    """
+
+    surplus: bool = False
+    knapp: bool = True
+    ww_basis: bool = False
+    ww_komfort: bool = False
+    wetter_knapp: bool = False
+    pv_morgen_knapp: bool = False
+    # PV-Boost-Kriterien fürs Warmwasser: Speicher fast voll bzw. kräftige
+    # Einspeisung, jeweils mit eigener Ein-/Aus-Schwelle.
+    ww_boost_soc: bool = False
+    ww_boost_saldo: bool = False
+    # Kaltreserve der Saldo-Regelung: Reserve-Speicher entladen mit, solange
+    # der mittlere SoC der übrigen unten ist.
+    kaltreserve: bool = False
+    # Heizkreis-Modus (Außentemperatur-Hysterese) und Flüster-Empfehlung.
+    wp_heizen: bool = False
+    wp_kuehlen: bool = False
+    wp_leise: bool = False
+
+
+def _latch(prev: bool, value: float | None, on: float, off: float) -> bool:
+    """Schmitt-Trigger: True erst ab `on`, False erst wieder ab `off`.
+
+    `on < off` heißt "aktiv, solange der Wert klein ist" (z. B. Temperatur
+    unter Sollwert), `on > off` die umgekehrte Richtung. Zwischen beiden
+    Schwellen – und wenn der Messwert fehlt – bleibt `prev` stehen.
+    """
+    if value is None:
+        return prev
+    if on < off:
+        if value <= on:
+            return True
+        if value >= off:
+            return False
+    else:
+        if value >= on:
+            return True
+        if value <= off:
+            return False
+    return prev
 
 
 @dataclass
@@ -38,6 +186,9 @@ class PlanInput:
     thermal_temp: float | None
     thermal_base: float
     thermal_comfort: float
+    # Ob überhaupt ein Warmwasser-Gerät konfiguriert ist; ohne eines bleiben
+    # ww_soll_c/ww_status leer, statt den Default-Sollwert zu melden.
+    thermal_present: bool = True
     priority_mode: str = PRIORITY_AUTO
     weather_factor_tomorrow: float | None = None  # 0 = trüb, 1 = klar
     free_kwh: float = 0.0  # Energiebedarf für "Kapazität frei"
@@ -64,6 +215,21 @@ class PlanInput:
     thermal_block_windows: list[tuple[datetime, datetime]] = field(
         default_factory=list
     )
+    # Legionellenschutz-Fenster im Horizont (wöchentlich, vom Aufrufer über
+    # weekly_windows aufgelöst) samt Zieltemperatur.
+    thermal_legionella_windows: list[tuple[datetime, datetime]] = field(
+        default_factory=list
+    )
+    thermal_legionella_target: float = DEFAULT_LEGIONELLA_TARGET
+    # PV-Boost-Schwellen fürs Warmwasser (Hysterese: Ein-/Aus-Niveau).
+    thermal_boost_soc_on: float = DEFAULT_BOOST_SOC_ON
+    thermal_boost_soc_off: float = DEFAULT_BOOST_SOC_OFF
+    thermal_boost_saldo_on_w: float = DEFAULT_BOOST_SALDO_ON_W
+    thermal_boost_saldo_off_w: float = DEFAULT_BOOST_SALDO_OFF_W
+    # Witterungsgeführter Heizkreis (optional).
+    heating: HeatingState | None = None
+    # Schmitt-Trigger-Zustand des vorigen Laufs; siehe PlanFlags.
+    flags: PlanFlags = field(default_factory=PlanFlags)
 
 
 @dataclass
@@ -113,8 +279,22 @@ class PlanResult:
     soc_prognose: list[SocPoint] = field(default_factory=list)
     ww_gesperrt: bool = False
     ww_sperrfenster: list[tuple[datetime, datetime]] = field(default_factory=list)
+    # Warmwasser-Orchestrierung: empfohlener Sollwert nach Priorität
+    # Legionellenschutz > PV-Boost > Basis; in der Sperrzeit None ("aus").
+    ww_soll_c: float | None = None
+    ww_status: str = ""  # "aus" | "legionellenschutz" | "pv_boost" | "basis"
+    ww_legionelle_aktiv: bool = False
+    ww_legionellen_fenster: list[tuple[datetime, datetime]] = field(
+        default_factory=list
+    )
+    # Empfehlung der Saldo-Regelung über alle Speicher (None ohne Daten).
+    regelung: ControlResult | None = None
+    # Heizkreis-Empfehlung (None, wenn kein Heizkreis konfiguriert ist).
+    heizung: HeatingResult | None = None
     empfehlung: str = "keine Daten"
     prioritaeten: list[str] = field(default_factory=list)
+    # Fortgeschriebener Trigger-Zustand für den nächsten Lauf.
+    flags: PlanFlags = field(default_factory=PlanFlags)
 
 
 def block_windows(
@@ -155,6 +335,41 @@ def block_windows(
     return windows
 
 
+def weekly_windows(
+    weekday: int | None,
+    start: str | None,
+    end: str | None,
+    horizon_start: datetime,
+    horizon_end: datetime,
+    tz: tzinfo,
+) -> list[tuple[datetime, datetime]]:
+    """Wöchentliches Fenster (Wochentag 0 = Montag, lokale Uhrzeiten) in
+    konkrete Fenster im Horizont auflösen — z. B. den Legionellenschutz.
+
+    Gleiche Mechanik wie `block_windows`: Ende vor Anfang läuft über
+    Mitternacht (der Wochentag bezeichnet den Starttag), Fenster werden auf
+    den Horizont beschnitten. Über 48 h ergeben sich 0–2 Fenster.
+    """
+    start_t = _parse_time(start)
+    end_t = _parse_time(end)
+    if weekday is None or start_t is None or end_t is None or start_t == end_t:
+        return []
+
+    first_day = horizon_start.astimezone(tz).date() - timedelta(days=1)
+    windows: list[tuple[datetime, datetime]] = []
+    for offset in range(4):
+        day = first_day + timedelta(days=offset)
+        if day.weekday() != weekday:
+            continue
+        end_day = day + timedelta(days=1) if end_t <= start_t else day
+        win_start = datetime.combine(day, start_t, tzinfo=tz)
+        win_end = datetime.combine(end_day, end_t, tzinfo=tz)
+        clipped = (max(win_start, horizon_start), min(win_end, horizon_end))
+        if clipped[1] > clipped[0]:
+            windows.append(clipped)
+    return windows
+
+
 def _parse_time(value: str | None) -> time | None:
     if not value:
         return None
@@ -166,6 +381,9 @@ def _parse_time(value: str | None) -> time | None:
 
 def compute_plan(inp: PlanInput) -> PlanResult:
     result = PlanResult()
+    # Trigger-Zustand des Vorlaufs übernehmen und im Ergebnis fortschreiben,
+    # ohne die Eingabe zu verändern.
+    result.flags = replace(inp.flags)
 
     # Sonnenfenster und Nachtdefizit
     result.sonnenfenster_h = max(
@@ -177,11 +395,23 @@ def compute_plan(inp: PlanInput) -> PlanResult:
 
     # Folgetag einpreisen: Meldet das Wetter dichte Bewölkung oder deckt die
     # Morgen-Prognose nicht einmal das Nachtdefizit, wird der Speicher heute
-    # voll geladen statt nur bis zum Nachtbedarf.
-    result.morgen_knapp = (
-        inp.weather_factor_tomorrow is not None
-        and inp.weather_factor_tomorrow < 0.35
-    ) or (0 < inp.pv_tomorrow_kwh < result.nachtdefizit_kwh)
+    # voll geladen statt nur bis zum Nachtbedarf. Beide Kriterien mit
+    # Hysterese, weil sie über das Ziel-SoC echtes Ladeverhalten steuern.
+    result.flags.wetter_knapp = _latch(
+        inp.flags.wetter_knapp,
+        inp.weather_factor_tomorrow,
+        on=WEATHER_ON,
+        off=WEATHER_OFF,
+    )
+    result.flags.pv_morgen_knapp = _latch(
+        inp.flags.pv_morgen_knapp,
+        inp.pv_tomorrow_kwh / result.nachtdefizit_kwh
+        if inp.pv_tomorrow_kwh > 0 and result.nachtdefizit_kwh > 0
+        else None,
+        on=PV_TOMORROW_ON,
+        off=PV_TOMORROW_OFF,
+    )
+    result.morgen_knapp = result.flags.wetter_knapp or result.flags.pv_morgen_knapp
 
     # Virtueller Gesamtspeicher aus allen Storages
     cap = sum(s.capacity_kwh for s in inp.storages)
@@ -240,6 +470,38 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         start <= inp.now < end for start, end in inp.thermal_block_windows
     )
 
+    # Legionellenschutz: wöchentliches Fenster mit erhöhtem Sollwert,
+    # unabhängig vom Überschuss (Hygiene geht vor, notfalls aus dem Netz).
+    result.ww_legionellen_fenster = list(inp.thermal_legionella_windows)
+    result.ww_legionelle_aktiv = any(
+        start <= inp.now < end for start, end in inp.thermal_legionella_windows
+    )
+
+    # PV-Boost-Kriterien: Speicher fast voll UND kräftige Einspeisung.
+    # Ohne konfigurierte Speicher entfällt das SoC-Kriterium.
+    if inp.storages:
+        result.flags.ww_boost_soc = _latch(
+            inp.flags.ww_boost_soc,
+            result.speicher_soc,
+            on=inp.thermal_boost_soc_on,
+            off=inp.thermal_boost_soc_off,
+        )
+    else:
+        result.flags.ww_boost_soc = True
+    result.flags.ww_boost_saldo = _latch(
+        inp.flags.ww_boost_saldo,
+        inp.saldo_w,
+        on=inp.thermal_boost_saldo_on_w,
+        off=inp.thermal_boost_saldo_off_w,
+    )
+
+    # Saldo-Regelung: Zuteilungsempfehlung über alle Speicher.
+    result.regelung = _storage_control(inp, result)
+
+    # Heizkreis: Modus- und Vorlauf-Empfehlung.
+    if inp.heating is not None:
+        result.heizung = _heating_plan(inp, result)
+
     # SoC-Prognose ab jetzt bis zum Horizontende. Bewusst nicht rückwirkend:
     # bekannt ist nur der aktuelle Stand, alles davor wäre erfunden.
     if known and cap > 0:
@@ -249,6 +511,28 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     result.empfehlung = (
         " → ".join(result.prioritaeten) if result.prioritaeten else "Einspeisen"
     )
+
+    # Empfohlener WW-Sollwert nach Priorität: Sperrzeit (aus) >
+    # Legionellenschutz > PV-Boost > Basis. Nutzt die in _priorities
+    # fortgeschriebenen Temperatur-Latches.
+    if not inp.thermal_present:
+        pass  # kein Warmwasser-Gerät: ww_soll_c bleibt None, Status leer
+    elif result.ww_gesperrt:
+        result.ww_soll_c = None
+        result.ww_status = "aus"
+    elif result.ww_legionelle_aktiv:
+        result.ww_soll_c = inp.thermal_legionella_target
+        result.ww_status = "legionellenschutz"
+    elif (
+        result.flags.ww_komfort
+        and result.flags.ww_boost_soc
+        and result.flags.ww_boost_saldo
+    ):
+        result.ww_soll_c = inp.thermal_comfort
+        result.ww_status = "pv_boost"
+    else:
+        result.ww_soll_c = inp.thermal_base
+        result.ww_status = "basis"
     return result
 
 
@@ -462,20 +746,180 @@ def _day_curve(
     return [PvSlot(start=t, end=nxt, watt=round(s * scale)) for t, nxt, s in raw]
 
 
+def _storage_control(inp: PlanInput, res: PlanResult) -> ControlResult | None:
+    """Saldo-Regelung: empfohlene Sollwerte je Speicher berechnen.
+
+    Priorität "Bezug minimieren": Der Regler zieht den Netzsaldo auf einen
+    leicht in die Einspeisung verschobenen Sollwert. Asymmetrische Gains
+    (schnell gegen teuren Bezug, gemächlich beim Laden), Totband gegen
+    Dauerkorrekturen. Entladen verteilt proportional zur verfügbaren Energie
+    oberhalb der Reserve; Kaltreserve-Speicher nehmen daran erst teil, wenn
+    der mittlere SoC der übrigen unter die Schwelle fällt (Hysterese).
+    Geladen wird proportional zur freien Kapazität — über alle Speicher,
+    Reserve eingeschlossen. Speicher ohne SoC-Wert werden aus der Zuteilung
+    genommen (kein Phantomanteil).
+    """
+    if inp.saldo_w is None or not inp.storages:
+        return None
+    known = [s for s in inp.storages if s.soc is not None]
+    if not known:
+        return None
+
+    # Kaltreserve-Hysterese über den mittleren SoC der Nicht-Reserve-Speicher.
+    primary_socs = [s.soc for s in known if not s.cold_reserve]
+    res.flags.kaltreserve = _latch(
+        inp.flags.kaltreserve,
+        sum(primary_socs) / len(primary_socs) if primary_socs else None,
+        on=RESERVE_SOC_ON,
+        off=RESERVE_SOC_OFF,
+    )
+    reserve_aktiv = res.flags.kaltreserve
+
+    bat_ist = sum(s.power_w for s in inp.storages if s.power_w is not None)
+    fehler = inp.saldo_w + CONTROL_TARGET_OFFSET_W
+    gain = CONTROL_GAIN_DISCHARGE if fehler > 0 else CONTROL_GAIN_CHARGE
+    max_ent = sum(s.max_discharge_w for s in known)
+    max_lad = sum(s.max_charge_w for s in known)
+    soll = max(-max_lad, min(bat_ist + fehler * gain, max_ent))
+
+    ctrl = ControlResult(
+        modus="pausiert",
+        fehler_w=round(fehler, 0),
+        soll_w=round(soll, 0),
+        reserve_aktiv=reserve_aktiv,
+        reserve_namen=[s.name for s in inp.storages if s.cold_reserve],
+    )
+
+    def _verteile(
+        anteile: list[tuple[StorageState, float]], gesamt: float, laden: bool
+    ) -> list[StorageSetpoint]:
+        summe = sum(a for _s, a in anteile)
+        setpoints = []
+        for s, anteil in anteile:
+            grenze = s.max_charge_w if laden else s.max_discharge_w
+            watt = min(gesamt * anteil / summe, grenze) if summe > 0 else 0.0
+            if watt < CONTROL_MIN_SETPOINT_W:
+                watt = 0.0
+            setpoints.append(StorageSetpoint(name=s.name, watt=round(watt)))
+        return setpoints
+
+    if soll > CONTROL_DEADBAND_W:
+        ctrl.modus = "entladen"
+        # Verfügbare Energie oberhalb der Reserve, Kaltreserve nur bei Bedarf.
+        anteile = [
+            (
+                s,
+                max(0.0, (s.soc - s.reserve_soc) / 100 * s.capacity_kwh)
+                if (not s.cold_reserve or reserve_aktiv)
+                else 0.0,
+            )
+            for s in known
+        ]
+        ctrl.zuteilung = _verteile(anteile, soll, laden=False)
+    elif soll < -CONTROL_DEADBAND_W:
+        ctrl.modus = "laden"
+        # Freie Kapazität bis 100 % — wer mehr Platz hat, bekommt mehr.
+        anteile = [
+            (s, max(0.0, (100 - s.soc) / 100 * s.capacity_kwh)) for s in known
+        ]
+        ctrl.zuteilung = _verteile(anteile, -soll, laden=True)
+    else:
+        ctrl.zuteilung = [StorageSetpoint(name=s.name, watt=0.0) for s in known]
+    return ctrl
+
+
+def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
+    """Heizkreis: Modus über Außentemperatur-Hysterese, Vorlauf aus der Kurve.
+
+    Heizen unterliegt der Sommersperre; Kühlen greift oberhalb der eigenen
+    Schwellen. Im Heizbetrieb hebt die Wärmeanforderung der Räume die
+    witterungsgeführte Kurve an; ohne Anforderung fällt der Vorlauf auf das
+    Minimum (Absenkbetrieb). Der Vorlauf bleibt zwischen Minimum und Maximum.
+    """
+    h = inp.heating
+    result = HeatingResult(name=h.name, sommer_sperre=h.heat_locked)
+    t = h.outdoor_temp_c
+    if t is None:
+        result.modus = "unbekannt"
+        return result
+    result.t_aussen_c = t
+
+    res.flags.wp_heizen = (
+        False
+        if h.heat_locked
+        else _latch(inp.flags.wp_heizen, t, on=h.heat_on_c, off=h.heat_off_c)
+    )
+    res.flags.wp_kuehlen = _latch(
+        inp.flags.wp_kuehlen, t, on=h.cool_on_c, off=h.cool_off_c
+    )
+
+    if res.flags.wp_heizen:
+        result.modus = "heizen"
+        vlt_min = (
+            h.vlt_min_cold_c if t < HEATING_COLD_THRESHOLD_C else h.vlt_min_c
+        )
+        if h.demand_pct is not None and h.demand_pct < 1:
+            vlt = vlt_min
+        else:
+            vlt = h.curve_base_c - t * h.curve_slope
+            if h.demand_pct is not None:
+                vlt += h.demand_pct / 100 * HEATING_DEMAND_SHIFT_K
+            vlt = max(vlt_min, min(vlt, h.vlt_max_c))
+        result.vlt_ziel_c = float(round(vlt))
+        res.flags.wp_leise = _latch(
+            inp.flags.wp_leise,
+            result.vlt_ziel_c,
+            on=SILENT_VLT_ON_C,
+            off=SILENT_VLT_OFF_C,
+        )
+        result.leise_empfohlen = res.flags.wp_leise
+    elif res.flags.wp_kuehlen:
+        result.modus = "kuehlen"
+        result.vlt_ziel_c = h.cool_vlt_c
+    else:
+        result.modus = "aus"
+    return result
+
+
 def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     """Dynamische Reihenfolge für den Überschuss. WW ist Priorität 1, sofern
     keine Sperrzeit läuft; in der Sperrzeit entfallen Basis- und Komfort-
     ladung, der Speicher darf also unter die Basistemperatur auskühlen."""
     prio: list[str] = []
 
+    # Thermostat-Logik: Bedarf wird erst gemeldet, wenn die Temperatur das
+    # Totband unter dem Sollwert durchschritten hat, und erst beim Erreichen
+    # des Sollwerts wieder fallengelassen.
+    res.flags.ww_basis = _latch(
+        inp.flags.ww_basis,
+        inp.thermal_temp,
+        on=inp.thermal_base - THERMAL_HYST_K,
+        off=inp.thermal_base,
+    )
+    res.flags.ww_komfort = _latch(
+        inp.flags.ww_komfort,
+        inp.thermal_temp,
+        on=inp.thermal_comfort - THERMAL_HYST_K,
+        off=inp.thermal_comfort,
+    )
+
     if res.ww_gesperrt:
         prio.append("WW gesperrt")
-    elif inp.thermal_temp is not None and inp.thermal_temp < inp.thermal_base:
+    elif res.ww_legionelle_aktiv:
+        prio.append(
+            f"Legionellenschutz ({inp.thermal_legionella_target:.0f} °C, notfalls Netz)"
+        )
+    elif res.flags.ww_basis and inp.thermal_temp is not None:
         prio.append(
             f"WW-Basisladung ({inp.thermal_temp:.0f} → {inp.thermal_base:.0f} °C, notfalls Netz)"
         )
 
-    surplus_now = inp.saldo_w is not None and inp.saldo_w < -100
+    # Der Momentansaldo ist die unruhigste Größe im ganzen Planner; ohne
+    # Totband kippt allein hier die Empfehlung im Minutentakt.
+    res.flags.surplus = _latch(
+        inp.flags.surplus, inp.saldo_w, on=SURPLUS_ON_W, off=SURPLUS_OFF_W
+    )
+    surplus_now = res.flags.surplus
     if not surplus_now and res.ueberschuss_rest_kwh <= 0:
         if res.speicher_bedarf_kwh > 0:
             prio.append(
@@ -483,13 +927,18 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
             )
         return prio
 
+    # Komfortladung (PV-Boost) nur, wenn der Speicher fast voll ist und
+    # kräftig eingespeist wird — sonst gehört der Überschuss zuerst dem Akku.
     ww_comfort_pending = (
         not res.ww_gesperrt
+        and not res.ww_legionelle_aktiv
         and inp.thermal_temp is not None
-        and inp.thermal_temp < inp.thermal_comfort
+        and res.flags.ww_komfort
+        and res.flags.ww_boost_soc
+        and res.flags.ww_boost_saldo
     )
     if ww_comfort_pending:
-        prio.append(f"WW-Komfort ({inp.thermal_comfort:.0f} °C)")
+        prio.append(f"WW-Komfort ({inp.thermal_comfort:.0f} °C, PV-Boost)")
 
     grund = " – morgen wenig Ertrag" if res.morgen_knapp else ""
     akku = (
@@ -508,9 +957,17 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     else:
         # Automatik: Reicht der Restertrag nicht für Akku UND Auto, bekommt der
         # Akku Vorrang, damit die Nacht gedeckt ist. Bei reichlich Ertrag darf
-        # das Auto zuerst, der Akku wird dann trotzdem noch voll.
-        knapp = res.ueberschuss_rest_kwh < res.speicher_bedarf_kwh * 1.5
-        prio.extend([akku, auto] if knapp else [auto, akku])
+        # das Auto zuerst, der Akku wird dann trotzdem noch voll. Mit Totband
+        # um das Verhältnis, sonst tauschen Akku und Auto laufend die Plätze.
+        res.flags.knapp = _latch(
+            inp.flags.knapp,
+            res.ueberschuss_rest_kwh / res.speicher_bedarf_kwh
+            if res.speicher_bedarf_kwh > 0
+            else None,
+            on=KNAPP_ON,
+            off=KNAPP_OFF,
+        )
+        prio.extend([akku, auto] if res.flags.knapp else [auto, akku])
 
     prio.append("Einspeisen")
     return prio

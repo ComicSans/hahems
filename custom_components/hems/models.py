@@ -9,11 +9,29 @@ from dataclasses import dataclass, field
 
 from .const import (
     DEFAULT_BASE_TARGET,
+    DEFAULT_BOOST_SALDO_OFF_W,
+    DEFAULT_BOOST_SALDO_ON_W,
+    DEFAULT_BOOST_SOC_OFF,
+    DEFAULT_BOOST_SOC_ON,
     DEFAULT_COMFORT_TARGET,
+    DEFAULT_COOL_OFF_C,
+    DEFAULT_COOL_ON_C,
+    DEFAULT_COOL_VLT_C,
+    DEFAULT_CURVE_BASE_C,
+    DEFAULT_CURVE_SLOPE,
+    DEFAULT_HEAT_LOCK_FROM,
+    DEFAULT_HEAT_LOCK_TO,
+    DEFAULT_HEAT_OFF_C,
+    DEFAULT_HEAT_ON_C,
+    DEFAULT_LEGIONELLA_TARGET,
     DEFAULT_MAX_CHARGE_W,
     DEFAULT_MAX_DISCHARGE_W,
     DEFAULT_RESERVE_SOC,
+    DEFAULT_VLT_MAX_C,
+    DEFAULT_VLT_MIN_C,
+    DEFAULT_VLT_MIN_COLD_C,
     ROLE_FORECAST,
+    ROLE_HEATING,
     ROLE_MODULATED,
     ROLE_STORAGE,
     ROLE_SWITCHABLE,
@@ -44,6 +62,10 @@ class Storage:
     # Input/Output-Limit). Ohne diese Entitäten wird der Speicher nur beobachtet.
     charge_setpoint_entity: str | None = None
     discharge_setpoint_entity: str | None = None
+    # Kaltreserve: nimmt am Entladen erst teil, wenn der mittlere SoC der
+    # übrigen Speicher die Reserve-Schwelle unterschreitet (mit Hysterese).
+    # Geladen wird sie immer mit, proportional zur freien Kapazität.
+    cold_reserve: bool = False
 
 
 @dataclass
@@ -59,6 +81,48 @@ class ThermalStore:
     # Sperre.
     block_start: str | None = None
     block_end: str | None = None
+    # Legionellenschutz: wöchentliches Fenster (Wochentag + lokale Uhrzeiten),
+    # in dem der Sollwert unabhängig vom Überschuss auf legionella_target
+    # angehoben wird — notfalls aus dem Netz. "none"/leer = deaktiviert.
+    legionella_weekday: str | int | None = None  # 0 = Montag … 6 = Sonntag
+    legionella_start: str | None = None
+    legionella_end: str | None = None
+    legionella_target: float = DEFAULT_LEGIONELLA_TARGET
+    # PV-Boost auf den Komfort-Sollwert nur, wenn der Speicher fast voll ist
+    # UND kräftig eingespeist wird. Jeweils Ein-/Aus-Schwelle (Hysterese).
+    boost_soc_on: float = DEFAULT_BOOST_SOC_ON
+    boost_soc_off: float = DEFAULT_BOOST_SOC_OFF
+    boost_saldo_on_w: float = DEFAULT_BOOST_SALDO_ON_W
+    boost_saldo_off_w: float = DEFAULT_BOOST_SALDO_OFF_W
+
+
+@dataclass
+class HeatingCircuit:
+    """Witterungsgeführter Heizkreis (z. B. Wärmepumpe): Modus-Empfehlung
+    (heizen/kühlen/aus) über Außentemperatur-Schwellen mit Hysterese plus
+    Vorlauf-Sollwert aus der Heizkurve."""
+
+    id: str
+    name: str
+    outdoor_temp_entity: str
+    # Wärmeanforderung der Räume in % (0–100), z. B. aus einem PID-Thermostat
+    # oder einem Template-Sensor; hebt die Vorlaufkurve an. Ohne Anforderung
+    # (< 1 %) fällt der Vorlauf auf das Minimum (Absenkbetrieb).
+    demand_entity: str | None = None
+    heat_on_c: float = DEFAULT_HEAT_ON_C
+    heat_off_c: float = DEFAULT_HEAT_OFF_C
+    cool_on_c: float = DEFAULT_COOL_ON_C
+    cool_off_c: float = DEFAULT_COOL_OFF_C
+    # Sommersperre: in diesen Monaten (einschließlich) wird Heizen nie
+    # empfohlen, egal wie kalt es ist.
+    heat_lock_from_month: int = DEFAULT_HEAT_LOCK_FROM
+    heat_lock_to_month: int = DEFAULT_HEAT_LOCK_TO
+    curve_base_c: float = DEFAULT_CURVE_BASE_C
+    curve_slope: float = DEFAULT_CURVE_SLOPE
+    vlt_min_c: float = DEFAULT_VLT_MIN_C
+    vlt_min_cold_c: float = DEFAULT_VLT_MIN_COLD_C
+    vlt_max_c: float = DEFAULT_VLT_MAX_C
+    cool_vlt_c: float = DEFAULT_COOL_VLT_C
 
 
 @dataclass
@@ -92,6 +156,7 @@ class DeviceRegistry:
     forecasts: list[ForecastSource] = field(default_factory=list)
     storages: list[Storage] = field(default_factory=list)
     thermals: list[ThermalStore] = field(default_factory=list)
+    heatings: list[HeatingCircuit] = field(default_factory=list)
     switchables: list[SwitchableLoad] = field(default_factory=list)
     modulateds: list[ModulatedLoad] = field(default_factory=list)
 
@@ -100,6 +165,7 @@ _ROLE_CLASSES = {
     ROLE_FORECAST: (ForecastSource, "forecasts"),
     ROLE_STORAGE: (Storage, "storages"),
     ROLE_THERMAL: (ThermalStore, "thermals"),
+    ROLE_HEATING: (HeatingCircuit, "heatings"),
     ROLE_SWITCHABLE: (SwitchableLoad, "switchables"),
     ROLE_MODULATED: (ModulatedLoad, "modulateds"),
 }

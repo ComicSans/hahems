@@ -21,18 +21,36 @@ from .const import (
     CONF_WEATHER,
     DEFAULT_BASE_TARGET,
     DEFAULT_BASELINE_W,
+    DEFAULT_BOOST_SALDO_OFF_W,
+    DEFAULT_BOOST_SALDO_ON_W,
+    DEFAULT_BOOST_SOC_OFF,
+    DEFAULT_BOOST_SOC_ON,
     DEFAULT_COMFORT_TARGET,
+    DEFAULT_COOL_OFF_C,
+    DEFAULT_COOL_ON_C,
+    DEFAULT_COOL_VLT_C,
+    DEFAULT_CURVE_BASE_C,
+    DEFAULT_CURVE_SLOPE,
     DEFAULT_FREE_H,
     DEFAULT_FREE_KWH,
+    DEFAULT_HEAT_LOCK_FROM,
+    DEFAULT_HEAT_LOCK_TO,
+    DEFAULT_HEAT_OFF_C,
+    DEFAULT_HEAT_ON_C,
+    DEFAULT_LEGIONELLA_TARGET,
     DEFAULT_MAX_CHARGE_W,
     DEFAULT_MAX_DISCHARGE_W,
     DEFAULT_NIGHT_W,
     DEFAULT_RESERVE_SOC,
+    DEFAULT_VLT_MAX_C,
+    DEFAULT_VLT_MIN_C,
+    DEFAULT_VLT_MIN_COLD_C,
     DOMAIN,
     PRIORITY_AUTO,
     PRIORITY_BATTERY_FIRST,
     PRIORITY_EV_FIRST,
     ROLE_FORECAST,
+    ROLE_HEATING,
     ROLE_MODULATED,
     ROLE_STORAGE,
     ROLE_SWITCHABLE,
@@ -44,6 +62,7 @@ ROLE_LABELS = {
     ROLE_FORECAST: "PV-Prognose",
     ROLE_STORAGE: "Speicher",
     ROLE_THERMAL: "Warmwasser",
+    ROLE_HEATING: "Heizkreis",
     ROLE_SWITCHABLE: "Schaltbare Last",
     ROLE_MODULATED: "Modulierbare Last",
 }
@@ -68,6 +87,16 @@ def _number(
             step=step,
             unit_of_measurement=unit,
             mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+
+def _weekday() -> selector.SelectSelector:
+    """Wochentag fürs Legionellen-Fenster; "none" = deaktiviert."""
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=["none", "0", "1", "2", "3", "4", "5", "6"],
+            translation_key="weekday",
         )
     )
 
@@ -109,6 +138,7 @@ STORAGE_SCHEMA = vol.Schema(
         vol.Required("max_discharge_w", default=DEFAULT_MAX_DISCHARGE_W): _number(
             100, 20000, "W"
         ),
+        vol.Required("cold_reserve", default=False): selector.BooleanSelector(),
     }
 )
 
@@ -124,6 +154,68 @@ THERMAL_SCHEMA = vol.Schema(
         ),
         vol.Optional("block_start"): selector.TimeSelector(),
         vol.Optional("block_end"): selector.TimeSelector(),
+        vol.Required("legionella_weekday", default="none"): _weekday(),
+        vol.Optional("legionella_start"): selector.TimeSelector(),
+        vol.Optional("legionella_end"): selector.TimeSelector(),
+        vol.Required(
+            "legionella_target", default=DEFAULT_LEGIONELLA_TARGET
+        ): _number(50, 75, "°C"),
+        vol.Required("boost_soc_on", default=DEFAULT_BOOST_SOC_ON): _number(
+            0, 100, "%"
+        ),
+        vol.Required("boost_soc_off", default=DEFAULT_BOOST_SOC_OFF): _number(
+            0, 100, "%"
+        ),
+        vol.Required(
+            "boost_saldo_on_w", default=DEFAULT_BOOST_SALDO_ON_W
+        ): _number(-20000, 0, "W", 50),
+        vol.Required(
+            "boost_saldo_off_w", default=DEFAULT_BOOST_SALDO_OFF_W
+        ): _number(-5000, 5000, "W", 50),
+    }
+)
+
+HEATING_SCHEMA = vol.Schema(
+    {
+        vol.Required("name"): selector.TextSelector(),
+        vol.Required("outdoor_temp_entity"): _entity(device_class="temperature"),
+        vol.Optional("demand_entity"): _entity(),
+        vol.Required("heat_on_c", default=DEFAULT_HEAT_ON_C): _number(
+            -10, 25, "°C", 0.5
+        ),
+        vol.Required("heat_off_c", default=DEFAULT_HEAT_OFF_C): _number(
+            -10, 30, "°C", 0.5
+        ),
+        vol.Required("cool_on_c", default=DEFAULT_COOL_ON_C): _number(
+            15, 40, "°C", 0.5
+        ),
+        vol.Required("cool_off_c", default=DEFAULT_COOL_OFF_C): _number(
+            10, 35, "°C", 0.5
+        ),
+        vol.Required(
+            "heat_lock_from_month", default=DEFAULT_HEAT_LOCK_FROM
+        ): _number(1, 12, ""),
+        vol.Required("heat_lock_to_month", default=DEFAULT_HEAT_LOCK_TO): _number(
+            1, 12, ""
+        ),
+        vol.Required("curve_base_c", default=DEFAULT_CURVE_BASE_C): _number(
+            25, 60, "°C", 0.1
+        ),
+        vol.Required("curve_slope", default=DEFAULT_CURVE_SLOPE): _number(
+            0, 3, "K/K", 0.01
+        ),
+        vol.Required("vlt_min_c", default=DEFAULT_VLT_MIN_C): _number(
+            15, 40, "°C", 0.5
+        ),
+        vol.Required("vlt_min_cold_c", default=DEFAULT_VLT_MIN_COLD_C): _number(
+            15, 40, "°C", 0.5
+        ),
+        vol.Required("vlt_max_c", default=DEFAULT_VLT_MAX_C): _number(
+            25, 70, "°C", 0.5
+        ),
+        vol.Required("cool_vlt_c", default=DEFAULT_COOL_VLT_C): _number(
+            10, 30, "°C", 0.5
+        ),
     }
 )
 
@@ -157,6 +249,7 @@ ROLE_SCHEMAS = {
     ROLE_FORECAST: FORECAST_SCHEMA,
     ROLE_STORAGE: STORAGE_SCHEMA,
     ROLE_THERMAL: THERMAL_SCHEMA,
+    ROLE_HEATING: HEATING_SCHEMA,
     ROLE_SWITCHABLE: SWITCHABLE_SCHEMA,
     ROLE_MODULATED: MODULATED_SCHEMA,
 }
@@ -165,7 +258,8 @@ ROLE_SCHEMAS = {
 WIZARD_MENUS = {
     ROLE_FORECAST: ("forecast_menu", "add_forecast", "storage_menu"),
     ROLE_STORAGE: ("storage_menu", "add_storage", "thermal_menu"),
-    ROLE_THERMAL: ("thermal_menu", "add_thermal", "switchable_menu"),
+    ROLE_THERMAL: ("thermal_menu", "add_thermal", "heating_menu"),
+    ROLE_HEATING: ("heating_menu", "add_heating", "switchable_menu"),
     ROLE_SWITCHABLE: ("switchable_menu", "add_switchable", "modulated_menu"),
     ROLE_MODULATED: ("modulated_menu", "add_modulated", "finish"),
 }
@@ -174,6 +268,7 @@ EDIT_STEPS = {
     ROLE_FORECAST: "edit_forecast",
     ROLE_STORAGE: "edit_storage",
     ROLE_THERMAL: "edit_thermal",
+    ROLE_HEATING: "edit_heating",
     ROLE_SWITCHABLE: "edit_switchable",
     ROLE_MODULATED: "edit_modulated",
 }
@@ -233,6 +328,9 @@ class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_thermal_menu(self, user_input=None):
         return self._wizard_menu(ROLE_THERMAL)
 
+    async def async_step_heating_menu(self, user_input=None):
+        return self._wizard_menu(ROLE_HEATING)
+
     async def async_step_switchable_menu(self, user_input=None):
         return self._wizard_menu(ROLE_SWITCHABLE)
 
@@ -253,6 +351,9 @@ class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_add_thermal(self, user_input=None):
         return await self._async_add_step(ROLE_THERMAL, "add_thermal", user_input)
+
+    async def async_step_add_heating(self, user_input=None):
+        return await self._async_add_step(ROLE_HEATING, "add_heating", user_input)
 
     async def async_step_add_switchable(self, user_input=None):
         return await self._async_add_step(ROLE_SWITCHABLE, "add_switchable", user_input)
@@ -283,6 +384,7 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
                 "add_forecast",
                 "add_storage",
                 "add_thermal",
+                "add_heating",
                 "add_switchable",
                 "add_modulated",
                 "edit_device",
@@ -336,6 +438,9 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_add_thermal(self, user_input=None):
         return await self._async_add_step(ROLE_THERMAL, "add_thermal", user_input)
 
+    async def async_step_add_heating(self, user_input=None):
+        return await self._async_add_step(ROLE_HEATING, "add_heating", user_input)
+
     async def async_step_add_switchable(self, user_input=None):
         return await self._async_add_step(ROLE_SWITCHABLE, "add_switchable", user_input)
 
@@ -385,6 +490,9 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_edit_thermal(self, user_input=None):
         return await self._async_edit_step(ROLE_THERMAL, "edit_thermal", user_input)
+
+    async def async_step_edit_heating(self, user_input=None):
+        return await self._async_edit_step(ROLE_HEATING, "edit_heating", user_input)
 
     async def async_step_edit_switchable(self, user_input=None):
         return await self._async_edit_step(
