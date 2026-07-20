@@ -36,6 +36,7 @@ from .const import (
 )
 from .models import DeviceRegistry, parse_devices
 from .planner import (
+    EvState,
     HeatingState,
     PlanFlags,
     PlanInput,
@@ -548,6 +549,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         ]
         thermal = reg.thermals[0] if reg.thermals else None
         heating_cfg = reg.heatings[0] if reg.heatings else None
+        modulated_cfg = reg.modulateds[0] if reg.modulateds else None
 
         # Darstellungshorizont der Plankarte: der ganze heutige und der ganze
         # morgige Kalendertag (lokal), plus die Sonnenzeiten beider Tage für
@@ -596,6 +598,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 vlt_max_c=heating_cfg.vlt_max_c,
                 cool_vlt_c=heating_cfg.cool_vlt_c,
             )
+
+        ev = (
+            EvState(min_a=modulated_cfg.min_a, phases=modulated_cfg.phases)
+            if modulated_cfg is not None
+            else None
+        )
 
         data.plan = compute_plan(
             PlanInput(
@@ -646,6 +654,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 if thermal
                 else 200,
                 heating=heating,
+                ev=ev,
                 flags=self._plan_flags,
             )
         )

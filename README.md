@@ -180,3 +180,14 @@ bis zu 5 K an — ohne Anforderung fällt der Vorlauf auf das Minimum
 (Absenkbetrieb). In den Sperrmonaten (Standard Mai–September) wird Heizen
 nie empfohlen. Bei niedrigem Vorlauf-Soll meldet das Attribut
 `leise_empfohlen`, dass der Flüsterbetrieb der Anlage reicht.
+
+## E-Auto: Mindestladeleistung der Wallbox
+
+Die Empfehlung "E-Auto mit Überschuss" prüft, ob der Momentanüberschuss die
+physikalische Mindestladeleistung der konfigurierten modulierbaren Last
+erreicht (`min_a × Phasen × 230 V`) — darunter könnte die Wallbox den
+gemeldeten Überschuss real gar nicht abnehmen. Die Ein-Schwelle liegt mit
+200 W Sicherheitsmarge über diesem Minimum, die Aus-Schwelle am nackten
+Minimum (Hysterese), damit die Empfehlung nicht bei jedem Wolkenschatten
+kippt. Ist keine modulierbare Last konfiguriert, gilt weiterhin das alte
+Verhalten: jeder Überschuss über 200 W genügt für die Empfehlung.

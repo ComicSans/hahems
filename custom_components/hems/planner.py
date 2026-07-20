@@ -20,6 +20,8 @@ from .const import (
     DEFAULT_BOOST_SOC_OFF,
     DEFAULT_BOOST_SOC_ON,
     DEFAULT_LEGIONELLA_TARGET,
+    EV_SURPLUS_MARGIN_W,
+    EV_VOLTAGE_PER_PHASE_V,
     HEATING_COLD_THRESHOLD_C,
     HEATING_DEMAND_SHIFT_K,
     PRIORITY_AUTO,
@@ -78,6 +80,18 @@ class HeatingState:
     vlt_min_cold_c: float
     vlt_max_c: float
     cool_vlt_c: float
+
+
+@dataclass
+class EvState:
+    """Mindestladeleistung der Wallbox für die 'E-Auto laden'-Empfehlung.
+
+    min_w = min_a × phases × EV_VOLTAGE_PER_PHASE_V; darunter kann die
+    Wallbox real gar nicht laden (Mindeststromstärke pro Ladepunkt).
+    """
+
+    min_a: float
+    phases: int
 
 
 @dataclass
@@ -146,6 +160,10 @@ class PlanFlags:
     wp_heizen: bool = False
     wp_kuehlen: bool = False
     wp_leise: bool = False
+    # E-Auto: Überschuss reicht (mit Marge) für die Wallbox-Mindestleistung.
+    # Start konservativ False, damit der erste Lauf nach einem Neustart nicht
+    # sofort "E-Auto laden" meldet, ohne den Momentanüberschuss zu kennen.
+    ev_bereit: bool = False
 
 
 def _latch(prev: bool, value: float | None, on: float, off: float) -> bool:
@@ -228,6 +246,9 @@ class PlanInput:
     thermal_boost_saldo_off_w: float = DEFAULT_BOOST_SALDO_OFF_W
     # Witterungsgeführter Heizkreis (optional).
     heating: HeatingState | None = None
+    # Wallbox-Mindestladeleistung für die "E-Auto laden"-Empfehlung
+    # (optional; ohne Konfiguration gilt die alte, ungeprüfte Empfehlung).
+    ev: EvState | None = None
     # Schmitt-Trigger-Zustand des vorigen Laufs; siehe PlanFlags.
     flags: PlanFlags = field(default_factory=PlanFlags)
 
@@ -953,6 +974,29 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     if ww_comfort_pending:
         prio.append(f"WW-Komfort ({inp.thermal_comfort:.0f} °C, PV-Boost)")
 
+    # E-Auto: Empfehlung nur, wenn der Momentanüberschuss die physikalische
+    # Mindestladeleistung der Wallbox erreicht (min_a × Phasen × Spannung) —
+    # darunter könnte die Wallbox den gemeldeten Überschuss real gar nicht
+    # abnehmen. Ein-Schwelle mit Sicherheitsmarge, Aus-Schwelle am nackten
+    # Minimum (Hysterese). Ohne konfigurierte Wallbox bleibt es beim alten,
+    # ungeprüften Verhalten (irgendein Überschuss genügt).
+    ev_min_w = (
+        inp.ev.min_a * inp.ev.phases * EV_VOLTAGE_PER_PHASE_V
+        if inp.ev is not None
+        else None
+    )
+    surplus_power_w = max(0.0, -(inp.saldo_w or 0.0))
+    res.flags.ev_bereit = (
+        _latch(
+            inp.flags.ev_bereit,
+            surplus_power_w,
+            on=ev_min_w + EV_SURPLUS_MARGIN_W,
+            off=ev_min_w,
+        )
+        if ev_min_w is not None
+        else True
+    )
+
     grund = " – morgen wenig Ertrag" if res.morgen_knapp else ""
     akku = (
         f"Akku laden bis {res.speicher_ziel_soc:.0f} %"
@@ -960,27 +1004,37 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
         if res.speicher_bedarf_kwh > 0
         else None
     )
-    auto = "E-Auto mit Überschuss"
-    if akku is None:
-        prio.append(auto)
-    elif inp.priority_mode == PRIORITY_BATTERY_FIRST:
-        prio.extend([akku, auto])
-    elif inp.priority_mode == PRIORITY_EV_FIRST:
-        prio.extend([auto, akku])
-    else:
-        # Automatik: Reicht der Restertrag nicht für Akku UND Auto, bekommt der
-        # Akku Vorrang, damit die Nacht gedeckt ist. Bei reichlich Ertrag darf
-        # das Auto zuerst, der Akku wird dann trotzdem noch voll. Mit Totband
-        # um das Verhältnis, sonst tauschen Akku und Auto laufend die Plätze.
-        res.flags.knapp = _latch(
-            inp.flags.knapp,
-            res.ueberschuss_rest_kwh / res.speicher_bedarf_kwh
-            if res.speicher_bedarf_kwh > 0
-            else None,
-            on=KNAPP_ON,
-            off=KNAPP_OFF,
+    auto = None
+    if res.flags.ev_bereit:
+        auto = (
+            f"E-Auto mit Überschuss (≥ {ev_min_w / 1000:.1f} kW nötig)"
+            if ev_min_w is not None
+            else "E-Auto mit Überschuss"
         )
-        prio.extend([akku, auto] if res.flags.knapp else [auto, akku])
+
+    if akku is not None and auto is not None:
+        if inp.priority_mode == PRIORITY_BATTERY_FIRST:
+            prio.extend([akku, auto])
+        elif inp.priority_mode == PRIORITY_EV_FIRST:
+            prio.extend([auto, akku])
+        else:
+            # Automatik: Reicht der Restertrag nicht für Akku UND Auto, bekommt der
+            # Akku Vorrang, damit die Nacht gedeckt ist. Bei reichlich Ertrag darf
+            # das Auto zuerst, der Akku wird dann trotzdem noch voll. Mit Totband
+            # um das Verhältnis, sonst tauschen Akku und Auto laufend die Plätze.
+            res.flags.knapp = _latch(
+                inp.flags.knapp,
+                res.ueberschuss_rest_kwh / res.speicher_bedarf_kwh
+                if res.speicher_bedarf_kwh > 0
+                else None,
+                on=KNAPP_ON,
+                off=KNAPP_OFF,
+            )
+            prio.extend([akku, auto] if res.flags.knapp else [auto, akku])
+    elif akku is not None:
+        prio.append(akku)
+    elif auto is not None:
+        prio.append(auto)
 
     prio.append("Einspeisen")
     return prio

@@ -89,6 +89,15 @@ HEATING_COLD_THRESHOLD_C = 5.0
 SILENT_VLT_ON_C = 35
 SILENT_VLT_OFF_C = 37
 
+# E-Auto: Die "E-Auto laden"-Empfehlung setzt voraus, dass der Überschuss die
+# physikalische Mindestladeleistung der Wallbox erreicht (min_a × Phasen ×
+# Netzspannung) — darunter kann real gar nicht geladen werden. Die
+# Ein-Schwelle liegt mit Sicherheitsmarge über diesem Minimum, damit die
+# Empfehlung nicht sofort wieder kippt, wenn der Überschuss knapp am Minimum
+# schwankt; die Aus-Schwelle ist das nackte physikalische Minimum.
+EV_VOLTAGE_PER_PHASE_V = 230.0
+EV_SURPLUS_MARGIN_W = 200.0
+
 # PV-Ertragsfaktor (0–1) je Wetterlage, falls die Vorhersage keinen
 # Bewölkungsgrad liefert. Diffuses Licht bringt auch bedeckt noch Ertrag.
 WEATHER_CONDITION_FACTORS = {
