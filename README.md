@@ -36,6 +36,8 @@ Variante manuell: den Ordner `custom_components/hems/` in das
 - `sensor.hems_pv_heute` / `hems_pv_rest_heute` / `hems_pv_morgen` (kWh, alle Flächen summiert)
 - `sensor.hems_pv_leistung_jetzt` (W, geschätzt)
 - `sensor.hems_saldo` (W, normalisiert: positiv = Netzbezug)
+- `sensor.hems_hausverbrauch` (W, PV + Batterie-Entladung + Netzbezug —
+  derselbe Wert wie der Haus-Knoten der Lastfluss-Karte)
 - `sensor.hems_nachtdefizit` (kWh, erwarteter Verbrauch Sonnenuntergang → Sonnenaufgang)
 - `sensor.hems_ueberschuss_rest_heute` (kWh, Prognose)
 - `sensor.hems_speicher_soc` / `hems_speicher_verfuegbar` / `hems_speicher_ziel_soc`

@@ -67,6 +67,17 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         value_fn=lambda d: d.saldo_w,
     ),
     HemsSensorDescription(
+        key="hausverbrauch",
+        name="Hausverbrauch",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        # Dieselbe Berechnung wie der Haus-Knoten der Lastfluss-Karte
+        # (PV + Batterie-Entladung + Netzbezug), hier als eigene Entität für
+        # Dashboards/Statistik statt nur als Kartenattribut.
+        value_fn=lambda d: d.haus_w,
+    ),
+    HemsSensorDescription(
         key="lastfluss",
         name="Lastfluss",
         native_unit_of_measurement=UnitOfPower.WATT,
