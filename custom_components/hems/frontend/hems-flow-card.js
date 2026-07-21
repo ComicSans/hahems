@@ -57,6 +57,20 @@ function fmtW(w) {
   return `${Math.round(abs)} W`;
 }
 
+// Wie fmtW, aber mit Vorzeichen — für die Pro-Speicher-Leistung
+// (negativ = Laden, positiv = Entladen), passend zur Konvention der Entität.
+function fmtWSigned(w) {
+  if (w === null || w === undefined) return "–";
+  return `${w < 0 ? "-" : ""}${fmtW(w)}`;
+}
+
+// Minimaler HTML-Escaper für Nutzer-Strings (Speichernamen aus der Config).
+function esc(s) {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
+}
+
 /** Kantenflüsse aus den vier Knotengrößen ableiten (alles >= 0). */
 function computeFlows(a) {
   const pv = Math.max(0, a.pv_w ?? 0);
@@ -208,6 +222,29 @@ class HemsFlowCard extends HTMLElement {
       .map((c) => `<span class="chip">${c}</span>`)
       .join("");
 
+    // Pro-Speicher-Zeilen: Name, SoC-Balken (dynamisch gefüllt) und Ist-
+    // Leistung. Nur gerendert, wenn die Integration eine Aufschlüsselung
+    // liefert; bei fehlendem SoC bleibt der Balken leer (leistungsbasierte
+    // Speicher ohne SoC-Meldung).
+    const storages = Array.isArray(a.speicher) ? a.speicher : [];
+    const storageRows = storages
+      .map((s) => {
+        const soc = s.soc != null ? Math.max(0, Math.min(100, s.soc)) : null;
+        const name = esc(s.name != null ? String(s.name) : "Speicher");
+        return `<div class="st-row">
+          <span class="st-name" title="${name}">${name}</span>
+          <div class="st-bar"><div class="st-fill" style="width:${
+            soc != null ? soc : 0
+          }%"></div></div>
+          <span class="st-soc">${soc != null ? `${Math.round(soc)} %` : "–"}</span>
+          <span class="st-watt">${fmtWSigned(s.watt)}</span>
+        </div>`;
+      })
+      .join("");
+    const storageBlock = storageRows
+      ? `<div class="storages">${storageRows}</div>`
+      : "";
+
     this.shadowRoot.innerHTML = `
       <style>
         /* Feste Höhe (siehe CARD_HEIGHT): das SVG skaliert mit, statt die
@@ -267,6 +304,57 @@ class HemsFlowCard extends HTMLElement {
           background: var(--secondary-background-color, #f5f5f5);
           color: var(--primary-text-color, #212121);
         }
+        /* Pro-Speicher-Zeilen: flex:none, damit das SVG darüber schrumpft
+           statt die Zeilen abzuschneiden. */
+        .storages {
+          flex: none;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 4px 16px 6px;
+        }
+        .st-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 12px;
+        }
+        .st-name {
+          flex: 0 0 auto;
+          max-width: 40%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--primary-text-color, #212121);
+        }
+        .st-bar {
+          flex: 1 1 auto;
+          min-width: 0;
+          height: 8px;
+          border-radius: 4px;
+          background: color-mix(in srgb, ${NODES.batt.color} 22%, transparent);
+          overflow: hidden;
+        }
+        .st-fill {
+          height: 100%;
+          border-radius: 4px;
+          background: ${NODES.batt.color};
+          transition: width 0.4s ease;
+        }
+        .st-soc {
+          flex: 0 0 auto;
+          min-width: 38px;
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+          color: var(--secondary-text-color, #727272);
+        }
+        .st-watt {
+          flex: 0 0 auto;
+          min-width: 56px;
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+          color: var(--primary-text-color, #212121);
+        }
       </style>
       <ha-card ${this._config.title ? `header="${this._config.title}"` : ""}>
         <div class="container">
@@ -276,6 +364,7 @@ class HemsFlowCard extends HTMLElement {
             ${nodeSvg}
           </svg>
         </div>
+        ${storageBlock}
         ${chips ? `<div class="footer">${chips}</div>` : ""}
       </ha-card>`;
   }

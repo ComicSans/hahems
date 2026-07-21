@@ -43,6 +43,7 @@ from .const import (
     WP_MODEL_MIN_HOURS,
 )
 from .actuator import Actuator
+from .changelog import ChangeLog, decision_snapshot, diff_snapshots
 from .config_check import ConfigCheck, check_config
 from .models import DeviceRegistry, parse_devices
 from .planner import (
@@ -134,6 +135,9 @@ class HemsData:
         self.ev_zwang: bool = False
         self.config_check: ConfigCheck | None = None
         self.plan: PlanResult = PlanResult()
+        # Pro-Speicher-Momentaufnahme für die Lastfluss-Karte
+        # (Name, SoC %, Ist-Leistung W, Kapazität kWh).
+        self.speicher_liste: list[dict] = []
 
 
 class HemsCoordinator(DataUpdateCoordinator[HemsData]):
@@ -155,6 +159,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # gesetzt, in RestoreEntity persistiert).
         self.goal: str = GOAL_SELF_CONSUMPTION
         self.ev_force: bool = False
+        # Änderungs-Log der Entscheidungen (vom Setup gesetzt) und die
+        # Momentaufnahme des Vorlaufs, gegen die diffed wird.
+        self.changelog: ChangeLog | None = None
+        self._decisions: dict | None = None
         # Schalt-Ebene (nur im Auto-Modus aktiv).
         self._actuator = Actuator(hass)
         self._night_load_w: float | None = None
@@ -829,6 +837,16 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             )
             for s in reg.storages
         ]
+        # Pro-Speicher-Werte für die Lastfluss-Karte (dynamisch je Speicher).
+        data.speicher_liste = [
+            {
+                "name": st.name,
+                "soc": st.soc,
+                "watt": st.power_w,
+                "kapazitaet_kwh": st.capacity_kwh,
+            }
+            for st in storages
+        ]
         thermal = reg.thermals[0] if reg.thermals else None
         heating_cfg = reg.heatings[0] if reg.heatings else None
 
@@ -988,4 +1006,21 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
                 await self._actuator.release_battery(reg)
         self._prev_mode = self.mode
+
+        # Entscheidungsänderungen für den Logs-Reiter fortschreiben.
+        self._record_decisions(data)
         return data
+
+    def _record_decisions(self, data: HemsData) -> None:
+        """Aktuelle Entscheidungen gegen den Vorlauf diffen und Änderungen loggen.
+
+        Der erste Lauf nach einem (Neu-)Start setzt nur die Baseline, damit das
+        Verfügbarwerden der Quellen keinen Schwall Scheinänderungen erzeugt.
+        """
+        if self.changelog is None:
+            return
+        snap = decision_snapshot(self.mode, self.goal, self.ev_force, data.plan)
+        prev, self._decisions = self._decisions, snap
+        if prev is None:
+            return
+        self.changelog.add(diff_snapshots(prev, snap, dt_util.utcnow().timestamp()))

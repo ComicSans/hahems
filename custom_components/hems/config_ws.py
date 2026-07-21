@@ -34,6 +34,7 @@ def async_register_ws(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_upsert)
     websocket_api.async_register_command(hass, ws_remove)
     websocket_api.async_register_command(hass, ws_set_general)
+    websocket_api.async_register_command(hass, ws_logs)
     hass.data[_WS_REGISTERED] = True
 
 
@@ -269,3 +270,25 @@ async def ws_set_general(hass, connection, msg):
     options.update(validated)
     hass.config_entries.async_update_entry(entry, options=options)
     connection.send_result(msg["id"], {"values": validated})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "hems/logs/get",
+        vol.Optional("entry_id"): str,
+    }
+)
+@callback
+def ws_logs(hass, connection, msg):
+    """Entscheidungs-Log der letzten Woche liefern (Panel filtert clientseitig).
+
+    Bewusst ohne require_admin (nur Lesen, wie ws_get) und synchron: der Log
+    liegt bereits in-memory beim Coordinator.
+    """
+    entry = _entry(hass, msg.get("entry_id"))
+    coordinator = (
+        hass.data.get(DOMAIN, {}).get(entry.entry_id) if entry is not None else None
+    )
+    changelog = getattr(coordinator, "changelog", None)
+    entries = list(changelog.entries()) if changelog is not None else []
+    connection.send_result(msg["id"], {"entries": entries})

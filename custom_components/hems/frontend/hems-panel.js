@@ -34,7 +34,17 @@ const TABS = [
   { id: "control", label: "Steuerung" },
   { id: "diagnostics", label: "Diagnose" },
   { id: "config", label: "Konfiguration" },
+  { id: "logs", label: "Logs" },
 ];
+
+// Zeitspannen-Optionen des Logs-Reiters (Stunden). Standard: „letzte Stunden".
+const LOG_SPANS = [
+  { h: 1, label: "letzte Stunde" },
+  { h: 6, label: "letzte 6 Stunden" },
+  { h: 24, label: "letzte 24 Stunden" },
+  { h: 168, label: "letzte Woche" },
+];
+const LOG_SPAN_DEFAULT = 6;
 
 class HemsPanel extends HTMLElement {
   constructor() {
@@ -87,6 +97,7 @@ class HemsPanel extends HTMLElement {
           <section data-panel="control" hidden></section>
           <section data-panel="diagnostics" hidden></section>
           <section data-panel="config" hidden></section>
+          <section data-panel="logs" hidden></section>
         </main>
       </div>`;
 
@@ -106,6 +117,7 @@ class HemsPanel extends HTMLElement {
       control: root.querySelector('[data-panel="control"]'),
       diagnostics: root.querySelector('[data-panel="diagnostics"]'),
       config: root.querySelector('[data-panel="config"]'),
+      logs: root.querySelector('[data-panel="logs"]'),
     };
 
     this._buildOverview();
@@ -199,6 +211,7 @@ class HemsPanel extends HTMLElement {
     );
     for (const [id, el] of Object.entries(this._sections)) el.hidden = id !== tab;
     if (tab === "config" && !this._cfg) this._loadConfig();
+    if (tab === "logs") this._openLogs();
   }
 
   // --- Live-Aktualisierung (jeder hass-Tick) ------------------------------
@@ -416,6 +429,83 @@ class HemsPanel extends HTMLElement {
     box
       .querySelector('[data-act="save"]')
       .addEventListener("click", () => this._save());
+    // Entity-Felder mit echten HA-Pickern bestücken (async, s. u.).
+    this._entityValues = {};
+    this._mountEntityPickers();
+  }
+
+  // Jeden entity-slot mit einem ha-selector (Entity-Picker) füllen. Die Werte
+  // laufen über this._entityValues, weil ha-selector über Properties und ein
+  // value-changed-Event arbeitet, nicht über ein <input> im DOM.
+  _mountEntityPickers() {
+    const box = this._sections.config;
+    box.querySelectorAll(".entity-slot").forEach((slot) => {
+      const key = slot.dataset.key;
+      const domain = (slot.dataset.domain || "")
+        .split(",")
+        .filter(Boolean);
+      const dc = slot.dataset.deviceClass || "";
+      const current = slot.dataset.value || "";
+      this._entityValues[key] = current;
+
+      const mount = () => {
+        const picker = document.createElement("ha-selector");
+        picker.hass = this._hass;
+        const entityCfg = {};
+        if (domain.length) {
+          entityCfg.domain = domain.length === 1 ? domain[0] : domain;
+        }
+        if (dc) entityCfg.device_class = dc;
+        picker.selector = { entity: entityCfg };
+        picker.value = current || undefined;
+        picker.style.display = "block";
+        picker.addEventListener("value-changed", (e) => {
+          this._entityValues[key] = e.detail && e.detail.value != null
+            ? e.detail.value
+            : "";
+        });
+        slot.innerHTML = "";
+        slot.appendChild(picker);
+      };
+
+      if (window.customElements.get("ha-selector")) {
+        mount();
+        return;
+      }
+      // ha-selector wird im Frontend teils lazy geladen. Auf die Definition
+      // warten; kommt sie nicht zeitnah, auf die Datalist zurückfallen.
+      let done = false;
+      window.customElements
+        .whenDefined("ha-selector")
+        .then(() => {
+          if (!done) {
+            done = true;
+            mount();
+          }
+        });
+      setTimeout(() => {
+        if (!done && !window.customElements.get("ha-selector")) {
+          done = true;
+          this._entityFallback(slot, key, domain, dc, current);
+        }
+      }, 2500);
+    });
+  }
+
+  // Fallback ohne ha-selector: das frühere Datalist-Textfeld. Der Wert kommt
+  // dann wieder aus dem DOM, daher den Key aus _entityValues entfernen.
+  _entityFallback(slot, key, domain, dc, current) {
+    delete this._entityValues[key];
+    const opts = entityOptions(this._hass, domain, dc)
+      .map(
+        (e) =>
+          `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`,
+      )
+      .join("");
+    slot.innerHTML = `<input list="dl_${key}" data-key="${key}" data-type="entity"
+        value="${current ? escapeHtml(current) : ""}"
+        placeholder="Entität wählen…" autocomplete="off">
+      <datalist id="dl_${key}">${opts}</datalist>`;
   }
 
   _fieldControl(f, value) {
@@ -424,16 +514,13 @@ class HemsPanel extends HTMLElement {
     const lbl = `<label for="${id}">${escapeHtml(f.label || f.key)}${req}</label>`;
     let input;
     if (f.type === "entity") {
-      const opts = entityOptions(this._hass, f.domain, f.device_class)
-        .map(
-          (e) =>
-            `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`,
-        )
-        .join("");
-      input = `<input id="${id}" list="dl_${f.key}" data-key="${f.key}" data-type="entity"
-                 value="${value != null ? escapeHtml(String(value)) : ""}"
-                 placeholder="Entität wählen…" autocomplete="off">
-               <datalist id="dl_${f.key}">${opts}</datalist>`;
+      // Platzhalter; nach dem Rendern mit einem echten HA-Entity-Picker
+      // (ha-selector) bestückt — zeigt Klarnamen, Suche und Icons. Fällt auf
+      // die Datalist zurück, falls ha-selector im Panel nicht verfügbar ist.
+      input = `<div class="entity-slot" data-key="${f.key}"
+                 data-domain="${(f.domain || []).join(",")}"
+                 data-device-class="${f.device_class || ""}"
+                 data-value="${value != null ? escapeHtml(String(value)) : ""}"></div>`;
     } else if (f.type === "number") {
       const a = [
         f.min != null ? `min="${f.min}"` : "",
@@ -472,21 +559,29 @@ class HemsPanel extends HTMLElement {
   _collectValues() {
     const box = this._sections.config;
     const values = {};
-    box.querySelectorAll("[data-key]").forEach((el) => {
-      const key = el.dataset.key;
-      const type = el.dataset.type;
-      if (type === "boolean") {
-        values[key] = el.checked;
-      } else if (type === "number") {
-        if (el.value !== "") values[key] = Number(el.value);
-      } else if (type === "time") {
-        if (el.value)
-          values[key] = el.value.length === 5 ? `${el.value}:00` : el.value;
-      } else {
-        const v = el.value.trim();
-        if (v !== "") values[key] = v;
-      }
-    });
+    // Nur echte Form-Controls — die entity-slot-<div>s (data-key ohne .value)
+    // liefern ihren Wert über _entityValues.
+    box
+      .querySelectorAll("input[data-key], select[data-key], textarea[data-key]")
+      .forEach((el) => {
+        const key = el.dataset.key;
+        const type = el.dataset.type;
+        if (type === "boolean") {
+          values[key] = el.checked;
+        } else if (type === "number") {
+          if (el.value !== "") values[key] = Number(el.value);
+        } else if (type === "time") {
+          if (el.value)
+            values[key] = el.value.length === 5 ? `${el.value}:00` : el.value;
+        } else {
+          const v = el.value.trim();
+          if (v !== "") values[key] = v;
+        }
+      });
+    // Werte der ha-selector-Entity-Picker.
+    for (const [key, v] of Object.entries(this._entityValues || {})) {
+      if (v !== "" && v != null) values[key] = v;
+    }
     return values;
   }
 
@@ -524,6 +619,118 @@ class HemsPanel extends HTMLElement {
     this._cfg = null;
     await this._loadConfig();
   }
+
+  // --- Logs (Entscheidungs-Änderungen, lazy geladen) ----------------------
+
+  // Beim Öffnen des Reiters einmalig die Filterleiste bauen und immer neu vom
+  // Backend abrufen (der Log ist klein — nur Änderungen, max. eine Woche).
+  _openLogs() {
+    if (!this._logsBuilt) this._buildLogs();
+    this._loadLogs();
+  }
+
+  _buildLogs() {
+    this._logsBuilt = true;
+    const s = this._sections.logs;
+    s.innerHTML = `
+      <div class="panel-card">
+        <div class="logs-bar">
+          <input type="search" class="logs-filter" placeholder="Nach Wort filtern…"
+                 autocomplete="off">
+          <select class="logs-span">
+            ${LOG_SPANS.map(
+              (o) =>
+                `<option value="${o.h}"${
+                  o.h === LOG_SPAN_DEFAULT ? " selected" : ""
+                }>${o.label}</option>`,
+            ).join("")}
+          </select>
+          <button class="btn ghost logs-reload" title="Aktualisieren">↻</button>
+        </div>
+        <div class="hint logs-status"></div>
+      </div>
+      <div class="logs-list"></div>`;
+    this._logsUi = {
+      filter: s.querySelector(".logs-filter"),
+      span: s.querySelector(".logs-span"),
+      status: s.querySelector(".logs-status"),
+      list: s.querySelector(".logs-list"),
+    };
+    // Filtern läuft rein clientseitig auf den zuletzt geladenen Einträgen.
+    this._logsUi.filter.addEventListener("input", () => this._renderLogs());
+    this._logsUi.span.addEventListener("change", () => this._renderLogs());
+    s.querySelector(".logs-reload").addEventListener("click", () =>
+      this._loadLogs(),
+    );
+  }
+
+  async _loadLogs() {
+    this._logsUi.status.textContent = "Lade…";
+    try {
+      const res = await this._hass.callWS({ type: "hems/logs/get" });
+      this._logs = Array.isArray(res && res.entries) ? res.entries : [];
+    } catch (err) {
+      this._logs = [];
+      this._logsUi.status.textContent = `Nicht ladbar: ${
+        err && err.message ? err.message : err
+      }`;
+      this._logsUi.list.innerHTML = "";
+      return;
+    }
+    this._renderLogs();
+  }
+
+  _renderLogs() {
+    const { filter, span, status, list } = this._logsUi;
+    const all = this._logs || [];
+    const spanH = Number(span.value) || LOG_SPAN_DEFAULT;
+    const cutoff = Date.now() / 1000 - spanH * 3600;
+    const q = filter.value.trim().toLowerCase();
+    const hits = all
+      .filter((e) => Number(e.ts) >= cutoff)
+      .filter(
+        (e) =>
+          !q ||
+          `${e.titel || ""} ${e.text || ""} ${e.cat || ""}`
+            .toLowerCase()
+            .includes(q),
+      )
+      .sort((a, b) => Number(b.ts) - Number(a.ts)); // neueste zuerst
+
+    status.textContent = q
+      ? `${hits.length} von ${all.length} Einträgen (Filter „${filter.value.trim()}")`
+      : `${hits.length} Einträge`;
+
+    if (!hits.length) {
+      list.innerHTML = `<div class="panel-card"><span class="missing">Keine Änderungen im gewählten Zeitraum.</span></div>`;
+      return;
+    }
+    list.innerHTML = `<div class="panel-card">${hits
+      .map(
+        (e) => `<div class="log-row cat-${escapeHtml(e.cat || "")}">
+          <span class="log-time">${fmtLogTime(e.ts)}</span>
+          <span class="log-body"><span class="log-titel">${escapeHtml(
+            e.titel || "",
+          )}</span> ${escapeHtml(e.text || "")}</span>
+        </div>`,
+      )
+      .join("")}</div>`;
+  }
+}
+
+// Log-Zeitstempel (Unix-Sekunden) als „Wochentag HH:MM" bzw. mit Datum, wenn
+// nicht von heute — kompakt genug für die Liste.
+function fmtLogTime(ts) {
+  const d = new Date(Number(ts) * 1000);
+  const today = new Date();
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  if (sameDay) return time;
+  const date = d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+  return `${date} ${time}`;
 }
 
 function entityOptions(hass, domains, deviceClass) {
@@ -631,8 +838,37 @@ const STYLE = `
     background: var(--card-background-color); color: var(--primary-text-color);
   }
   .field-input .unit { color: var(--secondary-text-color); font-size: 13px; }
+  .entity-slot { flex: 1; min-width: 0; }
+  .entity-slot ha-selector, .entity-slot ha-entity-picker { display: block; width: 100%; }
   .form-actions { display: flex; gap: 8px; margin-top: 8px; }
   .err { color: var(--error-color, #f44336); font-size: 13px; }
+  .logs-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .logs-filter, .logs-span {
+    padding: 8px 10px; border-radius: 8px; font-size: 14px;
+    border: 1px solid var(--divider-color);
+    background: var(--card-background-color); color: var(--primary-text-color);
+  }
+  .logs-filter { flex: 1; min-width: 160px; }
+  .logs-status { margin-top: 8px; }
+  .logs-list .panel-card { padding: 4px 20px; }
+  .log-row {
+    display: flex; gap: 12px; align-items: baseline;
+    padding: 8px 0; border-top: 1px solid var(--divider-color);
+    border-left: 3px solid var(--divider-color); padding-left: 10px;
+  }
+  .log-row:first-child { border-top: none; }
+  .log-time {
+    color: var(--secondary-text-color); font-size: 12px;
+    font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 84px;
+  }
+  .log-body { font-size: 14px; min-width: 0; }
+  .log-titel { font-weight: 600; }
+  .log-row.cat-modus { border-left-color: var(--primary-color); }
+  .log-row.cat-akku { border-left-color: #4caf50; }
+  .log-row.cat-ww { border-left-color: #26a69a; }
+  .log-row.cat-wp { border-left-color: #ef6c00; }
+  .log-row.cat-ev { border-left-color: #9c6ad6; }
+  .log-row.cat-ziel { border-left-color: #488fc2; }
 `;
 
 if (!window.customElements.get("hems-panel")) {

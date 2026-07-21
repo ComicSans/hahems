@@ -12,6 +12,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
+from .changelog import ChangeLog
 from .config_ws import async_register_ws
 from .const import DOMAIN
 from .coordinator import HemsCoordinator
@@ -52,7 +53,8 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     for card in ("hems-flow-card.js", "hems-plan-card.js"):
         add_extra_js_url(hass, f"{FRONTEND_URL}/{card}?v={integration.version}")
 
-    # Eigenes HEMS-Panel in der Seitenleiste (Übersicht + Steuerung + Diagnose).
+    # Eigenes HEMS-Panel in der Seitenleiste (Übersicht, Steuerung, Diagnose,
+    # Konfiguration, Logs).
     # Der Static-Handler liefert hems-panel.js aus derselben frontend/-Ablage.
     await panel_custom.async_register_panel(
         hass,
@@ -75,6 +77,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async_register_ws(hass)
 
     coordinator = HemsCoordinator(hass, entry)
+    # Persistenten Entscheidungs-Log laden und anhängen, bevor der erste
+    # Planlauf die Baseline setzt.
+    changelog = ChangeLog(hass)
+    await changelog.async_load()
+    coordinator.changelog = changelog
     await coordinator.async_config_entry_first_refresh()
     # Quellen sind nach einem Neustart evtl. noch nicht bereit: sofort neu
     # rechnen, sobald sie verfügbar werden, statt bis zum nächsten Poll zu warten.
@@ -93,5 +100,8 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        # Ausstehende Log-Einträge vor dem Reload/Entladen sichern.
+        if coordinator.changelog is not None:
+            await coordinator.changelog.async_flush()
     return unloaded

@@ -89,6 +89,8 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "pv_w": d.pv_power_now_w,
             "netz_w": d.saldo_w,  # positiv = Netzbezug
             "batterie_w": d.batterie_w,  # positiv = Entladen
+            # Pro-Speicher-Aufschlüsselung für die Karte (Name, SoC %, W)
+            "speicher": d.speicher_liste,
             "haus_w": d.haus_w,
             "wp_w": d.wp_w,
             "wallbox_w": d.wallbox_w,
