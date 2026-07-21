@@ -296,6 +296,11 @@ class HemsPanel extends HTMLElement {
     box.innerHTML =
       `<div class="cfg-head"><button class="btn ghost" data-act="reload">↻ Aktualisieren</button>
        <span class="hint">Änderungen laden die Integration neu.</span></div>` +
+      `<div class="panel-card">
+        <div class="role-head"><h2>Grundeinstellungen</h2>
+          <button class="btn small" data-act="edit-general">Bearbeiten</button></div>
+        <div class="hint">Zähler, Grundlasten, Wetter und Prioritätsmodus.</div>
+      </div>` +
       roles
         .map((r) => {
           const own = devices.filter((d) => d.role === r.role);
@@ -321,6 +326,12 @@ class HemsPanel extends HTMLElement {
       this._cfg = null;
       this._loadConfig();
     });
+    box
+      .querySelector('[data-act="edit-general"]')
+      .addEventListener("click", () => {
+        this._editing = { general: true };
+        this._renderEditForm();
+      });
     box.querySelectorAll("[data-add]").forEach((b) =>
       b.addEventListener("click", () => this._startEdit(b.dataset.add, null)),
     );
@@ -342,17 +353,26 @@ class HemsPanel extends HTMLElement {
 
   _renderEditForm() {
     const box = this._sections.config;
-    const { role, device } = this._editing;
-    const roleObj = this._cfg.roles.find((r) => r.role === role);
-    const label = (roleObj && roleObj.label) || role;
-    const fields = this._cfg.schema[role] || [];
-    const val = (f) =>
-      device && device[f.key] !== undefined ? device[f.key] : f.default;
+    let title;
+    let fields;
+    let val;
+    if (this._editing.general) {
+      title = "Grundeinstellungen bearbeiten";
+      fields = this._cfg.general.fields;
+      const values = this._cfg.general.values || {};
+      val = (f) => (values[f.key] !== undefined ? values[f.key] : f.default);
+    } else {
+      const { role, device } = this._editing;
+      const roleObj = this._cfg.roles.find((r) => r.role === role);
+      const label = (roleObj && roleObj.label) || role;
+      title = `${label} ${device ? "bearbeiten" : "hinzufügen"}`;
+      fields = this._cfg.schema[role] || [];
+      val = (f) =>
+        device && device[f.key] !== undefined ? device[f.key] : f.default;
+    }
     box.innerHTML = `
       <div class="panel-card">
-        <div class="role-head"><h2>${escapeHtml(label)} ${
-          device ? "bearbeiten" : "hinzufügen"
-        }</h2></div>
+        <div class="role-head"><h2>${escapeHtml(title)}</h2></div>
         <form class="cfg-form">
           ${fields.map((f) => this._fieldControl(f, val(f))).join("")}
           <div class="err" data-role="err" hidden></div>
@@ -368,7 +388,7 @@ class HemsPanel extends HTMLElement {
     });
     box
       .querySelector('[data-act="save"]')
-      .addEventListener("click", () => this._saveDevice());
+      .addEventListener("click", () => this._save());
   }
 
   _fieldControl(f, value) {
@@ -405,12 +425,13 @@ class HemsPanel extends HTMLElement {
       const v = value ? String(value).slice(0, 5) : "";
       input = `<input id="${id}" type="time" data-key="${f.key}" data-type="time" value="${v}">`;
     } else if (f.type === "select") {
+      const labels = f.option_labels || {};
       const opts = (f.options || [])
         .map(
           (o) =>
             `<option value="${escapeHtml(o)}" ${
               o === value ? "selected" : ""
-            }>${escapeHtml(o)}</option>`,
+            }>${escapeHtml(labels[o] || o)}</option>`,
         )
         .join("");
       input = `<select id="${id}" data-key="${f.key}" data-type="select">${opts}</select>`;
@@ -421,34 +442,39 @@ class HemsPanel extends HTMLElement {
     return `<div class="field">${lbl}<div class="field-input">${input}</div></div>`;
   }
 
-  _collectForm() {
+  _collectValues() {
     const box = this._sections.config;
-    const device = { role: this._editing.role };
-    if (this._editing.device) device.id = this._editing.device.id;
+    const values = {};
     box.querySelectorAll("[data-key]").forEach((el) => {
       const key = el.dataset.key;
       const type = el.dataset.type;
       if (type === "boolean") {
-        device[key] = el.checked;
+        values[key] = el.checked;
       } else if (type === "number") {
-        if (el.value !== "") device[key] = Number(el.value);
+        if (el.value !== "") values[key] = Number(el.value);
       } else if (type === "time") {
         if (el.value)
-          device[key] = el.value.length === 5 ? `${el.value}:00` : el.value;
+          values[key] = el.value.length === 5 ? `${el.value}:00` : el.value;
       } else {
         const v = el.value.trim();
-        if (v !== "") device[key] = v;
+        if (v !== "") values[key] = v;
       }
     });
-    return device;
+    return values;
   }
 
-  async _saveDevice() {
+  async _save() {
     const box = this._sections.config;
     const errBox = box.querySelector('[data-role="err"]');
-    const device = this._collectForm();
+    const values = this._collectValues();
     try {
-      await this._hass.callWS({ type: "hems/config/upsert", device });
+      if (this._editing.general) {
+        await this._hass.callWS({ type: "hems/config/set_general", values });
+      } else {
+        const device = { role: this._editing.role, ...values };
+        if (this._editing.device) device.id = this._editing.device.id;
+        await this._hass.callWS({ type: "hems/config/upsert", device });
+      }
     } catch (err) {
       errBox.hidden = false;
       errBox.textContent = `Fehler: ${err && err.message ? err.message : err}`;

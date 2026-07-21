@@ -19,7 +19,7 @@ from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 
-from .config_flow import ROLE_LABELS, ROLE_SCHEMAS
+from .config_flow import GENERAL_SCHEMA, ROLE_LABELS, ROLE_SCHEMAS
 from .const import CONF_DEVICES, DOMAIN
 
 _WS_REGISTERED = f"{DOMAIN}_ws_registered"
@@ -33,6 +33,7 @@ def async_register_ws(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get)
     websocket_api.async_register_command(hass, ws_upsert)
     websocket_api.async_register_command(hass, ws_remove)
+    websocket_api.async_register_command(hass, ws_set_general)
     hass.data[_WS_REGISTERED] = True
 
 
@@ -64,11 +65,15 @@ def _selector_descriptor(sel) -> dict:
     if name == "SelectSelector":
         opts = cfg.get("options") or []
         norm = [o if isinstance(o, str) else o.get("value") for o in opts]
-        return {"type": "select", "options": norm}
+        return {
+            "type": "select",
+            "options": norm,
+            "translation_key": cfg.get("translation_key"),
+        }
     return {"type": "text"}
 
 
-def _schema_to_fields(schema: vol.Schema, labels: dict) -> list[dict]:
+def _schema_to_fields(schema: vol.Schema, labels: dict, selectors: dict) -> list[dict]:
     fields = []
     for marker, sel in schema.schema.items():
         key = marker.schema
@@ -80,6 +85,13 @@ def _schema_to_fields(schema: vol.Schema, labels: dict) -> list[dict]:
             except Exception:  # noqa: BLE001
                 default = None
         desc = _selector_descriptor(sel)
+        # Klartext-Labels für Select-Optionen aus dem selector-Block der
+        # Übersetzung (z. B. Wochentag "0" → "Montag", priority_mode …).
+        tk = desc.get("translation_key")
+        if desc.get("type") == "select" and tk:
+            opt_labels = (selectors.get(tk, {}) or {}).get("options", {})
+            if opt_labels:
+                desc["option_labels"] = opt_labels
         desc.update(
             {
                 "key": key,
@@ -92,8 +104,9 @@ def _schema_to_fields(schema: vol.Schema, labels: dict) -> list[dict]:
     return fields
 
 
-def _read_labels(hass: HomeAssistant) -> dict:
-    """Feld-Labels je Rolle aus den Übersetzungsdateien (Sprache, dann en)."""
+def _read_translations(hass: HomeAssistant) -> dict:
+    """Übersetzungsdatei (Sprache, dann en) laden und cachen — liefert das
+    ganze Dict, aus dem Feld- und Select-Optionslabels abgeleitet werden."""
     cache = hass.data.setdefault(_LABELS_CACHE, {})
     lang = hass.config.language or "en"
     if lang in cache:
@@ -110,12 +123,12 @@ def _read_labels(hass: HomeAssistant) -> dict:
             return {}
 
     data = _load(lang) or _load("en")
-    steps = data.get("options", {}).get("step", {})
-    per_role = {
-        role: steps.get(f"add_{role}", {}).get("data", {}) for role in ROLE_SCHEMAS
-    }
-    cache[lang] = per_role
-    return per_role
+    cache[lang] = data
+    return data
+
+
+def _step_labels(tr: dict, top: str, step: str) -> dict:
+    return tr.get(top, {}).get("step", {}).get(step, {}).get("data", {}) or {}
 
 
 def _entry(hass: HomeAssistant, entry_id: str | None) -> ConfigEntry | None:
@@ -140,7 +153,16 @@ async def ws_get(hass, connection, msg):
     if entry is None:
         connection.send_error(msg["id"], "not_found", "Keine HEMS-Instanz gefunden")
         return
-    labels = await hass.async_add_executor_job(_read_labels, hass)
+    tr = await hass.async_add_executor_job(_read_translations, hass)
+    selectors = tr.get("selector", {})
+    general_labels = _step_labels(tr, "options", "general") or _step_labels(
+        tr, "config", "user"
+    )
+    general_fields = _schema_to_fields(GENERAL_SCHEMA, general_labels, selectors)
+    current = {**entry.data, **entry.options}
+    general_values = {
+        f["key"]: current.get(f["key"], f["default"]) for f in general_fields
+    }
     connection.send_result(
         msg["id"],
         {
@@ -149,10 +171,13 @@ async def ws_get(hass, connection, msg):
                 {"role": r, "label": ROLE_LABELS.get(r, r)} for r in ROLE_SCHEMAS
             ],
             "schema": {
-                r: _schema_to_fields(ROLE_SCHEMAS[r], labels.get(r, {}))
+                r: _schema_to_fields(
+                    ROLE_SCHEMAS[r], _step_labels(tr, "options", f"add_{r}"), selectors
+                )
                 for r in ROLE_SCHEMAS
             },
             "devices": list(entry.options.get(CONF_DEVICES, [])),
+            "general": {"fields": general_fields, "values": general_values},
         },
     )
 
@@ -218,3 +243,29 @@ async def ws_remove(hass, connection, msg):
     options[CONF_DEVICES] = devices
     hass.config_entries.async_update_entry(entry, options=options)
     connection.send_result(msg["id"], {"devices": devices})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "hems/config/set_general",
+        vol.Optional("entry_id"): str,
+        vol.Required("values"): dict,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_set_general(hass, connection, msg):
+    entry = _entry(hass, msg.get("entry_id"))
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Keine HEMS-Instanz gefunden")
+        return
+    try:
+        validated = GENERAL_SCHEMA(msg["values"])
+    except vol.Invalid as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    # Grundwerte liegen wie im Options-Flow in entry.options (überschreiben data).
+    options = dict(entry.options)
+    options.update(validated)
+    hass.config_entries.async_update_entry(entry, options=options)
+    connection.send_result(msg["id"], {"values": validated})

@@ -79,17 +79,18 @@ Backend-Zustand:
   E-Auto-Zwangsladung direkt schaltbar (`select`/`switch`).
 - **Diagnose** — der [Config-Sanity-Check](#config-sanity-check) mit Fehlern,
   Warnungen und Überlappungen auf einen Blick.
-- **Konfiguration** — Geräte-Editor direkt im Panel: Rollen mit ihren Geräten
-  auflisten, hinzufügen, bearbeiten, entfernen. Die Formularfelder werden aus
-  den **bestehenden** Config-Flow-Schemas abgeleitet (kein zweiter Feld-Katalog,
-  keine Drift), die Entitätsauswahl ist ein eigener Picker aus `hass.states`
+- **Konfiguration** — vollständiger Editor direkt im Panel: **Grundeinstellungen**
+  (Zähler, Grundlasten, Wetter, Prioritätsmodus) sowie Rollen mit ihren Geräten
+  auflisten, hinzufügen, bearbeiten, entfernen. Die Formularfelder und die
+  Klartext-Labels der Auswahllisten werden aus den **bestehenden**
+  Config-Flow-Schemas und Übersetzungen abgeleitet (kein zweiter Feld-Katalog,
+  keine Drift); die Entitätsauswahl ist ein eigener Picker aus `hass.states`
   (kein fragiles HA-internes Element). Gespeichert wird über WebSocket-Befehle
   (`hems/config/*`, Schreibzugriffe admin-pflichtig), die `entry.options`
   schreiben und die Integration neu laden.
 
 Der native Options-Flow (Einstellungen → Geräte & Dienste → HEMS →
-Konfigurieren) bleibt als gleichwertiger Weg erhalten; Grundwerte (Zähler,
-Grundlasten, Prioritätsmodus) laufen weiterhin dort.
+Konfigurieren) bleibt als gleichwertiger Weg erhalten.
 
 ## Lastfluss-Karte
 
