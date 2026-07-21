@@ -632,6 +632,14 @@
           "nulleinspeisung": "Nulleinspeisung",
           "vollladen": "Laden"
         }
+      },
+      "regel_aggressivitaet": {
+        "name": "Regel-Aggressivität",
+        "state": {
+          "min": "Sanft",
+          "normal": "Normal",
+          "max": "Aggressiv"
+        }
       }
     },
     "switch": {

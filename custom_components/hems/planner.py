@@ -13,6 +13,7 @@ from .const import (
     CONTROL_DEADBAND_W,
     CONTROL_GAIN_CHARGE,
     CONTROL_GAIN_DISCHARGE,
+    CONTROL_GAIN_FACTORS,
     CONTROL_MIN_SETPOINT_W,
     CONTROL_TARGET_OFFSET_W,
     CONTROL_ZERO_FEEDIN_OFFSET_W,
@@ -20,6 +21,7 @@ from .const import (
     DEFAULT_BOOST_SALDO_ON_W,
     DEFAULT_BOOST_SOC_OFF,
     DEFAULT_BOOST_SOC_ON,
+    DEFAULT_GAIN_LEVEL,
     DEFAULT_LEGIONELLA_TARGET,
     EV_DEMAND_FLOOR_W,
     EV_DEMAND_GRACE_S,
@@ -301,6 +303,10 @@ class PlanInput:
     priority_mode: str = PRIORITY_AUTO
     # Optimierungsziel (Laufzeit): steuert Ladeziel-SoC und Regler-Offset.
     goal: str = GOAL_SELF_CONSUMPTION
+    # Regel-Aggressivität (Laufzeit, min/normal/max): skaliert die Regler-Gains,
+    # damit Ladelücken schneller geschlossen werden. Beeinflusst nur die
+    # Schrittweite pro Zyklus, nicht die Umschaltrate (bleibt 1×/min).
+    gain_level: str = DEFAULT_GAIN_LEVEL
     # E-Auto-Zwangsladung: lädt unabhängig von Überschuss und Wallbox-
     # Mindestleistung. Die Wallbox-Last wird dann aus dem Saldo herausgerechnet,
     # den die Speicher-Regelung sieht, damit der Hausakku nicht still ins Auto
@@ -1218,7 +1224,14 @@ def _storage_control(
     # wirklich anders regelt: gegen Export laden, kleinen Restbezug tolerieren.
     offset = _ziel_offset(inp)
     fehler = saldo_w + offset
-    gain = CONTROL_GAIN_DISCHARGE if fehler > 0 else CONTROL_GAIN_CHARGE
+    # Basis-Gain (asymmetrisch: schnell gegen Bezug, gemächlich beim Laden),
+    # skaliert mit der Regel-Aggressivität. Auf 1.0 gedeckelt: ein Gain von 1
+    # korrigiert den Fehler bereits in einem Schritt vollständig; darüber würde
+    # der Proportionalregler überschwingen. Der 60-s-Takt bleibt unberührt —
+    # aggressiver heißt größerer Schritt, nicht häufigeres Umschalten.
+    basis_gain = CONTROL_GAIN_DISCHARGE if fehler > 0 else CONTROL_GAIN_CHARGE
+    faktor = CONTROL_GAIN_FACTORS.get(inp.gain_level, 1.0)
+    gain = min(1.0, basis_gain * faktor)
     max_ent = sum(s.max_discharge_w for s in known)
     max_lad = sum(s.max_charge_w for s in known)
     soll = max(-max_lad, min(bat_ist + fehler * gain, max_ent))

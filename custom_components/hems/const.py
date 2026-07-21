@@ -70,6 +70,19 @@ DEFAULT_BOOST_SALDO_OFF_W = 200  # ... und ab dem er wieder endet
 # korrigierend über die gemessene Speicherleistung.
 CONTROL_GAIN_DISCHARGE = 0.65
 CONTROL_GAIN_CHARGE = 0.5
+# Regel-Aggressivität (Laufzeit, per Select): skaliert beide Gains gemeinsam,
+# damit der Regler Ladelücken schneller schließt. Wirkt NUR auf die
+# Korrektur-Schrittweite pro Zyklus — der 60-s-Takt (und damit die maximale
+# Umschaltrate von 1×/min) bleibt unberührt. Ein größerer Faktor gleicht
+# schneller aus, erhöht aber die Oszillations-Amplitude; das 1.0-Cap in
+# _storage_control verhindert Overshoot über die volle Ein-Schritt-Korrektur
+# hinaus. „normal" = 1.0 = bisheriges Verhalten. Default „max" (aggressiv).
+GAIN_MIN = "min"
+GAIN_NORMAL = "normal"
+GAIN_MAX = "max"
+GAIN_LEVELS = (GAIN_MIN, GAIN_NORMAL, GAIN_MAX)
+CONTROL_GAIN_FACTORS = {GAIN_MIN: 0.6, GAIN_NORMAL: 1.0, GAIN_MAX: 1.5}
+DEFAULT_GAIN_LEVEL = GAIN_MAX
 CONTROL_TARGET_OFFSET_W = 25.0
 CONTROL_DEADBAND_W = 30.0
 CONTROL_MIN_SETPOINT_W = 60.0  # kleinere Sollwerte werden auf 0 gerundet

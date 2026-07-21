@@ -632,6 +632,14 @@
           "nulleinspeisung": "Zero feed-in",
           "vollladen": "Full charge"
         }
+      },
+      "regel_aggressivitaet": {
+        "name": "Control aggressiveness",
+        "state": {
+          "min": "Gentle",
+          "normal": "Normal",
+          "max": "Aggressive"
+        }
       }
     },
     "switch": {

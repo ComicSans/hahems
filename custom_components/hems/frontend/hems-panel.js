@@ -46,6 +46,11 @@ const SEG_LABELS = {
     nulleinspeisung: "Nulleinspeisung",
     vollladen: "Laden",
   },
+  gain: {
+    min: "Sanft",
+    normal: "Normal",
+    max: "Aggressiv",
+  },
 };
 
 // Zeitspannen-Optionen des Logs-Reiters (Stunden). Standard: „letzte Stunden".
@@ -191,6 +196,11 @@ class HemsPanel extends HTMLElement {
         <div class="segmented" data-role="goal"></div>
       </div>
       <div class="panel-card">
+        <h2>Regel-Aggressivität</h2>
+        <p class="hint">wie kräftig der Regler Ladelücken schließt · Umschalten bleibt 1×/min</p>
+        <div class="segmented" data-role="gain"></div>
+      </div>
+      <div class="panel-card">
         <h2>E-Auto Zwangsladung</h2>
         <div class="toggle-row"><button data-role="force" class="toggle"></button>
           <span class="hint" data-role="force-hint"></span></div>
@@ -198,11 +208,13 @@ class HemsPanel extends HTMLElement {
     this._ctrl = {
       mode: s.querySelector('[data-role="mode"]'),
       goal: s.querySelector('[data-role="goal"]'),
+      gain: s.querySelector('[data-role="gain"]'),
       force: s.querySelector('[data-role="force"]'),
       forceHint: s.querySelector('[data-role="force-hint"]'),
     };
     this._modeEntity = resolveEntity(this._hass, "select", "hems_modus", "modus");
     this._goalEntity = resolveEntity(this._hass, "select", "hems_optimierungsziel", "optimierungsziel");
+    this._gainEntity = resolveEntity(this._hass, "select", "hems_regel_aggressivitaet", "aggressiv");
     this._forceEntity = resolveEntity(this._hass, "switch", "hems_e_auto_zwangsladung", "zwangsladung");
     this._checkEntity = resolveEntity(this._hass, "binary_sensor", "hems_konfiguration", "konfiguration");
 
@@ -233,6 +245,7 @@ class HemsPanel extends HTMLElement {
     for (const c of this._cards) c.el.hass = this._hass;
     this._renderSegmented("mode", this._modeEntity, "select");
     this._renderSegmented("goal", this._goalEntity, "select");
+    this._renderSegmented("gain", this._gainEntity, "select");
     this._renderForce();
     this._renderDiagnostics();
   }
@@ -245,6 +258,7 @@ class HemsPanel extends HTMLElement {
   _ensureEntities() {
     this._modeEntity ||= resolveEntity(this._hass, "select", "hems_modus", "modus");
     this._goalEntity ||= resolveEntity(this._hass, "select", "hems_optimierungsziel", "optimierungsziel");
+    this._gainEntity ||= resolveEntity(this._hass, "select", "hems_regel_aggressivitaet", "aggressiv");
     this._forceEntity ||= resolveEntity(this._hass, "switch", "hems_e_auto_zwangsladung", "zwangsladung");
     this._checkEntity ||= resolveEntity(this._hass, "binary_sensor", "hems_konfiguration", "konfiguration");
     if (!this._overviewReady) this._buildOverview();

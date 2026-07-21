@@ -28,6 +28,7 @@ from .const import (
     DEFAULT_BASELINE_W,
     DEFAULT_FREE_H,
     DEFAULT_FREE_KWH,
+    DEFAULT_GAIN_LEVEL,
     DEFAULT_NIGHT_W,
     DEFAULT_WP_W_PER_K,
     DOMAIN,
@@ -159,6 +160,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # gesetzt, in RestoreEntity persistiert).
         self.goal: str = GOAL_SELF_CONSUMPTION
         self.ev_force: bool = False
+        # Regel-Aggressivität (min/normal/max), vom Select gesetzt und in
+        # RestoreEntity persistiert. Default aggressiv, damit Ladelücken zügig
+        # geschlossen werden.
+        self.gain_level: str = DEFAULT_GAIN_LEVEL
         # Änderungs-Log der Entscheidungen (vom Setup gesetzt) und die
         # Momentaufnahme des Vorlaufs, gegen die diffed wird.
         self.changelog: ChangeLog | None = None
@@ -934,6 +939,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 thermal_present=thermal is not None,
                 priority_mode=self._opt(CONF_PRIORITY_MODE, PRIORITY_AUTO),
                 goal=self.goal,
+                gain_level=self.gain_level,
                 ev_force=self.ev_force,
                 wallbox_w=data.wallbox_w,
                 weather_factor_tomorrow=data.wetter_faktor_morgen,

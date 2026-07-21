@@ -73,9 +73,12 @@ def decision_snapshot(mode: str, goal: str, ev_force: bool, plan: Any) -> dict:
 
     reg = getattr(plan, "regelung", None)
     if reg is not None:
+        # Nur der Modus (Laden/Entladen/Pausiert), bewusst ohne Watt-Wert: das
+        # Log führt die *Empfehlung*, deren Sollwert nicht mit der gemessenen
+        # batterie_w der Flow-Card übereinstimmt — eine konkrete Zahl wie
+        # „129 W" wirkte daneben wie ein Widerspruch. Kategorial bleibt das Log
+        # zudem flutfest (Watt-Drift innerhalb eines Modus löst keinen Eintrag).
         disp = _AKKU_LABEL.get(reg.modus, reg.modus)
-        if reg.modus != "pausiert":
-            disp = f"{disp} {round(abs(reg.soll_w))} W"
         snap["akku_modus"] = (reg.modus, disp)
         snap["akku_reserve"] = (
             bool(reg.reserve_aktiv),
