@@ -23,6 +23,7 @@ from .const import (
     CONF_METER,
     CONF_NIGHT_W,
     CONF_PRIORITY_MODE,
+    CONF_PV_MINUS_BATTERY,
     CONF_PV_POWER,
     CONF_WEATHER,
     DEFAULT_BASELINE_W,
@@ -789,6 +790,23 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Ist-Leistungen für den Lastfluss.
         # Batterie-Konvention: positiv = Entladen ins Haus, negativ = Laden.
         data.batterie_w = self._sum_power([s.power_entity for s in reg.storages])
+
+        # Hängen PV und Akku am selben Messpunkt (Hybrid-Wechselrichter), enthält
+        # die gemessene PV-Leistung die Akkuleistung: Entladen (batterie_w > 0)
+        # treibt sie hoch, Laden (< 0) senkt sie. Die Akkuleistung
+        # herausrechnen (pv - batterie_w) liefert die reine Erzeugung und behebt
+        # zugleich den Doppelzähler in haus_w unten (dort geht batterie_w bereits
+        # separat ein). Nur auf die gemessene PV anwenden — die Schätzung weiter
+        # unten ist prognosebasiert und akku-frei. Kein Herausrechnen ohne
+        # bekannte Akkuleistung. Untergrenze 0, da echte Erzeugung nie negativ.
+        if (
+            self._opt(CONF_PV_MINUS_BATTERY, False)
+            and data.pv_power_now_w is not None
+            and data.batterie_w is not None
+        ):
+            data.pv_power_now_w = round(
+                max(0.0, data.pv_power_now_w - data.batterie_w), 0
+            )
         data.wp_w = self._sum_power([s.power_entity for s in reg.switchables])
         data.wallbox_w = self._sum_power([m.power_entity for m in reg.modulateds])
 

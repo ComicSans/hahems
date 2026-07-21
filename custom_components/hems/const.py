@@ -5,6 +5,12 @@ DOMAIN = "hems"
 CONF_METER = "meter_entity"
 CONF_PV_POWER = "pv_power_entity"
 CONF_INVERT = "invert_meter"
+# Manche Anlagen messen PV und Akku am selben Punkt (Hybrid-Wechselrichter):
+# der PV-Sensor enthält dann die Akkuleistung — Entladen treibt den PV-Wert
+# hoch, Laden senkt ihn. Ist die Option aktiv, rechnet der Coordinator die
+# Akkuleistung aus der gemessenen PV heraus (pv - batterie_w), damit die
+# Anzeige die reine Erzeugung zeigt.
+CONF_PV_MINUS_BATTERY = "pv_minus_battery"
 CONF_BASELINE_W = "baseline_load_w"
 CONF_NIGHT_W = "night_load_w"
 CONF_DEVICES = "devices"

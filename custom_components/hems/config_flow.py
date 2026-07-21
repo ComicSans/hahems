@@ -17,6 +17,7 @@ from .const import (
     CONF_METER,
     CONF_NIGHT_W,
     CONF_PRIORITY_MODE,
+    CONF_PV_MINUS_BATTERY,
     CONF_PV_POWER,
     CONF_WEATHER,
     DEFAULT_BASE_TARGET,
@@ -286,6 +287,9 @@ GENERAL_SCHEMA = vol.Schema(
         vol.Required(CONF_METER): _entity(device_class="power"),
         vol.Required(CONF_INVERT, default=False): selector.BooleanSelector(),
         vol.Optional(CONF_PV_POWER): _entity(device_class="power"),
+        vol.Required(
+            CONF_PV_MINUS_BATTERY, default=False
+        ): selector.BooleanSelector(),
         vol.Optional(CONF_WEATHER): _entity("weather"),
         vol.Required(CONF_BASELINE_W, default=DEFAULT_BASELINE_W): _number(
             50, 5000, "W"
