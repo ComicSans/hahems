@@ -139,8 +139,20 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
     for m in reg.modulateds:
         ctx = f"E-Auto '{m.name}'"
         if m.current_entity:
-            _mark("E-Auto (Zwangsladung)")
+            _mark("E-Auto (Überschuss + Zwang)")
             _need(m.current_entity, ("number", "input_number"), ctx, "Strom-Entity")
+            if not m.power_entity:
+                c.warnings.append(
+                    f"{ctx}: keine Leistungsmessung (power_now) — die "
+                    f"Überschussregelung braucht die Ist-Ladeleistung, um sie aus "
+                    f"dem Saldo herauszurechnen; ohne sie regelt HEMS den Strom "
+                    f"nicht (die externe Ladeautomation bleibt zuständig)"
+                )
+            if not m.switch_entity:
+                c.info.append(
+                    f"{ctx}: kein Schalter — Wallbox kann bei zu wenig Überschuss "
+                    f"nur auf {m.min_a:.0f} A gedrosselt, nicht abgeschaltet werden"
+                )
         _need(m.switch_entity, ("switch", "input_boolean"), ctx, "Schalter")
 
     # --- Überlappung: aktive Automationen auf HEMS-Steuer-Entities ----------

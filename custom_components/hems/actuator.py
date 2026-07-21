@@ -43,21 +43,14 @@ class Actuator:
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
 
-    async def apply(
-        self,
-        reg: DeviceRegistry,
-        plan: PlanResult,
-        *,
-        force_charge: bool,
-    ) -> None:
-        """Reihenfolge WW → WP → Akku → E-Auto. Jedes Gerät gekapselt."""
+    async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
+        """Reihenfolge WW → WP → Akku → modulierbare Lasten. Jedes Gerät
+        gekapselt. Die Zwangsladung ist bereits in der Empfehlung kodiert
+        (plan.ev_regelung.zwang → volle Ampere je Last)."""
         await self._guard(self._apply_ww, reg, plan, name="Warmwasser")
         await self._guard(self._apply_wp, reg, plan, name="Wärmepumpe")
         await self._guard(self._apply_battery, reg, plan, name="Speicher")
-        try:
-            await self._apply_ev(reg, plan, force_charge=force_charge)
-        except Exception as err:  # noqa: BLE001 – ein Gerät darf nie die anderen reißen
-            _LOGGER.warning("HEMS-Actuator: E-Auto fehlgeschlagen: %s", err)
+        await self._guard(self._apply_modulated, reg, plan, name="Lasten")
 
     async def release_battery(self, reg: DeviceRegistry) -> None:
         """Akku-Setpoints einmalig auf 0/0 (passiv) setzen — beim Verlassen des
@@ -237,17 +230,42 @@ class Actuator:
 
     # --- E-Auto (nur Zwangsladung) -----------------------------------------
 
-    async def _apply_ev(
-        self, reg: DeviceRegistry, plan: PlanResult, *, force_charge: bool
-    ) -> None:
-        if not reg.modulateds:
+    async def _apply_modulated(self, reg: DeviceRegistry, plan: PlanResult) -> None:
+        """Alle modulierbaren Lasten (Wallboxen) auf ihren empfohlenen Sollstrom
+        stellen. Ohne Empfehlung (kein Saldo/keine Leistungsmessung) bleiben sie
+        unangetastet — die externe Automation bleibt dann zuständig."""
+        rec = plan.ev_regelung
+        if rec is None or not reg.modulateds:
             return
-        # HEMS modelliert (noch) keinen Überschuss-Ladestrom, daher wird im
-        # Auto-Modus nur die Zwangsladung aktuiert; das Überschussladen bleibt
-        # bei der bestehenden Automation.
-        if not force_charge:
+        by_id = {sp.id: sp for sp in rec.lasten}
+        for m in reg.modulateds:
+            sp = by_id.get(m.id)
+            if sp is None:
+                continue
+            try:
+                await self._apply_one_load(m, sp)
+            except Exception as err:  # noqa: BLE001 – eine Last reißt nie die andern
+                _LOGGER.warning(
+                    "HEMS-Actuator: Last %s fehlgeschlagen: %s", m.name, err
+                )
+
+    async def _apply_one_load(self, m, sp) -> None:
+        if sp.laden and sp.strom_a is not None:
+            # Laden: erst den Sollstrom stellen, dann freigeben.
+            await self._set_number(m.current_entity, sp.strom_a)
+            if m.switch_entity:
+                await self._turn(m.switch_entity, True)
             return
-        m = reg.modulateds[0]
-        await self._set_number(m.current_entity, m.max_a)
+        # Nicht laden: erst auf den Mindeststrom drosseln (senkt den Bezug
+        # sofort, auch während einer laufenden Mindestlaufzeit), dann abschalten,
+        # sobald Schalter und Mindestlaufzeit (gegen Schützflattern) es zulassen.
+        # Ohne Schalter bleibt es bei der Drosselung auf den Mindeststrom.
+        await self._set_number(m.current_entity, m.min_a)
         if m.switch_entity:
-            await self._turn(m.switch_entity, True)
+            s = self.hass.states.get(m.switch_entity)
+            if (
+                s is None
+                or s.state != "on"
+                or self._age(s) >= timedelta(minutes=m.min_on_min)
+            ):
+                await self._turn(m.switch_entity, False)

@@ -281,6 +281,24 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         attr_fn=lambda d: {
             "ziel": d.ziel,
             "ev_zwang": d.ev_zwang,
+            # Wallbox-/Lastregelung (HEMS stellt den Ladestrom selbst)
+            "wallbox_ueberschuss_w": d.plan.ev_regelung.ueberschuss_w
+            if d.plan.ev_regelung
+            else None,
+            "wallbox_soll_summe_w": d.plan.ev_regelung.soll_summe_w
+            if d.plan.ev_regelung
+            else None,
+            "lasten": [
+                {
+                    "name": sp.name,
+                    "laden": sp.laden,
+                    "strom_a": sp.strom_a,
+                    "grund": sp.grund,
+                }
+                for sp in d.plan.ev_regelung.lasten
+            ]
+            if d.plan.ev_regelung
+            else [],
             "prioritaeten": d.plan.prioritaeten,
             "speicher_bedarf_kwh": d.plan.speicher_bedarf_kwh,
             "speicher_kapazitaet_kwh": d.plan.speicher_kapazitaet_kwh,

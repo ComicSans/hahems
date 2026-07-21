@@ -21,6 +21,8 @@ from .const import (
     DEFAULT_BOOST_SOC_OFF,
     DEFAULT_BOOST_SOC_ON,
     DEFAULT_LEGIONELLA_TARGET,
+    EV_DEMAND_FLOOR_W,
+    EV_DEMAND_GRACE_S,
     EV_SURPLUS_MARGIN_W,
     EV_VOLTAGE_PER_PHASE_V,
     GOAL_FULL_CHARGE,
@@ -48,6 +50,11 @@ KNAPP_OFF = 1.7
 THERMAL_HYST_K = 2.0  # Totband unter dem WW-Sollwert, bevor Bedarf gemeldet wird
 WEATHER_ON = 0.30  # Wetterfaktor morgen, ab dem "morgen knapp" greift
 WEATHER_OFF = 0.40
+# Rotations-Malus (kWh) für eine beobachtet-leere Last: groß genug, um jede
+# realistische Tagesenergie zu überbieten, damit eine leere Last in der
+# Rangfolge stets hinter jede nicht-leere fällt — aber endlich, damit sie ohne
+# Konkurrenz (einzige Last, oder echte Restkapazität) weiterläuft.
+EV_LEER_PENALTY_KWH = 1_000_000.0
 PV_TOMORROW_ON = 1.0  # PV morgen / Nachtdefizit, ab dem "morgen knapp" greift
 PV_TOMORROW_OFF = 1.15
 
@@ -103,15 +110,48 @@ class WpModel:
 
 
 @dataclass
-class EvState:
-    """Mindestladeleistung der Wallbox für die 'E-Auto laden'-Empfehlung.
+class ModulatedState:
+    """Zustand einer modulierbaren Last (Wallbox …) für die Überschussregelung.
 
-    min_w = min_a × phases × EV_VOLTAGE_PER_PHASE_V; darunter kann die
-    Wallbox real gar nicht laden (Mindeststromstärke pro Ladepunkt).
+    min_w = min_a × phases × EV_VOLTAGE_PER_PHASE_V; darunter kann die Last real
+    gar nicht laufen. Der Regler verteilt den Überschuss über alle Lasten
+    innerhalb ihres Schwankungsbereichs [min, max] und regelt sie bei Defizit
+    vor dem Akku herunter.
+
+    Fairness/Rotation (Regime 2, wenn der Überschuss nicht für alle Minima
+    reicht): `energie_heute_kwh` ist der Fairness-Schlüssel (wer wenig geladen
+    hat, kommt zuerst); `ist_an`/`an_seit_s` liefern Ist-Schaltlage und
+    Mindestlaufzeit-Schutz; `nachfrage` (gemessene Leistung über Schwelle)
+    trennt „lädt gerade" von „an, aber kein Auto" — nur nachfragende Lasten
+    konkurrieren um knappe Kapazität. Alle Laufzeit-Felder füllt der
+    Coordinator; der Planner entscheidet daraus rein funktional.
     """
 
+    name: str
     min_a: float
     phases: int
+    id: str = ""  # eindeutiger Schlüssel (Join über alle Ebenen, nicht der Name)
+    max_a: float = 16.0
+    priority: int = 1
+    min_on_min: int = 10
+    hat_schalter: bool = True
+    power_w: float | None = None
+    energie_heute_kwh: float = 0.0
+    ist_an: bool = False
+    an_seit_s: float | None = None
+    nachfrage: bool = False
+    # Vom Coordinator gesetzt: an, aber nach der Anlaufzeit ohne nennenswerte
+    # Leistung (kein/volles Auto) — wird in der Rotationsrangfolge nach hinten
+    # gestellt (Cooldown), damit sie einer real ladenden Last weicht.
+    leer: bool = False
+
+    @property
+    def min_w(self) -> float:
+        return self.min_a * self.phases * EV_VOLTAGE_PER_PHASE_V
+
+    @property
+    def max_w(self) -> float:
+        return self.max_a * self.phases * EV_VOLTAGE_PER_PHASE_V
 
 
 @dataclass
@@ -138,6 +178,37 @@ class ControlResult:
     zuteilung: list[StorageSetpoint] = field(default_factory=list)
     reserve_aktiv: bool = False
     reserve_namen: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ModulatedSetpoint:
+    """Empfehlung für eine einzelne modulierbare Last."""
+
+    name: str
+    laden: bool
+    strom_a: float | None
+    id: str = ""  # eindeutiger Schlüssel (Join zum Gerät im Actuator)
+    soll_w: float = 0.0
+    grund: str = ""  # Kurzbegründung (Transparenz), z. B. "min_on gehalten"
+
+
+@dataclass
+class EvControlResult:
+    """Empfehlung der Wallbox-/Lastregelung — HEMS besitzt den Überschussstrom.
+
+    Der Überschuss VOR dem Akku (`ueberschuss_w`) wird über alle modulierbaren
+    Lasten innerhalb ihres Schwankungsbereichs verteilt; sinkt er ins Defizit,
+    werden sie heruntergeregelt, bevor der Akku entlädt. Reicht er nicht für
+    alle Minima, entscheidet Priorität (grob) und Energie-Fairness (Rotation
+    innerhalb gleichrangiger Lasten), welche laufen. `soll_summe_w` ist die
+    Summe der Sollleistung (Kopplung an den Speicher-Regler). `zwang` markiert
+    die Sofortladung (volle Ampere, unabhängig vom Überschuss).
+    """
+
+    lasten: list[ModulatedSetpoint]
+    ueberschuss_w: float
+    soll_summe_w: float = 0.0
+    zwang: bool = False
 
 
 @dataclass
@@ -276,9 +347,9 @@ class PlanInput:
     thermal_boost_saldo_off_w: float = DEFAULT_BOOST_SALDO_OFF_W
     # Witterungsgeführter Heizkreis (optional).
     heating: HeatingState | None = None
-    # Wallbox-Mindestladeleistung für die "E-Auto laden"-Empfehlung
-    # (optional; ohne Konfiguration gilt die alte, ungeprüfte Empfehlung).
-    ev: EvState | None = None
+    # Modulierbare Lasten (Wallboxen …) für die Überschussregelung. Leer =
+    # keine Wallbox konfiguriert; dann bleibt die alte, ungeprüfte Empfehlung.
+    modulateds: list[ModulatedState] = field(default_factory=list)
     # Wärmepumpen-Verbrauchsmodell. Ist es gesetzt, ist das Lastprofil
     # WP-bereinigt (der Coordinator zieht die WP-Statistik beim Lernen ab)
     # und die WP wird hier explizit temperaturabhängig aufgeschlagen —
@@ -353,6 +424,8 @@ class PlanResult:
     )
     # Empfehlung der Saldo-Regelung über alle Speicher (None ohne Daten).
     regelung: ControlResult | None = None
+    # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).
+    ev_regelung: EvControlResult | None = None
     # Heizkreis-Empfehlung (None, wenn kein Heizkreis konfiguriert ist).
     heizung: HeatingResult | None = None
     empfehlung: str = "keine Daten"
@@ -595,8 +668,28 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         off=inp.thermal_boost_saldo_off_w,
     )
 
+    # Modulierbare Lasten zuerst: Überschuss-Ladeströme bestimmen. Die
+    # Reihenfolge ist bewusst — der Speicher-Regler bekommt anschließend den um
+    # die neuen Last-Sollwerte bereinigten Saldo, damit die Lasten vor der
+    # Akku-Entladung heruntergeregelt werden.
+    result.ev_regelung = _modulated_control(inp, result)
+    # Für die Empfehlungs-Zeile: lädt mindestens eine Last?
+    result.flags.ev_bereit = bool(
+        result.ev_regelung
+        and any(sp.laden for sp in result.ev_regelung.lasten)
+    )
+    ev_target_w = None
+    if result.ev_regelung is not None and not result.ev_regelung.zwang:
+        # Summe der kommandierten Last-Sollleistung. Nicht laufende Lasten
+        # zählen 0, obwohl der Actuator sie ggf. noch auf den Mindeststrom hält
+        # (Mindestlaufzeit / kein Schalter). Die Differenz korrigiert der
+        # nächste Zyklus über die gemessene Last selbst; sie schlägt Richtung
+        # Netz aus, nicht in eine Akku-Überentladung — und skaliert mit der Zahl
+        # min_on-gehaltener Lasten.
+        ev_target_w = result.ev_regelung.soll_summe_w
+
     # Saldo-Regelung: Zuteilungsempfehlung über alle Speicher.
-    result.regelung = _storage_control(inp, result)
+    result.regelung = _storage_control(inp, result, ev_target_w=ev_target_w)
 
     # Heizkreis: Modus- und Vorlauf-Empfehlung.
     if inp.heating is not None:
@@ -888,7 +981,194 @@ def _day_curve(
     return [PvSlot(start=t, end=nxt, watt=round(s * scale)) for t, nxt, s in raw]
 
 
-def _storage_control(inp: PlanInput, res: PlanResult) -> ControlResult | None:
+def _ziel_offset(inp: PlanInput) -> float:
+    """Regel-Zieloffset: Eigenverbrauch/Vollladen lassen ein kleines
+    Einspeise-Residuum zu (+Offset), Nulleinspeisung hält einen kleinen Bezug
+    (−Offset). Gemeinsame Größe für Speicher- und Wallbox-Regelung, damit beide
+    denselben Netz-Sollpunkt anstreben."""
+    return (
+        -CONTROL_ZERO_FEEDIN_OFFSET_W
+        if inp.goal == GOAL_ZERO_FEEDIN
+        else CONTROL_TARGET_OFFSET_W
+    )
+
+
+def _ampere(watt: float, m: ModulatedState) -> float:
+    """Sollleistung → Ladestrom, konservativ abgerundet (nie mehr ziehen als
+    der Überschuss hergibt), geklemmt auf [min_a, max_a]."""
+    volt = m.phases * EV_VOLTAGE_PER_PHASE_V
+    return float(max(m.min_a, min(math.floor(watt / volt), m.max_a)))
+
+
+def _modulated_control(inp: PlanInput, res: PlanResult) -> EvControlResult | None:
+    """Modulierbare Lasten (Wallboxen) am Überschuss VOR dem Akku führen —
+    HEMS besitzt den Ladestrom.
+
+    Der Überschuss ergibt sich aus dem Saldo, aus dem die Ist-Last aller Lasten
+    und die Akkuleistung herausgerechnet werden. Er wird über alle Lasten
+    innerhalb ihres Schwankungsbereichs [min, max] verteilt; sinkt er ins
+    Defizit, werden sie heruntergeregelt, bevor der Akku entlädt (modulierbare
+    Lasten weichen vor dem Akku).
+
+    Zwei Regime:
+    - Überschuss ≥ Summe der Minima: alle laufen, der Rest wird proportional
+      zum Schwankungsbereich verteilt (alle anteilig gedrosselt statt eine ganz).
+    - Überschuss < Summe der Minima: nicht alle können über ihr Minimum. Dann
+      entscheidet Priorität (grob: höhere Priorität zuerst) und darunter
+      Energie-Fairness — die heute am wenigsten geladene Last kommt zuerst, mit
+      Rotations-Hysterese (eine laufende Last räumt ihren Platz erst, wenn eine
+      wartende um mehr als eine Mindestlaufzeit-Ladung zurückliegt) und
+      Mindestlaufzeit-Lock gegen Schützflattern.
+
+    Nachfrage-Trennung: Nur Lasten, die real Leistung ziehen (oder heute schon
+    geladen haben), konkurrieren um knappe Kapazität. Eine angeschaltete, aber
+    autolose Wallbox zieht ~0 und würde sonst als „am wenigsten geladen" jede
+    Rotation gewinnen und eine ladende verdrängen.
+
+    Zwangsladung: alle Lasten volle Ampere. Ohne Saldo/Leistungsmessung keine
+    Empfehlung (Fail-safe: Lasten unangetastet, externe Automation zuständig).
+    """
+    loads = inp.modulateds
+    if not loads:
+        return None
+
+    if inp.ev_force:
+        lasten = [
+            ModulatedSetpoint(
+                name=m.name, id=m.id, laden=True, strom_a=m.max_a,
+                soll_w=m.max_w, grund="Zwang",
+            )
+            for m in loads
+        ]
+        return EvControlResult(
+            lasten=lasten, ueberschuss_w=0.0,
+            soll_summe_w=sum(m.max_w for m in loads), zwang=True,
+        )
+
+    if inp.saldo_w is None or inp.wallbox_w is None:
+        return None
+
+    bat_ist = sum(s.power_w for s in inp.storages if s.power_w is not None)
+    mess_summe = sum(m.power_w or 0.0 for m in loads)
+    # Überschuss vor dem Akku: Ist-Last aller Wallboxen und Akkuleistung heraus-
+    # rechnen. Bewusst ohne Regel-Offset (der gilt nur der Akku-Ruhelage).
+    avail_w = -(inp.saldo_w - mess_summe + bat_ist)
+    margin = EV_SURPLUS_MARGIN_W
+
+    def _demanding(m: ModulatedState) -> bool:
+        """Zieht real Leistung — oder ist frisch an und noch im Anlauf."""
+        if m.nachfrage:
+            return True
+        return (
+            m.ist_an
+            and m.an_seit_s is not None
+            and m.an_seit_s < EV_DEMAND_GRACE_S
+        )
+
+    def _locked_on(m: ModulatedState) -> bool:
+        """Innerhalb der Mindestlaufzeit an (Taktschutz, darf nicht sofort aus)."""
+        return (
+            m.ist_an
+            and m.an_seit_s is not None
+            and m.an_seit_s < m.min_on_min * 60
+        )
+
+    def _rotation_credit(m: ModulatedState) -> float:
+        """Energie (kWh), die m in einer Mindestlaufzeit bei Mindestleistung
+        sammelt — Hysterese, damit eine laufende Last erst weicht, wenn eine
+        wartende um mehr als das zurückliegt (kein Ping-Pong bei Gleichstand)."""
+        return m.min_w * (m.min_on_min / 60.0) / 1000.0
+
+    # --- Auswahl: welche Lasten laufen (Minima reservieren) -----------------
+    # Rangfolge je Prioritätsstufe: wenig Energie zuerst (Fairness), laufende
+    # Lasten mit Rotations-Kredit bevorzugt (Hysterese gegen Ping-Pong),
+    # beobachtet-leere Lasten mit großem Malus nach hinten (sie weichen jeder
+    # real ladenden Last, laufen aber weiter, wenn keine Konkurrenz da ist).
+    def _rang(m: ModulatedState) -> float:
+        return (
+            m.energie_heute_kwh
+            - (_rotation_credit(m) if m.ist_an else 0.0)
+            + (EV_LEER_PENALTY_KWH if m.leer else 0.0)
+        )
+
+    run: list[ModulatedState] = []
+    remaining = avail_w
+    for prio in sorted({m.priority for m in loads}):
+        tier = sorted(
+            (m for m in loads if m.priority == prio), key=_rang
+        )
+        # Mindestlaufzeit-gesperrte Lasten zuerst: sie MÜSSEN laufen (Taktschutz),
+        # also reservieren sie ihre Kapazität vor den frei wählbaren. Sonst
+        # bekäme eine neu startende Last Kapazität, während die abtretende noch
+        # gesperrt-an ist — beide liefen kurz (Akku müsste die Überlappung
+        # decken). So wartet die Rotation, bis die alte Last abschaltbereit ist.
+        for m in sorted(tier, key=lambda m: (not _locked_on(m), _rang(m))):
+            # An, aber leer und Mindestlaufzeit vorbei → abschalten, Slot frei
+            # für eine nachfragende Last.
+            if m.ist_an and not _locked_on(m) and not _demanding(m):
+                continue
+            # Schmitt-Band: an-Last hält bis min_w−Marge, aus-Last startet erst
+            # ab min_w+Marge. Ein min_on-Lock zwingt ohnehin an (Taktschutz).
+            schwelle = m.min_w - margin if m.ist_an else m.min_w + margin
+            if _locked_on(m) or remaining >= schwelle:
+                run.append(m)
+                # Nur reservieren, was real gezogen wird: eine an-gesperrte Last
+                # ohne Auto belegt keine Kapazität.
+                if _demanding(m) or not m.ist_an:
+                    remaining -= m.min_w
+
+    # --- Headroom: Rest proportional zum Schwankungsbereich, Priorität zuerst.
+    # Nur nachfragende Lasten bekommen mehr als ihr Minimum; frisch angeschaltete
+    # laufen erst am Minimum, bis sie im Folgezyklus Nachfrage nachweisen.
+    soll: dict[str, float] = {m.id: m.min_w for m in run}
+    for prio in sorted({m.priority for m in run}):
+        tier_run = [m for m in run if m.priority == prio and _demanding(m)]
+        headroom = sum(m.max_w - m.min_w for m in tier_run)
+        if headroom <= 0 or remaining <= 0:
+            continue
+        geben = min(remaining, headroom)
+        for m in tier_run:
+            anteil = (m.max_w - m.min_w) / headroom
+            soll[m.id] = min(m.max_w, m.min_w + geben * anteil)
+        remaining -= geben
+
+    # --- Sollwerte je Last --------------------------------------------------
+    # soll_summe_w koppelt an den Speicher-Regler und darf NUR real gezogene
+    # Leistung enthalten: eine min_on-gehaltene Leerlast (an, kein Auto) zieht
+    # ~0 — würde sie mitgezählt, entlädt der Speicher-Regler den Akku für eine
+    # Phantomlast. Gezählt wird also nur, was zieht (oder gerade anläuft).
+    lasten = []
+    soll_summe = 0.0
+    for m in loads:
+        if m.id in soll:
+            strom_a = _ampere(soll[m.id], m)
+            watt = strom_a * m.phases * EV_VOLTAGE_PER_PHASE_V
+            zieht = _demanding(m) or not m.ist_an
+            lasten.append(
+                ModulatedSetpoint(
+                    name=m.name, id=m.id, laden=True, strom_a=strom_a,
+                    soll_w=watt, grund="läuft" if zieht else "an, kein Auto",
+                )
+            )
+            if zieht:
+                soll_summe += watt
+        else:
+            lasten.append(
+                ModulatedSetpoint(
+                    name=m.name, id=m.id, laden=False, strom_a=None, soll_w=0.0,
+                    grund="Überschuss zu klein",
+                )
+            )
+    return EvControlResult(
+        lasten=lasten,
+        ueberschuss_w=round(avail_w),
+        soll_summe_w=round(soll_summe),
+    )
+
+
+def _storage_control(
+    inp: PlanInput, res: PlanResult, ev_target_w: float | None = None
+) -> ControlResult | None:
     """Saldo-Regelung: empfohlene Sollwerte je Speicher berechnen.
 
     Priorität "Bezug minimieren": Der Regler zieht den Netzsaldo auf einen
@@ -925,15 +1205,18 @@ def _storage_control(inp: PlanInput, res: PlanResult) -> ControlResult | None:
     saldo_w = inp.saldo_w
     if inp.ev_force and inp.wallbox_w:
         saldo_w = inp.saldo_w - inp.wallbox_w
+    elif ev_target_w is not None and inp.wallbox_w is not None:
+        # Überschussregelung: HEMS stellt die Wallbox gleich auf ev_target_w.
+        # Der Regler soll den Saldo sehen, der sich mit diesem NEUEN Sollwert
+        # ergibt (Ist-Last + Delta), sonst hielte er die Akku-Entladung für die
+        # bereits gedrosselte Wallbox aufrecht. Am Nullpunkt (Wallbox schon auf
+        # Soll) verschwindet das Delta — der Regler sieht wieder den Rohsaldo.
+        saldo_w = inp.saldo_w + (ev_target_w - inp.wallbox_w)
     # Sollwert-Offset: Eigenverbrauch/Vollladen schieben das Regel-Residuum
     # leicht in die Einspeisung (+25 W). Echte Nulleinspeisung hält stattdessen
     # einen kleinen Bezug (−100 W) — deutlich über Totband, damit das Ziel
     # wirklich anders regelt: gegen Export laden, kleinen Restbezug tolerieren.
-    offset = (
-        -CONTROL_ZERO_FEEDIN_OFFSET_W
-        if inp.goal == GOAL_ZERO_FEEDIN
-        else CONTROL_TARGET_OFFSET_W
-    )
+    offset = _ziel_offset(inp)
     fehler = saldo_w + offset
     gain = CONTROL_GAIN_DISCHARGE if fehler > 0 else CONTROL_GAIN_CHARGE
     max_ent = sum(s.max_discharge_w for s in known)
@@ -1100,28 +1383,12 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     if ww_comfort_pending:
         prio.append(f"WW-Komfort ({inp.thermal_comfort:.0f} °C, PV-Boost)")
 
-    # E-Auto: Empfehlung nur, wenn der Momentanüberschuss die physikalische
-    # Mindestladeleistung der Wallbox erreicht (min_a × Phasen × Spannung) —
-    # darunter könnte die Wallbox den gemeldeten Überschuss real gar nicht
-    # abnehmen. Ein-Schwelle mit Sicherheitsmarge, Aus-Schwelle am nackten
-    # Minimum (Hysterese). Ohne konfigurierte Wallbox bleibt es beim alten,
-    # ungeprüften Verhalten (irgendein Überschuss genügt).
-    ev_min_w = (
-        inp.ev.min_a * inp.ev.phases * EV_VOLTAGE_PER_PHASE_V
-        if inp.ev is not None
-        else None
-    )
-    surplus_power_w = max(0.0, -(inp.saldo_w or 0.0))
-    res.flags.ev_bereit = (
-        _latch(
-            inp.flags.ev_bereit,
-            surplus_power_w,
-            on=ev_min_w + EV_SURPLUS_MARGIN_W,
-            off=ev_min_w,
-        )
-        if ev_min_w is not None
-        else True
-    )
+    # E-Auto-Bereitschaft: bereits von der Lastregelung (_modulated_control)
+    # bestimmt und in res.flags.ev_bereit hinterlegt (in compute_plan gesetzt).
+    # Ohne konfigurierte Wallbox gilt das alte Verhalten (irgendein Überschuss
+    # genügt).
+    if res.ev_regelung is None:
+        res.flags.ev_bereit = True
 
     grund = " – morgen wenig Ertrag" if res.morgen_knapp else ""
     akku = (
@@ -1135,11 +1402,19 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
         # Zwangsladung: unabhängig von Überschuss und Mindestleistung.
         auto = "E-Auto laden (Zwang, unabhängig vom Überschuss)"
     elif res.flags.ev_bereit:
-        auto = (
-            f"E-Auto mit Überschuss (≥ {ev_min_w / 1000:.1f} kW nötig)"
-            if ev_min_w is not None
-            else "E-Auto mit Überschuss"
+        # Aktive Lasten mit Sollstrom auflisten (eine oder mehrere).
+        aktiv = (
+            [sp for sp in res.ev_regelung.lasten if sp.laden]
+            if res.ev_regelung is not None
+            else []
         )
+        if len(aktiv) == 1:
+            auto = f"E-Auto {aktiv[0].strom_a:.0f} A mit Überschuss"
+        elif len(aktiv) > 1:
+            teile = ", ".join(f"{sp.name} {sp.strom_a:.0f} A" for sp in aktiv)
+            auto = f"Lasten mit Überschuss ({teile})"
+        else:
+            auto = "E-Auto mit Überschuss"
 
     if inp.ev_force and auto is not None:
         # Zwang hat Vorrang vor jeder Überschussverteilung.

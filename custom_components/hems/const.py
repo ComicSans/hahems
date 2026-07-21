@@ -120,6 +120,23 @@ SILENT_VLT_OFF_C = 37
 # schwankt; die Aus-Schwelle ist das nackte physikalische Minimum.
 EV_VOLTAGE_PER_PHASE_V = 230.0
 EV_SURPLUS_MARGIN_W = 200.0
+# Nachfrage-Erkennung für die Rotation mehrerer modulierbarer Lasten: Eine an-
+# geschaltete Last gilt als "lädt / fragt nach", sobald ihre gemessene Leistung
+# über EV_DEMAND_FLOOR_W liegt. Frisch eingeschaltete Lasten zählen für die
+# Anlaufzeit EV_DEMAND_GRACE_S auch bei geringer Leistung noch als nachfragend
+# (das Auto handelt den Ladestrom erst aus). Nur nachfragende Lasten (oder
+# solche, die heute schon geladen haben) konkurrieren um knappe Kapazität; eine
+# angesteckt-lose Wallbox verdrängt so keine ladende — sie bekäme sonst als
+# "am wenigsten geladen" dauernd den Vorzug.
+EV_DEMAND_FLOOR_W = 500.0
+EV_DEMAND_GRACE_S = 180.0
+# Eine angeschaltete Last, die nach der Anlaufzeit weiter unter EV_DEMAND_FLOOR_W
+# bleibt, gilt als „leer" (kein/volles Auto) und wird für EV_EMPTY_COOLDOWN_S in
+# der Rotationsrangfolge nach hinten gestellt — sie weicht damit einer real
+# ladenden Last, wird aber nach Ablauf erneut kurz geprüft (der einzige Weg,
+# ein zwischenzeitlich angestecktes Auto zu entdecken). Zieht sie wieder
+# Leistung, entfällt der Cooldown sofort.
+EV_EMPTY_COOLDOWN_S = 1800.0
 
 # Wärmepumpen-Verbrauchsmodell für die Bedarfsprognose (Tag und Nacht):
 # P(Stunde) = Basis + k × max(0, Heizgrenze − Außentemperatur). Basis ist die

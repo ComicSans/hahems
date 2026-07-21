@@ -31,6 +31,9 @@ from .const import (
     DEFAULT_NIGHT_W,
     DEFAULT_WP_W_PER_K,
     DOMAIN,
+    EV_DEMAND_FLOOR_W,
+    EV_DEMAND_GRACE_S,
+    EV_EMPTY_COOLDOWN_S,
     GOAL_SELF_CONSUMPTION,
     MODE_AUTO,
     MODE_OBSERVE,
@@ -43,8 +46,8 @@ from .actuator import Actuator
 from .config_check import ConfigCheck, check_config
 from .models import DeviceRegistry, parse_devices
 from .planner import (
-    EvState,
     HeatingState,
+    ModulatedState,
     PlanFlags,
     PlanInput,
     PlanResult,
@@ -170,6 +173,16 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._unit_warned: set[str] = set()
         # Hysterese-Zustand des Planners, über die Update-Zyklen fortgeschrieben.
         self._plan_flags = PlanFlags()
+        # Fairness-Akkumulator für die Lastrotation: geladene Energie je Last
+        # (kWh) am laufenden lokalen Kalendertag, aus der gemessenen Leistung
+        # integriert. Reset um Mitternacht. Bewusst „dumm" — jede Entscheidung
+        # trifft der reine Planner, hier wird nur gemessen und gezählt.
+        self._mod_energy_kwh: dict[str, float] = {}
+        self._mod_energy_day = None  # date, an dem der Akkumulator gilt
+        self._mod_energy_ts: datetime | None = None  # letzter Integrationszeit
+        # Rotations-Cooldown je Last: Zeitpunkt, bis zu dem eine beobachtet-leere
+        # Last in der Rangfolge hinten steht (Name → Ablauf-UTC).
+        self._mod_leer_bis: dict[str, datetime] = {}
 
     # -- Konfiguration -----------------------------------------------------
 
@@ -306,6 +319,91 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         """Summe in W; None statt 0, wenn kein einziger Wert verfügbar ist."""
         vals = [v for e in entity_ids if e and (v := self._power_w(e)) is not None]
         return round(sum(vals), 0) if vals else None
+
+    def _modulated_states(self, reg: DeviceRegistry, now: datetime) -> list:
+        """Laufzeit-Zustand aller modulierbaren Lasten für die Überschuss-
+        regelung. Bewusst „dumm": misst Ist-Leistung, integriert die geladene
+        Tagesenergie (Fairness-Schlüssel, Reset lokal um Mitternacht) und leitet
+        Schaltlage/Anlaufzeit/Nachfrage ab — jede Entscheidung trifft der reine
+        Planner aus diesen Werten."""
+        today = dt_util.now().date()
+        if self._mod_energy_day != today:
+            self._mod_energy_day = today
+            self._mod_energy_kwh = {}
+            self._mod_energy_ts = None
+        dt_h = 0.0
+        if self._mod_energy_ts is not None:
+            dt_h = max(0.0, (now - self._mod_energy_ts).total_seconds() / 3600.0)
+        self._mod_energy_ts = now
+
+        states = []
+        for m in reg.modulateds:
+            key = m.id  # eindeutiger Join-Schlüssel (nicht der editierbare Name)
+            power = self._power_w(m.power_entity)
+            # Nur echten Bezug (positiv) integrieren; ein Vorzeichen-Ausreißer
+            # oder fehlender Wert lässt den Zähler stehen.
+            if power is not None and power > 0 and dt_h > 0:
+                self._mod_energy_kwh[key] = (
+                    self._mod_energy_kwh.get(key, 0.0) + power * dt_h / 1000.0
+                )
+            if m.switch_entity:
+                s = self.hass.states.get(m.switch_entity)
+                ist_an = bool(s and s.state == "on")
+                an_seit_s = (
+                    (now - s.last_changed).total_seconds()
+                    if s is not None and ist_an
+                    else None
+                )
+            else:
+                # Ohne Schalter gibt es keinen von HEMS geschützten Schütz; die
+                # Last gilt als an, sobald sie Leistung zieht (keine min_on-Sperre).
+                ist_an = bool(power and power > 0)
+                an_seit_s = None
+            nachfrage = bool(power is not None and power > EV_DEMAND_FLOOR_W)
+
+            # Leer-Cooldown: an und nach der Anlaufzeit ohne nennenswerte
+            # Leistung → als leer merken (nach hinten in der Rotation). Zieht die
+            # Last wieder, entfällt der Cooldown sofort. Neu bewaffnet wird erst
+            # nach Ablauf, damit eine leere Last nur einmal pro Cooldown kurz
+            # geprüft wird.
+            observed_empty = (
+                ist_an
+                and an_seit_s is not None
+                and an_seit_s > EV_DEMAND_GRACE_S
+                and (power or 0.0) < EV_DEMAND_FLOOR_W
+            )
+            end = self._mod_leer_bis.get(key)
+            cooling = end is not None and now < end
+            if nachfrage:
+                self._mod_leer_bis.pop(key, None)
+                leer = False
+            elif observed_empty and not cooling:
+                self._mod_leer_bis[key] = now + timedelta(
+                    seconds=EV_EMPTY_COOLDOWN_S
+                )
+                leer = True
+            else:
+                leer = cooling
+
+            states.append(
+                ModulatedState(
+                    name=m.name,
+                    id=m.id,
+                    min_a=m.min_a,
+                    phases=m.phases,
+                    max_a=m.max_a,
+                    priority=m.priority,
+                    min_on_min=m.min_on_min,
+                    hat_schalter=bool(m.switch_entity),
+                    power_w=power,
+                    energie_heute_kwh=round(self._mod_energy_kwh.get(key, 0.0), 3),
+                    ist_an=ist_an,
+                    an_seit_s=an_seit_s,
+                    nachfrage=nachfrage,
+                    leer=leer,
+                )
+            )
+        return states
 
     def _own_entity_id(self, key: str) -> str | None:
         """Entity-ID einer eigenen Entität über die Registry auflösen.
@@ -733,7 +831,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         ]
         thermal = reg.thermals[0] if reg.thermals else None
         heating_cfg = reg.heatings[0] if reg.heatings else None
-        modulated_cfg = reg.modulateds[0] if reg.modulateds else None
 
         # Darstellungshorizont der Plankarte: der ganze heutige und der ganze
         # morgige Kalendertag (lokal), plus die Sonnenzeiten beider Tage für
@@ -783,11 +880,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 cool_vlt_c=heating_cfg.cool_vlt_c,
             )
 
-        ev = (
-            EvState(min_a=modulated_cfg.min_a, phases=modulated_cfg.phases)
-            if modulated_cfg is not None
-            else None
-        )
+        modulateds = self._modulated_states(reg, now)
 
         # Lastmodell zuerst: der Aufruf lernt auch das WP-Modell, das unten
         # in den PlanInput einfließt.
@@ -854,7 +947,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 if thermal
                 else 200,
                 heating=heating,
-                ev=ev,
+                modulateds=modulateds,
                 wp_model=self._wp_model,
                 temp_forecast_c=temp_forecast or None,
                 flags=self._plan_flags,
@@ -884,7 +977,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
 
         if self.mode == MODE_AUTO:
             _LOGGER.info("HEMS-Auto: %s", data.plan.empfehlung)
-            await self._actuator.apply(reg, data.plan, force_charge=self.ev_force)
+            await self._actuator.apply(reg, data.plan)
         else:
             if self.mode == MODE_OBSERVE:
                 _LOGGER.info("HEMS-Empfehlung: %s", data.plan.empfehlung)

@@ -74,11 +74,30 @@ Parameter des einzelnen Geräts. Ein vierter Akku = neue Storage-Instanz, fertig
   nennenswerte PV in Sicht (konfigurierbar, standardmäßig konservativ niedrig)
 
 ### Wallbox
-- Modus **PV-Überschuss** (Standard): Ampere folgen dem Überschuss. Freigabe erst
-  ab stabil ~4,3 kW Überschuss (3-phasig, 6 A Minimum), Hysterese + Mindestlaufzeit
-  gegen Schützflattern. Auto = "Senke mit unbekanntem Bedarf" (kein SoC-Zugriff)
-- Modus **Sofortladen** (Notfall-Override): volle Ampere, Netz egal.
+- Modus **PV-Überschuss** (Standard): HEMS besitzt den Ladestrom selbst. Der
+  Sollstrom folgt dem Überschuss **vor dem Akku** (aus dem Saldo werden aktuelle
+  Wallbox-Last und Akkuleistung herausgerechnet). Dadurch weicht die Wallbox als
+  modulierbare Last **vor** der Akku-Entladung: lässt der Ertrag nach, wird zuerst
+  der Ladestrom bis zum Minimum heruntergeregelt, erst danach hilft der Akku;
+  reicht es nicht mehr für die Mindestleistung, schaltet die Wallbox ab. Freigabe
+  erst ab stabil ~4,3 kW Überschuss (3-phasig, 6 A Minimum), symmetrisches
+  Hysterese-Band + Mindestlaufzeit gegen Schützflattern
+- Modus **Sofortladen** (Notfall-Override): volle Ampere, Netz egal. Die
+  Wallbox-Last wird dabei aus dem Speicher-Saldo herausgerechnet (Akku schonen).
   Setzt sich nach Ladeende selbst auf Standard zurück
+- **Mehrere modulierbare Lasten:** Der Überschuss wird über alle Lasten verteilt.
+  Reicht er für alle Minima, laufen alle und der Rest wird proportional zum
+  Schwankungsbereich aufgeteilt (alle anteilig gedrosselt statt eine ganz).
+  Reicht er nicht, entscheidet Priorität grob (höhere zuerst) und darunter
+  Energie-Fairness: die heute am wenigsten geladene Last kommt zuerst, mit
+  Rotation im Takt der Mindestlaufzeit. Eine angesteckt-lose Wallbox (an, zieht
+  ~0) wird erkannt und tritt zurück, damit sie keine ladende verdrängt; sie wird
+  nur einmal je Cooldown (`EV_EMPTY_COOLDOWN_S`, Standard 30 min) kurz geprüft,
+  um ein zwischenzeitlich angestecktes Auto zu entdecken. Wer eine dauerhaft
+  leere Zweitbox hat, gibt dem Auto besser eine höhere Priorität (dann keine
+  Prüf-Pausen)
+- **Wichtig:** Die bisherige externe Überschuss-Ladeautomation muss deaktiviert
+  werden — sonst regeln beide gegeneinander (HEMS drosselt, Automation rampt hoch)
 
 ### Wärmepumpe (Winterlogik)
 - Pausenfenster um den PV-Peak nur an ertragsschwachen Tagen, wenn der Überschuss
