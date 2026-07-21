@@ -211,8 +211,18 @@ class Actuator:
                 charge_w, discharge_w = 0.0, watt
             else:  # "pausiert"
                 charge_w = discharge_w = 0.0
-            # Richtungs-Select (optional, z. B. Zendure ac_mode).
-            if s.mode_entity and s.mode_charge_option and s.mode_discharge_option:
+            # Richtungs-Select (optional, z. B. Zendure ac_mode) nur beim
+            # tatsächlichen Laden/Entladen stellen — in der Pause den zuletzt
+            # gesetzten Modus stehen lassen. Sonst flippt der Select bei jedem
+            # Deadband-Durchgang (laden ⇄ pausiert) zwischen den Optionen und
+            # lässt das Gerät takten. Die 0/0-Setpoints halten den Speicher in
+            # der Pause ohnehin passiv, egal in welcher Richtung der Select steht.
+            if (
+                s.mode_entity
+                and s.mode_charge_option
+                and s.mode_discharge_option
+                and ctrl.modus in ("laden", "entladen")
+            ):
                 want = (
                     s.mode_charge_option
                     if ctrl.modus == "laden"
