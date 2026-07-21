@@ -601,5 +601,22 @@
         "6": "Sunday"
       }
     }
+  },
+  "entity": {
+    "select": {
+      "optimierungsziel": {
+        "name": "Optimization goal",
+        "state": {
+          "eigenverbrauch": "Self-consumption",
+          "nulleinspeisung": "Zero feed-in",
+          "vollladen": "Full charge"
+        }
+      }
+    },
+    "switch": {
+      "ev_force": {
+        "name": "Force EV charging"
+      }
+    }
   }
 }

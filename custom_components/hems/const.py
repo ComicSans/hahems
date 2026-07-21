@@ -17,6 +17,20 @@ PRIORITY_AUTO = "auto"
 PRIORITY_BATTERY_FIRST = "battery_first"
 PRIORITY_EV_FIRST = "ev_first"
 
+# Optimierungsziel der Speicher-/Saldo-Regelung (Laufzeit-Select, orthogonal
+# zum priority_mode, der nur die Überschussreihenfolge bestimmt).
+#   eigenverbrauch  – bisheriges Verhalten: Bezug minimieren, Einspeisung
+#                     ausdrücklich erlaubt (Regel-Residuum leicht in den Export),
+#                     Ladeziel nur bis Nachtdeckung.
+#   nulleinspeisung – echter Zero-Export: Regel-Residuum in den (minimalen)
+#                     Bezug geschoben und Akku voll geladen, damit möglichst
+#                     nichts ins Netz zurückfließt.
+#   vollladen       – Ladeziel dauerhaft auf 100 %, sonst wie eigenverbrauch.
+GOAL_SELF_CONSUMPTION = "eigenverbrauch"
+GOAL_ZERO_FEEDIN = "nulleinspeisung"
+GOAL_FULL_CHARGE = "vollladen"
+GOALS = (GOAL_SELF_CONSUMPTION, GOAL_ZERO_FEEDIN, GOAL_FULL_CHARGE)
+
 ROLE_FORECAST = "forecast"
 ROLE_STORAGE = "storage"
 ROLE_THERMAL = "thermal"
@@ -58,6 +72,14 @@ CONTROL_GAIN_CHARGE = 0.5
 CONTROL_TARGET_OFFSET_W = 25.0
 CONTROL_DEADBAND_W = 30.0
 CONTROL_MIN_SETPOINT_W = 60.0  # kleinere Sollwerte werden auf 0 gerundet
+# Ziel "Nulleinspeisung": der Regler hält das Netz auf einem kleinen Bezug
+# statt auf leichter Einspeisung. Der Betrag liegt bewusst deutlich über
+# Totband und Min-Sollwert (30/60 W) — sonst wäre das Ziel vom Eigenverbrauch
+# (Offset 25 W) nicht unterscheidbar, weil die 50-W-Differenz weggerundet würde.
+# Wirkung: gegen realen Export wird geladen, kleiner Restbezug (bis ~Offset)
+# wird toleriert statt in die Einspeisung ausgeregelt; am Nullpunkt bleibt der
+# Regler stehen (kein Zwangsbezug zum Laden).
+CONTROL_ZERO_FEEDIN_OFFSET_W = 100.0
 
 # Kaltreserve: als Reserve markierte Speicher nehmen am Entladen erst teil,
 # wenn der mittlere SoC der übrigen unter ON fällt, und scheiden erst

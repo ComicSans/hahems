@@ -601,5 +601,22 @@
         "6": "Sonntag"
       }
     }
+  },
+  "entity": {
+    "select": {
+      "optimierungsziel": {
+        "name": "Optimierungsziel",
+        "state": {
+          "eigenverbrauch": "Eigenverbrauch",
+          "nulleinspeisung": "Nulleinspeisung",
+          "vollladen": "Vollladen"
+        }
+      }
+    },
+    "switch": {
+      "ev_force": {
+        "name": "E-Auto Zwangsladung"
+      }
+    }
   }
 }

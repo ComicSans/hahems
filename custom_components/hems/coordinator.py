@@ -31,6 +31,7 @@ from .const import (
     DEFAULT_NIGHT_W,
     DEFAULT_WP_W_PER_K,
     DOMAIN,
+    GOAL_SELF_CONSUMPTION,
     MODE_OBSERVE,
     PRIORITY_AUTO,
     WEATHER_CONDITION_FACTORS,
@@ -122,6 +123,9 @@ class HemsData:
         # des laufenden Tages nachlädt (Slugs sind instanzabhängig).
         self.verlauf_pv_entity: str | None = None
         self.verlauf_soc_entity: str | None = None
+        # Laufzeit-Steuerung (aus Select/Switch), fürs Dashboard mitgeführt.
+        self.ziel: str = GOAL_SELF_CONSUMPTION
+        self.ev_zwang: bool = False
         self.plan: PlanResult = PlanResult()
 
 
@@ -135,6 +139,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         )
         self.entry = entry
         self.mode: str = MODE_OBSERVE
+        # Optimierungsziel und E-Auto-Zwangsladung (von Select bzw. Switch
+        # gesetzt, in RestoreEntity persistiert).
+        self.goal: str = GOAL_SELF_CONSUMPTION
+        self.ev_force: bool = False
         self._night_load_w: float | None = None
         self._night_load_fetched: datetime | None = None
         # (Tagtyp, UTC-Stunde) → mittlere Last in W; Tagtyp 0 = Werktag, 1 = Wochenende
@@ -803,6 +811,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 thermal_comfort=thermal.comfort_target if thermal else 60,
                 thermal_present=thermal is not None,
                 priority_mode=self._opt(CONF_PRIORITY_MODE, PRIORITY_AUTO),
+                goal=self.goal,
+                ev_force=self.ev_force,
+                wallbox_w=data.wallbox_w,
                 weather_factor_tomorrow=data.wetter_faktor_morgen,
                 free_kwh=float(self._opt(CONF_FREE_KWH, DEFAULT_FREE_KWH)),
                 free_h=float(self._opt(CONF_FREE_H, DEFAULT_FREE_H)),
@@ -840,6 +851,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         )
         self._plan_flags = data.plan.flags
 
+        data.ziel = self.goal
+        data.ev_zwang = self.ev_force
         data.lastprofil_quelle = self._profile_source
         data.lastprofil = _profile_rows(self._load_profile, now)
         data.verlauf_pv_entity = self._own_entity_id("pv_leistung_jetzt")

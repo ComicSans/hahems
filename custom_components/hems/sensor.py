@@ -279,6 +279,8 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         name="Empfehlung",
         value_fn=lambda d: d.plan.empfehlung[:255],
         attr_fn=lambda d: {
+            "ziel": d.ziel,
+            "ev_zwang": d.ev_zwang,
             "prioritaeten": d.plan.prioritaeten,
             "speicher_bedarf_kwh": d.plan.speicher_bedarf_kwh,
             "speicher_kapazitaet_kwh": d.plan.speicher_kapazitaet_kwh,

@@ -14,7 +14,12 @@ from homeassistant.loader import async_get_integration
 from .const import DOMAIN
 from .coordinator import HemsCoordinator
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.SELECT]
+PLATFORMS = [
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+    Platform.SELECT,
+    Platform.SWITCH,
+]
 
 FRONTEND_URL = "/hems-frontend"
 FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"

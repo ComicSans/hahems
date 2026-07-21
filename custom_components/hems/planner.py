@@ -15,6 +15,7 @@ from .const import (
     CONTROL_GAIN_DISCHARGE,
     CONTROL_MIN_SETPOINT_W,
     CONTROL_TARGET_OFFSET_W,
+    CONTROL_ZERO_FEEDIN_OFFSET_W,
     DEFAULT_BOOST_SALDO_OFF_W,
     DEFAULT_BOOST_SALDO_ON_W,
     DEFAULT_BOOST_SOC_OFF,
@@ -22,6 +23,9 @@ from .const import (
     DEFAULT_LEGIONELLA_TARGET,
     EV_SURPLUS_MARGIN_W,
     EV_VOLTAGE_PER_PHASE_V,
+    GOAL_FULL_CHARGE,
+    GOAL_SELF_CONSUMPTION,
+    GOAL_ZERO_FEEDIN,
     HEATING_COLD_THRESHOLD_C,
     HEATING_DEMAND_SHIFT_K,
     PRIORITY_AUTO,
@@ -224,6 +228,16 @@ class PlanInput:
     # ww_soll_c/ww_status leer, statt den Default-Sollwert zu melden.
     thermal_present: bool = True
     priority_mode: str = PRIORITY_AUTO
+    # Optimierungsziel (Laufzeit): steuert Ladeziel-SoC und Regler-Offset.
+    goal: str = GOAL_SELF_CONSUMPTION
+    # E-Auto-Zwangsladung: lädt unabhängig von Überschuss und Wallbox-
+    # Mindestleistung. Die Wallbox-Last wird dann aus dem Saldo herausgerechnet,
+    # den die Speicher-Regelung sieht, damit der Hausakku nicht still ins Auto
+    # leerläuft ("Akku schonen"); das Zwangs-Delta kommt aus dem Netz.
+    ev_force: bool = False
+    # Aktuelle Wallbox-Leistung (W, Bezug), nur für die Saldo-Bereinigung bei
+    # Zwangsladung; sonst ungenutzt.
+    wallbox_w: float | None = None
     weather_factor_tomorrow: float | None = None  # 0 = trüb, 1 = klar
     free_kwh: float = 0.0  # Energiebedarf für "Kapazität frei"
     free_h: float = 1.0  # Dauer, über die der Bedarf gedeckt sein soll
@@ -492,8 +506,15 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         reserve = sum(s.reserve_soc / 100 * s.capacity_kwh for s in inp.storages)
         result.speicher_verfuegbar_kwh = round(available, 2)
         result.speicher_soc = round(available / cap * 100, 1)
+        # Voll laden, wenn morgen wenig kommt ODER das Ziel es verlangt:
+        # Nulleinspeisung braucht maximale Aufnahmekapazität gegen Export,
+        # Vollladen hält das Ziel ohnehin dauerhaft auf 100 %.
+        ziel_voll = result.morgen_knapp or inp.goal in (
+            GOAL_ZERO_FEEDIN,
+            GOAL_FULL_CHARGE,
+        )
         ziel_kwh = (
-            cap if result.morgen_knapp else min(cap, result.nachtdefizit_kwh + reserve)
+            cap if ziel_voll else min(cap, result.nachtdefizit_kwh + reserve)
         )
         result.speicher_ziel_soc = round(ziel_kwh / cap * 100, 1)
         result.speicher_bedarf_kwh = round(max(0.0, ziel_kwh - available), 2)
@@ -897,7 +918,23 @@ def _storage_control(inp: PlanInput, res: PlanResult) -> ControlResult | None:
     reserve_aktiv = res.flags.kaltreserve
 
     bat_ist = sum(s.power_w for s in inp.storages if s.power_w is not None)
-    fehler = inp.saldo_w + CONTROL_TARGET_OFFSET_W
+    # E-Auto-Zwangsladung: die Wallbox-Last nicht ausregeln, sonst entlädt der
+    # Regler den Hausakku, um den Netzbezug der Wallbox zu decken. Der
+    # herausgerechnete Saldo lässt den Akku seinen SoC halten; das Zwangs-Delta
+    # bleibt beim Netz.
+    saldo_w = inp.saldo_w
+    if inp.ev_force and inp.wallbox_w:
+        saldo_w = inp.saldo_w - inp.wallbox_w
+    # Sollwert-Offset: Eigenverbrauch/Vollladen schieben das Regel-Residuum
+    # leicht in die Einspeisung (+25 W). Echte Nulleinspeisung hält stattdessen
+    # einen kleinen Bezug (−100 W) — deutlich über Totband, damit das Ziel
+    # wirklich anders regelt: gegen Export laden, kleinen Restbezug tolerieren.
+    offset = (
+        -CONTROL_ZERO_FEEDIN_OFFSET_W
+        if inp.goal == GOAL_ZERO_FEEDIN
+        else CONTROL_TARGET_OFFSET_W
+    )
+    fehler = saldo_w + offset
     gain = CONTROL_GAIN_DISCHARGE if fehler > 0 else CONTROL_GAIN_CHARGE
     max_ent = sum(s.max_discharge_w for s in known)
     max_lad = sum(s.max_charge_w for s in known)
@@ -1041,7 +1078,9 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
         inp.flags.surplus, inp.saldo_w, on=SURPLUS_ON_W, off=SURPLUS_OFF_W
     )
     surplus_now = res.flags.surplus
-    if not surplus_now and res.ueberschuss_rest_kwh <= 0:
+    # Bei Zwangsladung nicht früh aussteigen: die "E-Auto laden (Zwang)"-
+    # Empfehlung soll auch ohne jeden Überschuss erscheinen.
+    if not inp.ev_force and not surplus_now and res.ueberschuss_rest_kwh <= 0:
         if res.speicher_bedarf_kwh > 0:
             prio.append(
                 f"kein Überschuss; Akku fehlt {res.speicher_bedarf_kwh} kWh bis Ziel-SoC"
@@ -1092,14 +1131,22 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
         else None
     )
     auto = None
-    if res.flags.ev_bereit:
+    if inp.ev_force:
+        # Zwangsladung: unabhängig von Überschuss und Mindestleistung.
+        auto = "E-Auto laden (Zwang, unabhängig vom Überschuss)"
+    elif res.flags.ev_bereit:
         auto = (
             f"E-Auto mit Überschuss (≥ {ev_min_w / 1000:.1f} kW nötig)"
             if ev_min_w is not None
             else "E-Auto mit Überschuss"
         )
 
-    if akku is not None and auto is not None:
+    if inp.ev_force and auto is not None:
+        # Zwang hat Vorrang vor jeder Überschussverteilung.
+        prio.append(auto)
+        if akku is not None:
+            prio.append(akku)
+    elif akku is not None and auto is not None:
         if inp.priority_mode == PRIORITY_BATTERY_FIRST:
             prio.extend([akku, auto])
         elif inp.priority_mode == PRIORITY_EV_FIRST:
@@ -1123,5 +1170,8 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     elif auto is not None:
         prio.append(auto)
 
-    prio.append("Einspeisen")
+    # "Einspeisen" als Rest-Label nur, wenn tatsächlich Überschuss vorliegt;
+    # bei reiner Zwangsladung aus dem Netz wäre es irreführend.
+    if surplus_now or res.ueberschuss_rest_kwh > 0:
+        prio.append("Einspeisen")
     return prio

@@ -56,6 +56,10 @@ Variante manuell: den Ordner `custom_components/hems/` in das
 - `sensor.hems_heizkreis` (Modus-Empfehlung heizen/kuehlen/aus;
   Vorlauf-Soll, Außentemperatur und Flüster-Empfehlung als Attribute)
 - `select.hems_modus` (beobachten / aus)
+- `select.hems_optimierungsziel` (eigenverbrauch / nulleinspeisung / vollladen —
+  siehe [Optimierungsziel](#optimierungsziel))
+- `switch.hems_e_auto_zwangsladung` (erzwingt die E-Auto-Ladeempfehlung, siehe
+  [E-Auto: Zwangsladung](#e-auto-zwangsladung-force-loading))
 
 ## Lastfluss-Karte
 
@@ -184,6 +188,29 @@ mittlere SoC der übrigen unter 40 % fällt, und scheidet oberhalb von 45 %
 wieder aus (Hysterese); geladen wird er immer mit. In Phase 1 wird die
 Empfehlung nur angezeigt, nicht ausgeführt.
 
+## Optimierungsziel
+
+`select.hems_optimierungsziel` steuert zur Laufzeit, worauf die Speicher-
+Regelung optimiert. Das Ziel ist unabhängig vom Prioritätsmodus (`priority_mode`
+aus der Einrichtung), der nur die Reihenfolge der Überschussverteilung bestimmt.
+Es wird als Attribut `ziel` an `sensor.hems_empfehlung` gespiegelt.
+
+- **eigenverbrauch** (Standard): bisheriges Verhalten. Bezug minimieren, der
+  Regel-Rest wird bewusst leicht in die Einspeisung geschoben; der Akku wird nur
+  bis zur Nachtdeckung geladen (voll nur, wenn morgen wenig Ertrag erwartet
+  wird).
+- **nulleinspeisung**: echter Zero-Export. Der Regler hält das Netz auf einem
+  kleinen Bezug (~100 W) statt auf leichter Einspeisung: gegen realen Export
+  wird der Akku geladen, ein kleiner Restbezug wird toleriert statt in die
+  Einspeisung ausgeregelt, am Nullpunkt bleibt er stehen (kein Zwangsbezug).
+  Zusätzlich wird der Akku voll geladen, um PV-Überschuss aufzunehmen.
+  Physikalische Grenze: ist der Akku voll und die PV liefert weiter mehr als das
+  Haus braucht, lässt sich Einspeisung ohne PV-Abregelung (die diese
+  Integration in Phase 1 nicht stellt) nicht vermeiden.
+- **vollladen**: hält das Ladeziel dauerhaft auf 100 %, sonst wie
+  eigenverbrauch. Das ist die manuelle Variante der automatischen
+  Schlechtwetter-Vollladung (`morgen_knapp`).
+
 ## Heizkreis (Wärmepumpe)
 
 Die Rolle "Heizkreis" liefert eine Modus-Empfehlung aus der Außentemperatur
@@ -230,3 +257,16 @@ gemeldeten Überschuss real gar nicht abnehmen. Die Ein-Schwelle liegt mit
 Minimum (Hysterese), damit die Empfehlung nicht bei jedem Wolkenschatten
 kippt. Ist keine modulierbare Last konfiguriert, gilt weiterhin das alte
 Verhalten: jeder Überschuss über 200 W genügt für die Empfehlung.
+
+## E-Auto: Zwangsladung (Force Loading)
+
+`switch.hems_e_auto_zwangsladung` erzwingt die Ladeempfehlung "E-Auto laden
+(Zwang)" — unabhängig von Überschuss und Wallbox-Mindestleistung. Der Zustand
+wird als Attribut `ev_zwang` an `sensor.hems_empfehlung` gespiegelt.
+
+Damit der Hausakku dabei nicht still ins Auto leerläuft, rechnet die Saldo-
+Regelung die aktuelle Wallbox-Leistung (`wallbox_w`) aus dem Saldo heraus, den
+sie ausregelt: Der Akku hält seinen SoC, das Zwangs-Delta kommt aus dem Netz
+("Akku schonen"). Liefert die PV gerade Überschuss, lädt der Akku daraus wie
+gewohnt weiter — er wird nur nicht zusätzlich für die Wallbox entladen. Wie
+alle Empfehlungen wird auch diese in Phase 1 nur angezeigt, nicht ausgeführt.
