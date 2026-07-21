@@ -1234,15 +1234,29 @@ def _storage_control(
     def _verteile(
         anteile: list[tuple[StorageState, float]], gesamt: float, laden: bool
     ) -> list[StorageSetpoint]:
-        summe = sum(a for _s, a in anteile)
-        setpoints = []
-        for s, anteil in anteile:
+        """Gesamtleistung greedy zuteilen: die Einheit mit der meisten freien
+        Kapazität (Laden) bzw. verfügbaren Energie (Entladen) zuerst füllen, dann
+        die nächste. Bewusst NICHT proportional zerstäuben — bei N Einheiten läge
+        sonst jeder Anteil unter dem Mindest-Setpoint und würde auf 0 gerundet
+        (Totzone ~N×min, die in Nulleinspeisung Klein­überschüsse trotz freiem
+        Akku ins Netz laufen ließe). Das Bündeln gleicht zugleich die SoCs an
+        (leerste/vollste Einheit zuerst). Ein Rest unter dem Mindest-Setpoint
+        bleibt ungestellt — konservativ: nie mehr kommandieren als der bereits
+        gain-/offset-gedämpfte Zielwert hergibt, damit kein Netzbezug entsteht."""
+        rest = gesamt
+        watts: dict[str, float] = {}
+        for s, anteil in sorted(anteile, key=lambda p: p[1], reverse=True):
             grenze = s.max_charge_w if laden else s.max_discharge_w
-            watt = min(gesamt * anteil / summe, grenze) if summe > 0 else 0.0
-            if watt < CONTROL_MIN_SETPOINT_W:
-                watt = 0.0
-            setpoints.append(StorageSetpoint(name=s.name, watt=round(watt)))
-        return setpoints
+            watt = min(rest, grenze)
+            if anteil <= 0 or watt < CONTROL_MIN_SETPOINT_W:
+                watts[s.name] = 0.0
+                continue
+            watts[s.name] = watt
+            rest -= watt
+        return [
+            StorageSetpoint(name=s.name, watt=round(watts[s.name]))
+            for s, _a in anteile
+        ]
 
     if soll > CONTROL_DEADBAND_W:
         ctrl.modus = "entladen"
