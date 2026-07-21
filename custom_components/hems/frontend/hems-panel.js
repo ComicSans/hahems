@@ -255,7 +255,9 @@ class HemsPanel extends HTMLElement {
     box.innerHTML = "";
     for (const opt of options) {
       const b = document.createElement("button");
-      b.textContent = opt;
+      // Roh-Slugs (z. B. „eigenverbrauch") lesbar anzeigen; der Service-Call
+      // unten nutzt weiter den unveränderten Optionswert.
+      b.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
       b.className = opt === current ? "seg active" : "seg";
       b.addEventListener("click", () =>
         this._hass.callService(domain, "select_option", {
@@ -757,6 +759,9 @@ function escapeHtml(s) {
 
 const STYLE = `
   :host { display: block; background: var(--primary-background-color); min-height: 100vh; }
+  /* [hidden] muss auch explizite display-Regeln (z. B. .grid) schlagen, sonst
+     bliebe die Übersicht in jedem Tab sichtbar. */
+  [hidden] { display: none !important; }
   .wrap { color: var(--primary-text-color); }
   header {
     display: flex; align-items: center; gap: 12px;
