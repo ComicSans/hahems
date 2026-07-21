@@ -4,6 +4,7 @@ from __future__ import annotations
 import mimetypes
 from pathlib import Path
 
+from homeassistant.components import panel_custom
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
@@ -11,6 +12,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
+from .config_ws import async_register_ws
 from .const import DOMAIN
 from .coordinator import HemsCoordinator
 
@@ -50,6 +52,19 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     for card in ("hems-flow-card.js", "hems-plan-card.js"):
         add_extra_js_url(hass, f"{FRONTEND_URL}/{card}?v={integration.version}")
 
+    # Eigenes HEMS-Panel in der Seitenleiste (Übersicht + Steuerung + Diagnose).
+    # Der Static-Handler liefert hems-panel.js aus derselben frontend/-Ablage.
+    await panel_custom.async_register_panel(
+        hass,
+        frontend_url_path="hems",
+        webcomponent_name="hems-panel",
+        module_url=f"{FRONTEND_URL}/hems-panel.js?v={integration.version}",
+        sidebar_title="HEMS",
+        sidebar_icon="mdi:home-lightning-bolt",
+        require_admin=False,
+        embed_iframe=False,
+    )
+
     # Erst nach erfolgreicher Registrierung markieren, damit ein Fehler oben
     # beim nächsten Setup-Versuch erneut registriert (statt still zu blockieren).
     hass.data[FRONTEND_REGISTERED] = True
@@ -57,6 +72,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_register_frontend(hass)
+    async_register_ws(hass)
 
     coordinator = HemsCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()

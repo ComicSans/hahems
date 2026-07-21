@@ -3,7 +3,7 @@
   "name": "HEMS",
   "codeowners": [],
   "config_flow": true,
-  "dependencies": ["sun", "http", "frontend"],
+  "dependencies": ["sun", "http", "frontend", "panel_custom", "websocket_api"],
   "after_dependencies": ["recorder"],
   "documentation": "https://github.com/ComicSans/hahems",
   "integration_type": "hub",

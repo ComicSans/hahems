@@ -66,6 +66,31 @@ Variante manuell: den Ordner `custom_components/hems/` in das
 - `binary_sensor.hems_konfiguration` (Config-Sanity-Check für den Auto-Modus;
   siehe [Config-Sanity-Check](#config-sanity-check))
 
+## HEMS-Panel (Seitenleiste)
+
+Die Integration registriert einen eigenen Eintrag **HEMS** in der HA-
+Seitenleiste (`panel_custom`, dependency-freies Web-Component `hems-panel.js`).
+Phase 1 ist reines Frontend auf den vorhandenen Entitäten — kein zusätzlicher
+Backend-Zustand:
+
+- **Übersicht** — bettet die Lastfluss- und Entladeplan-Karte ein (zusätzlich
+  zu ihrer Nutzung in Dashboards).
+- **Steuerung** — Betriebsmodus (beobachten/auto/aus), Optimierungsziel und
+  E-Auto-Zwangsladung direkt schaltbar (`select`/`switch`).
+- **Diagnose** — der [Config-Sanity-Check](#config-sanity-check) mit Fehlern,
+  Warnungen und Überlappungen auf einen Blick.
+- **Konfiguration** — Geräte-Editor direkt im Panel: Rollen mit ihren Geräten
+  auflisten, hinzufügen, bearbeiten, entfernen. Die Formularfelder werden aus
+  den **bestehenden** Config-Flow-Schemas abgeleitet (kein zweiter Feld-Katalog,
+  keine Drift), die Entitätsauswahl ist ein eigener Picker aus `hass.states`
+  (kein fragiles HA-internes Element). Gespeichert wird über WebSocket-Befehle
+  (`hems/config/*`, Schreibzugriffe admin-pflichtig), die `entry.options`
+  schreiben und die Integration neu laden.
+
+Der native Options-Flow (Einstellungen → Geräte & Dienste → HEMS →
+Konfigurieren) bleibt als gleichwertiger Weg erhalten; Grundwerte (Zähler,
+Grundlasten, Prioritätsmodus) laufen weiterhin dort.
+
 ## Lastfluss-Karte
 
 Die Integration liefert eine eigene Lovelace-Karte mit und registriert sie
