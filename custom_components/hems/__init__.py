@@ -1,6 +1,7 @@
 """HEMS - Home Energy Management System."""
 from __future__ import annotations
 
+import hashlib
 import mimetypes
 from pathlib import Path
 
@@ -10,7 +11,6 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.loader import async_get_integration
 
 from .changelog import ChangeLog
 from .config_ws import async_register_ws
@@ -27,6 +27,25 @@ PLATFORMS = [
 FRONTEND_URL = "/hems-frontend"
 FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"
 
+# Alle vom Panel/den Karten geladenen JS-Assets. Der Cache-Buster (?v=…) wird
+# aus dem Datei-Inhalt abgeleitet, NICHT aus der manifest-Version: sonst
+# serviert der Browser (Cache-Control: max-age=31d) nach jeder JS-Änderung, die
+# die manifest-Version nicht anfasst, weiter die alte Datei — das Panel bleibt
+# dann mit veraltetem/inkonsistentem JS leer, bis manuell hart neugeladen wird.
+_FRONTEND_ASSETS = ("hems-panel.js", "hems-flow-card.js", "hems-plan-card.js")
+
+
+def _asset_versions(frontend_dir: Path) -> dict[str, str]:
+    """Content-Hash je Asset (blocking IO, im Executor aufrufen)."""
+    versions: dict[str, str] = {}
+    for name in _FRONTEND_ASSETS:
+        try:
+            data = (frontend_dir / name).read_bytes()
+            versions[name] = hashlib.sha1(data).hexdigest()[:12]
+        except OSError:
+            versions[name] = "0"
+    return versions
+
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
     """Die HEMS-Karten als Lovelace-Ressourcen ausliefern (einmalig)."""
@@ -40,18 +59,21 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     # und die Karten als "Custom element doesn't exist" scheitern.
     mimetypes.add_type("text/javascript", ".js")
 
+    frontend_dir = Path(__file__).parent / "frontend"
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(
                 FRONTEND_URL,
-                str(Path(__file__).parent / "frontend"),
+                str(frontend_dir),
                 cache_headers=True,
             )
         ]
     )
-    integration = await async_get_integration(hass, DOMAIN)
+    # Cache-Buster aus dem Datei-Inhalt (nicht der manifest-Version) ableiten,
+    # damit jede JS-Änderung die URL ändert und der Browser sie neu holt.
+    versions = await hass.async_add_executor_job(_asset_versions, frontend_dir)
     for card in ("hems-flow-card.js", "hems-plan-card.js"):
-        add_extra_js_url(hass, f"{FRONTEND_URL}/{card}?v={integration.version}")
+        add_extra_js_url(hass, f"{FRONTEND_URL}/{card}?v={versions[card]}")
 
     # Eigenes HEMS-Panel in der Seitenleiste (Übersicht, Steuerung, Diagnose,
     # Konfiguration, Logs).
@@ -60,7 +82,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         hass,
         frontend_url_path="hems",
         webcomponent_name="hems-panel",
-        module_url=f"{FRONTEND_URL}/hems-panel.js?v={integration.version}",
+        module_url=f"{FRONTEND_URL}/hems-panel.js?v={versions['hems-panel.js']}",
         sidebar_title="HEMS",
         sidebar_icon="mdi:home-lightning-bolt",
         require_admin=False,
