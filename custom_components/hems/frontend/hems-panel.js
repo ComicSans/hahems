@@ -42,6 +42,7 @@ class HemsPanel extends HTMLElement {
     this._tab = "overview";
     this._built = false;
     this._cards = [];
+    this._overviewReady = false;
   }
 
   set hass(hass) {
@@ -115,10 +116,22 @@ class HemsPanel extends HTMLElement {
   _buildOverview() {
     const flowEntity = resolveEntity(this._hass, "sensor", "hems_lastfluss", "lastfluss");
     const planEntity = resolveEntity(this._hass, "sensor", "hems_entladeplan", "entladeplan");
+    // Nach einem HA-Neustart sind die hems_*-Entities beim ersten hass-Tick
+    // oft noch nicht registriert. Dann NICHT mit null-Entitäten fest verdrahten
+    // (das bliebe bis zum manuellen Reload als "nicht gefunden" stehen), sondern
+    // einen Platzhalter zeigen und in _ensureEntities erneut versuchen.
+    if (!flowEntity || !planEntity) {
+      this._sections.overview.innerHTML =
+        `<div class="panel-card"><span class="missing">HEMS-Entitäten werden geladen…</span></div>`;
+      return;
+    }
+    this._sections.overview.innerHTML = "";
+    this._cards = [];
     this._sections.overview.append(
       this._makeCard("hems-flow-card", { entity: flowEntity }, "Lastfluss"),
       this._makeCard("hems-plan-card", { entity: planEntity }, "Entlade- & PV-Plan"),
     );
+    this._overviewReady = true;
   }
 
   // Karte in einen ha-card-losen Rahmen setzen; die Karten bringen ihre
@@ -192,11 +205,25 @@ class HemsPanel extends HTMLElement {
 
   _update() {
     if (!this._built) return;
+    this._ensureEntities();
     for (const c of this._cards) c.el.hass = this._hass;
     this._renderSegmented("mode", this._modeEntity, "select");
     this._renderSegmented("goal", this._goalEntity, "select");
     this._renderForce();
     this._renderDiagnostics();
+  }
+
+  // Entitäts-IDs (instanzabhängige Slugs) lazy auflösen und nur nachziehen,
+  // solange sie fehlen — nach einem HA-Neustart tauchen die hems_*-Entities
+  // erst ein paar Ticks nach dem ersten Aufbau in hass.states auf. Ohne dieses
+  // Nachziehen blieben die einmal als null gecachten IDs dauerhaft "nicht
+  // gefunden", bis der Nutzer die Seite manuell neu lädt (kein JS-Fehler).
+  _ensureEntities() {
+    this._modeEntity ||= resolveEntity(this._hass, "select", "hems_modus", "modus");
+    this._goalEntity ||= resolveEntity(this._hass, "select", "hems_optimierungsziel", "optimierungsziel");
+    this._forceEntity ||= resolveEntity(this._hass, "switch", "hems_e_auto_zwangsladung", "zwangsladung");
+    this._checkEntity ||= resolveEntity(this._hass, "binary_sensor", "hems_konfiguration", "konfiguration");
+    if (!this._overviewReady) this._buildOverview();
   }
 
   _renderSegmented(role, entity, domain) {
