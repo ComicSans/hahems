@@ -33,7 +33,7 @@ _MODE_LABEL = {"beobachten": "beobachten", "auto": "auto", "aus": "aus"}
 _GOAL_LABEL = {
     "eigenverbrauch": "Eigenverbrauch",
     "nulleinspeisung": "Nulleinspeisung",
-    "vollladen": "Vollladen",
+    "vollladen": "Laden",
 }
 _AKKU_LABEL = {"laden": "Laden", "entladen": "Entladen", "pausiert": "Pausiert"}
 _WW_LABEL = {

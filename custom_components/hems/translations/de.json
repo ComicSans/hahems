@@ -630,7 +630,7 @@
         "state": {
           "eigenverbrauch": "Eigenverbrauch",
           "nulleinspeisung": "Nulleinspeisung",
-          "vollladen": "Vollladen"
+          "vollladen": "Laden"
         }
       }
     },

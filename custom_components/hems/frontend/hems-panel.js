@@ -37,6 +37,17 @@ const TABS = [
   { id: "logs", label: "Logs" },
 ];
 
+// Anzeige-Labels je Segment-Rolle. Die Optionswerte (Slugs) bleiben unberührt;
+// nur die Beschriftung weicht ab, wo die reine Erst-Buchstaben-Großschreibung
+// nicht passt (z. B. „vollladen" → „Laden").
+const SEG_LABELS = {
+  goal: {
+    eigenverbrauch: "Eigenverbrauch",
+    nulleinspeisung: "Nulleinspeisung",
+    vollladen: "Laden",
+  },
+};
+
 // Zeitspannen-Optionen des Logs-Reiters (Stunden). Standard: „letzte Stunden".
 const LOG_SPANS = [
   { h: 1, label: "letzte Stunde" },
@@ -253,11 +264,13 @@ class HemsPanel extends HTMLElement {
     if (box.dataset.sig === sig) return;
     box.dataset.sig = sig;
     box.innerHTML = "";
+    const labels = SEG_LABELS[role] || {};
     for (const opt of options) {
       const b = document.createElement("button");
-      // Roh-Slugs (z. B. „eigenverbrauch") lesbar anzeigen; der Service-Call
-      // unten nutzt weiter den unveränderten Optionswert.
-      b.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
+      // Roh-Slugs (z. B. „eigenverbrauch") lesbar anzeigen; ein Override je
+      // Rolle sticht, sonst genügt Erst-Buchstaben-Großschreibung. Der
+      // Service-Call unten nutzt weiter den unveränderten Optionswert.
+      b.textContent = labels[opt] || opt.charAt(0).toUpperCase() + opt.slice(1);
       b.className = opt === current ? "seg active" : "seg";
       b.addEventListener("click", () =>
         this._hass.callService(domain, "select_option", {
