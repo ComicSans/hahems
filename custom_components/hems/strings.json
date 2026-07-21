@@ -50,7 +50,10 @@
           "reserve_soc": "Reserve SoC (%)",
           "max_charge_w": "Max. charging power (W)",
           "max_discharge_w": "Max. discharge power (W)",
-          "cold_reserve": "Cold reserve"
+          "cold_reserve": "Cold reserve",
+          "mode_entity": "Direction select (optional, e.g. Zendure ac_mode)",
+          "mode_charge_option": "Direction option when charging",
+          "mode_discharge_option": "Direction option when discharging"
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
@@ -78,7 +81,8 @@
           "boost_soc_on": "PV boost: battery SoC to start (%)",
           "boost_soc_off": "PV boost: battery SoC to stop (%)",
           "boost_saldo_on_w": "PV boost: grid balance to start (W)",
-          "boost_saldo_off_w": "PV boost: grid balance to stop (W)"
+          "boost_saldo_off_w": "PV boost: grid balance to stop (W)",
+          "control_entity": "Control entity (water_heater) for auto mode"
         },
         "data_description": {
           "base_target": "This temperature is always maintained, from the grid if necessary.",
@@ -202,7 +206,10 @@
           "vlt_min_c": "Minimum flow temperature (°C)",
           "vlt_min_cold_c": "Minimum flow in cold weather (°C)",
           "vlt_max_c": "Maximum flow temperature (°C)",
-          "cool_vlt_c": "Cooling flow temperature (°C)"
+          "cool_vlt_c": "Cooling flow temperature (°C)",
+          "control_entity": "Control entity (climate) for auto mode",
+          "silent_switch_entity": "Silent-mode switch (optional)",
+          "season_select_entity": "Season-direction input_select (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -266,7 +273,10 @@
           "reserve_soc": "Reserve SoC (%)",
           "max_charge_w": "Max. charging power (W)",
           "max_discharge_w": "Max. discharge power (W)",
-          "cold_reserve": "Cold reserve"
+          "cold_reserve": "Cold reserve",
+          "mode_entity": "Direction select (optional, e.g. Zendure ac_mode)",
+          "mode_charge_option": "Direction option when charging",
+          "mode_discharge_option": "Direction option when discharging"
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
@@ -294,7 +304,8 @@
           "boost_soc_on": "PV boost: battery SoC to start (%)",
           "boost_soc_off": "PV boost: battery SoC to stop (%)",
           "boost_saldo_on_w": "PV boost: grid balance to start (W)",
-          "boost_saldo_off_w": "PV boost: grid balance to stop (W)"
+          "boost_saldo_off_w": "PV boost: grid balance to stop (W)",
+          "control_entity": "Control entity (water_heater) for auto mode"
         },
         "data_description": {
           "base_target": "This temperature is always maintained, from the grid if necessary.",
@@ -382,7 +393,10 @@
           "reserve_soc": "Reserve SoC (%)",
           "max_charge_w": "Max. charging power (W)",
           "max_discharge_w": "Max. discharge power (W)",
-          "cold_reserve": "Cold reserve"
+          "cold_reserve": "Cold reserve",
+          "mode_entity": "Direction select (optional, e.g. Zendure ac_mode)",
+          "mode_charge_option": "Direction option when charging",
+          "mode_discharge_option": "Direction option when discharging"
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
@@ -410,7 +424,8 @@
           "boost_soc_on": "PV boost: battery SoC to start (%)",
           "boost_soc_off": "PV boost: battery SoC to stop (%)",
           "boost_saldo_on_w": "PV boost: grid balance to start (W)",
-          "boost_saldo_off_w": "PV boost: grid balance to stop (W)"
+          "boost_saldo_off_w": "PV boost: grid balance to stop (W)",
+          "control_entity": "Control entity (water_heater) for auto mode"
         },
         "data_description": {
           "base_target": "This temperature is always maintained, from the grid if necessary.",
@@ -519,7 +534,10 @@
           "vlt_min_c": "Minimum flow temperature (°C)",
           "vlt_min_cold_c": "Minimum flow in cold weather (°C)",
           "vlt_max_c": "Maximum flow temperature (°C)",
-          "cool_vlt_c": "Cooling flow temperature (°C)"
+          "cool_vlt_c": "Cooling flow temperature (°C)",
+          "control_entity": "Control entity (climate) for auto mode",
+          "silent_switch_entity": "Silent-mode switch (optional)",
+          "season_select_entity": "Season-direction input_select (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -556,7 +574,10 @@
           "vlt_min_c": "Minimum flow temperature (°C)",
           "vlt_min_cold_c": "Minimum flow in cold weather (°C)",
           "vlt_max_c": "Maximum flow temperature (°C)",
-          "cool_vlt_c": "Cooling flow temperature (°C)"
+          "cool_vlt_c": "Cooling flow temperature (°C)",
+          "control_entity": "Control entity (climate) for auto mode",
+          "silent_switch_entity": "Silent-mode switch (optional)",
+          "season_select_entity": "Season-direction input_select (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",

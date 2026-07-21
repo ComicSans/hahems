@@ -38,8 +38,9 @@ ROLE_HEATING = "heating_circuit"
 ROLE_SWITCHABLE = "switchable_load"
 ROLE_MODULATED = "modulated_load"
 
-MODE_OBSERVE = "beobachten"
-MODE_OFF = "aus"
+MODE_OBSERVE = "beobachten"  # empfehlen + loggen, nicht schalten
+MODE_AUTO = "auto"  # empfehlen + schalten (Actuator aktiv)
+MODE_OFF = "aus"  # reiner Stopp: keine Schreibzugriffe (Kill-Switch)
 
 DEFAULT_BASELINE_W = 500
 DEFAULT_NIGHT_W = 400

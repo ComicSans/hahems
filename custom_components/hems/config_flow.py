@@ -130,6 +130,9 @@ STORAGE_SCHEMA = vol.Schema(
         vol.Optional("power_entity"): _entity(device_class="power"),
         vol.Optional("charge_setpoint_entity"): _entity(["number", "input_number"]),
         vol.Optional("discharge_setpoint_entity"): _entity(["number", "input_number"]),
+        vol.Optional("mode_entity"): _entity(["select", "input_select"]),
+        vol.Optional("mode_charge_option"): selector.TextSelector(),
+        vol.Optional("mode_discharge_option"): selector.TextSelector(),
         vol.Required("capacity_kwh"): _number(0.1, 100, "kWh", 0.01),
         vol.Required("reserve_soc", default=DEFAULT_RESERVE_SOC): _number(0, 100, "%"),
         vol.Required("max_charge_w", default=DEFAULT_MAX_CHARGE_W): _number(
@@ -146,6 +149,7 @@ THERMAL_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
         vol.Optional("temp_entity"): _entity(device_class="temperature"),
+        vol.Optional("control_entity"): _entity(["water_heater", "climate"]),
         vol.Required("base_target", default=DEFAULT_BASE_TARGET): _number(
             30, 70, "°C"
         ),
@@ -180,6 +184,9 @@ HEATING_SCHEMA = vol.Schema(
         vol.Required("name"): selector.TextSelector(),
         vol.Required("outdoor_temp_entity"): _entity(device_class="temperature"),
         vol.Optional("demand_entity"): _entity(),
+        vol.Optional("control_entity"): _entity(["climate"]),
+        vol.Optional("silent_switch_entity"): _entity(["switch", "input_boolean"]),
+        vol.Optional("season_select_entity"): _entity(["input_select", "select"]),
         vol.Required("heat_on_c", default=DEFAULT_HEAT_ON_C): _number(
             -10, 25, "°C", 0.5
         ),

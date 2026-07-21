@@ -32,12 +32,15 @@ from .const import (
     DEFAULT_WP_W_PER_K,
     DOMAIN,
     GOAL_SELF_CONSUMPTION,
+    MODE_AUTO,
     MODE_OBSERVE,
     PRIORITY_AUTO,
     WEATHER_CONDITION_FACTORS,
     WP_MODEL_DAYS,
     WP_MODEL_MIN_HOURS,
 )
+from .actuator import Actuator
+from .config_check import ConfigCheck, check_config
 from .models import DeviceRegistry, parse_devices
 from .planner import (
     EvState,
@@ -126,6 +129,7 @@ class HemsData:
         # Laufzeit-Steuerung (aus Select/Switch), fürs Dashboard mitgeführt.
         self.ziel: str = GOAL_SELF_CONSUMPTION
         self.ev_zwang: bool = False
+        self.config_check: ConfigCheck | None = None
         self.plan: PlanResult = PlanResult()
 
 
@@ -139,10 +143,17 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         )
         self.entry = entry
         self.mode: str = MODE_OBSERVE
+        # Vorheriger Modus, um den Übergang auto→(beobachten|aus) zu erkennen
+        # und den Akku genau einmal freizugeben.
+        self._prev_mode: str = MODE_OBSERVE
+        # Signatur des letzten Config-Checks, damit nur bei Änderung geloggt wird.
+        self._check_signature: tuple | None = None
         # Optimierungsziel und E-Auto-Zwangsladung (von Select bzw. Switch
         # gesetzt, in RestoreEntity persistiert).
         self.goal: str = GOAL_SELF_CONSUMPTION
         self.ev_force: bool = False
+        # Schalt-Ebene (nur im Auto-Modus aktiv).
+        self._actuator = Actuator(hass)
         self._night_load_w: float | None = None
         self._night_load_fetched: datetime | None = None
         # (Tagtyp, UTC-Stunde) → mittlere Last in W; Tagtyp 0 = Werktag, 1 = Wochenende
@@ -853,11 +864,35 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
 
         data.ziel = self.goal
         data.ev_zwang = self.ev_force
+
+        # Config-Sanity-Check (speist binary_sensor.hems_konfiguration). Fehler/
+        # Überlappungen nur bei Änderung loggen, nicht jeden 60-s-Zyklus.
+        data.config_check = check_config(self.hass, reg)
+        self.config_check = data.config_check
+        sig = data.config_check.signature()
+        if sig != self._check_signature:
+            self._check_signature = sig
+            for msg in data.config_check.errors:
+                _LOGGER.warning("HEMS-Config-Fehler: %s", msg)
+            for msg in data.config_check.warnings:
+                _LOGGER.info("HEMS-Config-Warnung: %s", msg)
+
         data.lastprofil_quelle = self._profile_source
         data.lastprofil = _profile_rows(self._load_profile, now)
         data.verlauf_pv_entity = self._own_entity_id("pv_leistung_jetzt")
         data.verlauf_soc_entity = self._own_entity_id("speicher_soc")
 
-        if self.mode == MODE_OBSERVE:
-            _LOGGER.info("HEMS-Empfehlung: %s", data.plan.empfehlung)
+        if self.mode == MODE_AUTO:
+            _LOGGER.info("HEMS-Auto: %s", data.plan.empfehlung)
+            await self._actuator.apply(reg, data.plan, force_charge=self.ev_force)
+        else:
+            if self.mode == MODE_OBSERVE:
+                _LOGGER.info("HEMS-Empfehlung: %s", data.plan.empfehlung)
+            # Verlassen des Auto-Modus (→ beobachten oder aus): den Akku einmalig
+            # freigeben, damit er nicht mit der letzten Rate blind weiterläuft.
+            # WW/WP/EV bleiben unangetastet.
+            if self._prev_mode == MODE_AUTO:
+                _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
+                await self._actuator.release_battery(reg)
+        self._prev_mode = self.mode
         return data

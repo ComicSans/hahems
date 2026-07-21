@@ -1,7 +1,10 @@
-"""Binärsensor: Ist Kapazität für einen zusätzlichen Verbraucher frei?"""
+"""Binärsensoren: freie Kapazität und Config-Sanity-Check."""
 from __future__ import annotations
 
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -16,7 +19,9 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator: HemsCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([HemsCapacityFreeSensor(coordinator)])
+    async_add_entities(
+        [HemsCapacityFreeSensor(coordinator), HemsConfigCheckSensor(coordinator)]
+    )
 
 
 class HemsCapacityFreeSensor(CoordinatorEntity[HemsCoordinator], BinarySensorEntity):
@@ -46,4 +51,46 @@ class HemsCapacityFreeSensor(CoordinatorEntity[HemsCoordinator], BinarySensorEnt
             "frei_kwh": self.coordinator.data.plan.kapazitaet_frei_kwh,
             "bedarf_kwh": self.coordinator._opt(CONF_FREE_KWH, DEFAULT_FREE_KWH),
             "dauer_h": self.coordinator._opt(CONF_FREE_H, DEFAULT_FREE_H),
+        }
+
+
+class HemsConfigCheckSensor(
+    CoordinatorEntity[HemsCoordinator], BinarySensorEntity
+):
+    """Config-Sanity-Check für den Auto-Modus. An = Problem (harte Fehler, oder
+    im Auto-Modus eine Überlappung mit aktiven Automationen). Details als
+    Attribute: was der Auto-Modus schaltet, Fehler, Warnungen, Überlappungen."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Konfiguration"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, coordinator: HemsCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_konfiguration"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name="HEMS",
+            manufacturer="Tobias Reithmeier",
+            model="HEMS Planner",
+        )
+
+    @property
+    def is_on(self) -> bool:
+        check = self.coordinator.data.config_check
+        return check is not None and check.problem(self.coordinator.mode)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        check = self.coordinator.data.config_check
+        if check is None:
+            return {}
+        return {
+            "bereit_fuer_auto": not check.errors,
+            "auto_schaltet": check.actuated or ["(nichts – keine Steuer-Entities)"],
+            "fehler": check.errors,
+            "warnungen": check.warnings,
+            "ueberlappung": check.overlaps,
+            "hinweise": check.info,
+            "ueberlappungspruefung": "ok" if check.scan_ok else "nicht verfügbar",
         }

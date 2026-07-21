@@ -12,6 +12,7 @@ from .const import (
     DOMAIN,
     GOAL_SELF_CONSUMPTION,
     GOALS,
+    MODE_AUTO,
     MODE_OBSERVE,
     MODE_OFF,
 )
@@ -28,7 +29,7 @@ async def async_setup_entry(
 class HemsModeSelect(SelectEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_name = "Modus"
-    _attr_options = [MODE_OBSERVE, MODE_OFF]
+    _attr_options = [MODE_OBSERVE, MODE_AUTO, MODE_OFF]
 
     def __init__(self, coordinator: HemsCoordinator) -> None:
         self._coordinator = coordinator
@@ -49,6 +50,8 @@ class HemsModeSelect(SelectEntity, RestoreEntity):
         self._attr_current_option = option
         self._coordinator.mode = option
         self.async_write_ha_state()
+        # Moduswechsel (z. B. → auto) sofort wirksam machen.
+        await self._coordinator.async_request_refresh()
 
 
 class HemsGoalSelect(SelectEntity, RestoreEntity):

@@ -62,6 +62,12 @@ class Storage:
     # Input/Output-Limit). Ohne diese Entitäten wird der Speicher nur beobachtet.
     charge_setpoint_entity: str | None = None
     discharge_setpoint_entity: str | None = None
+    # Optionaler Richtungs-Select (z. B. Zendure ac_mode): wird beim Laden auf
+    # mode_charge_option, beim Entladen auf mode_discharge_option gestellt.
+    # Ohne diese drei Felder werden nur die Leistungslimits geschrieben.
+    mode_entity: str | None = None
+    mode_charge_option: str | None = None
+    mode_discharge_option: str | None = None
     # Kaltreserve: nimmt am Entladen erst teil, wenn der mittlere SoC der
     # übrigen Speicher die Reserve-Schwelle unterschreitet (mit Hysterese).
     # Geladen wird sie immer mit, proportional zur freien Kapazität.
@@ -73,6 +79,9 @@ class ThermalStore:
     id: str
     name: str
     temp_entity: str | None = None
+    # Steuer-Entity (water_heater) für den Auto-Modus: On/Off + Sollwert.
+    # Ohne dieses Entity wird die WW-Empfehlung nur angezeigt, nicht gestellt.
+    control_entity: str | None = None
     base_target: float = DEFAULT_BASE_TARGET
     comfort_target: float = DEFAULT_COMFORT_TARGET
     # Sperrzeit als lokale Uhrzeiten "HH:MM:SS". In diesem Fenster wird weder
@@ -109,6 +118,12 @@ class HeatingCircuit:
     # oder einem Template-Sensor; hebt die Vorlaufkurve an. Ohne Anforderung
     # (< 1 %) fällt der Vorlauf auf das Minimum (Absenkbetrieb).
     demand_entity: str | None = None
+    # Steuer-Entities für den Auto-Modus (alle optional): climate für Modus +
+    # Vorlauf-Soll, Schalter für den Flüsterbetrieb, input_select für die
+    # Saison-Statistik-Richtung. Ohne control_entity nur Anzeige.
+    control_entity: str | None = None
+    silent_switch_entity: str | None = None
+    season_select_entity: str | None = None
     heat_on_c: float = DEFAULT_HEAT_ON_C
     heat_off_c: float = DEFAULT_HEAT_OFF_C
     cool_on_c: float = DEFAULT_COOL_ON_C

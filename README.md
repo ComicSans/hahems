@@ -6,8 +6,11 @@ Home Energy Management System als Home-Assistant-Custom-Integration.
 Geräte-agnostisch: Akkus, PV-Prognosen, Warmwasser, Wärmepumpe und Wallbox werden
 als Rollen über die UI konfiguriert, keine Entity-IDs im Code.
 
-**Status: Phase 1 (Beobachten).** Die Integration rechnet Prognosen und
-Empfehlungen, steuert aber noch nichts. Konzept und Phasenplan: [CONCEPT.md](CONCEPT.md).
+**Status: Phase 1 (Beobachten) + optionale Aktuierung.** Die Integration rechnet
+Prognosen und Empfehlungen. Standardmäßig zeigt sie diese nur an (`beobachten`);
+im Modus `auto` schaltet sie zusätzlich auf konfigurierte Steuer-Entitäten
+(siehe [Auto-Modus](#auto-modus-aktuierung)). Konzept und Phasenplan:
+[CONCEPT.md](CONCEPT.md).
 
 > **Breaking Change (0.6.0):** `sensor.hems_einspeiseplan` heißt jetzt
 > `sensor.hems_entladeplan` — „Einspeisung" meinte fälschlich Netzeinspeisung,
@@ -55,11 +58,13 @@ Variante manuell: den Ordner `custom_components/hems/` in das
   Attribute)
 - `sensor.hems_heizkreis` (Modus-Empfehlung heizen/kuehlen/aus;
   Vorlauf-Soll, Außentemperatur und Flüster-Empfehlung als Attribute)
-- `select.hems_modus` (beobachten / aus)
+- `select.hems_modus` (beobachten / auto / aus — siehe [Auto-Modus](#auto-modus-aktuierung))
 - `select.hems_optimierungsziel` (eigenverbrauch / nulleinspeisung / vollladen —
   siehe [Optimierungsziel](#optimierungsziel))
 - `switch.hems_e_auto_zwangsladung` (erzwingt die E-Auto-Ladeempfehlung, siehe
   [E-Auto: Zwangsladung](#e-auto-zwangsladung-force-loading))
+- `binary_sensor.hems_konfiguration` (Config-Sanity-Check für den Auto-Modus;
+  siehe [Config-Sanity-Check](#config-sanity-check))
 
 ## Lastfluss-Karte
 
@@ -185,8 +190,9 @@ freien Kapazität. Speicher ohne SoC-Wert fallen aus der Zuteilung.
 
 Ein als **Kaltreserve** markierter Speicher entlädt erst mit, wenn der
 mittlere SoC der übrigen unter 40 % fällt, und scheidet oberhalb von 45 %
-wieder aus (Hysterese); geladen wird er immer mit. In Phase 1 wird die
-Empfehlung nur angezeigt, nicht ausgeführt.
+wieder aus (Hysterese); geladen wird er immer mit. Im Modus `beobachten` wird
+die Empfehlung nur angezeigt; im Modus `auto` schreibt HEMS die Zuteilung auf
+die Lade-/Entlade-Sollwerte der Speicher (siehe [Auto-Modus](#auto-modus-aktuierung)).
 
 ## Optimierungsziel
 
@@ -210,6 +216,70 @@ Es wird als Attribut `ziel` an `sensor.hems_empfehlung` gespiegelt.
 - **vollladen**: hält das Ladeziel dauerhaft auf 100 %, sonst wie
   eigenverbrauch. Das ist die manuelle Variante der automatischen
   Schlechtwetter-Vollladung (`morgen_knapp`).
+
+## Auto-Modus (Aktuierung)
+
+`select.hems_modus` hat drei Stufen — sie trennen **denken** (Planner),
+**messen** (Coordinator) und **schalten** (Actuator):
+
+- **beobachten**: Empfehlungen werden berechnet und geloggt, aber nicht
+  ausgeführt (Standard).
+- **auto**: HEMS schreibt die Empfehlung zusätzlich auf konfigurierte
+  Steuer-Entitäten.
+- **aus**: reiner Stopp — keinerlei Schreibzugriffe (Kill-Switch). Geräte
+  behalten ihren letzten Zustand; parallele Automationen übernehmen sofort
+  wieder.
+
+Der Actuator ist bewusst konservativ: Er schreibt **nur** auf konfigurierte
+Steuer-Entitäten (sonst reine Beobachtung, auch im Auto-Modus), **nur bei
+Wertänderung** (idempotent, kein Bus-Spam), **nie** auf eine fehlende/unbekannte
+Empfehlung, und **isoliert Fehler je Gerät**. Reihenfolge WW → WP → Akku → E-Auto.
+
+Steuer-Entitäten je Rolle (alle optional, im Options-Flow zu setzen):
+
+| Rolle | Empfehlung | Steuer-Entitäten | Service |
+|---|---|---|---|
+| Warmwasser | `ww_soll_c` + Status | `control_entity` (water_heater) | on/off + `set_temperature` |
+| Wärmepumpe | `heizung.modus`/`vlt`/`leise` | `control_entity` (climate), `silent_switch_entity`, `season_select_entity` | `set_hvac_mode` + `set_temperature` + Silent + Saison |
+| Speicher | `regelung` (Zuteilung je Einheit) | `charge_setpoint_entity`, `discharge_setpoint_entity`, optional `mode_entity` + `mode_charge/discharge_option` | `number.set_value` (+ `select_option`) |
+| E-Auto | nur Zwangsladung | `current_entity`, `switch_entity` (Rolle „Modulierbare Last") | `number.set_value` + on/off |
+
+Zwei Einschränkungen für das Scharfschalten:
+
+1. **Warmwasser-Nacht-Aus braucht das Sperrfenster.** HEMS meldet WW nur während
+   des konfigurierten Sperrfensters (`block_start`/`block_end`) als „aus", sonst
+   „basis" (Grundtemperatur). Ohne gesetztes Fenster hält der Auto-Modus WW rund
+   um die Uhr an. Das Sperrfenster ist eine feste Uhrzeit, kann die saisonale
+   Tag/Nacht-Umschaltung der alten Automation also nur annähern.
+2. **E-Auto: nur Zwangsladung.** HEMS modelliert (noch) keinen Überschuss-
+   Ladestrom. Im Auto-Modus wird nur die Zwangsladung
+   (`switch.hems_e_auto_zwangsladung`) auf `current_entity`/`switch_entity`
+   geschaltet; das PV-Überschussladen bleibt bei der bestehenden Automation.
+   → E-Auto-Automationen vorerst aktiv lassen.
+
+## Config-Sanity-Check
+
+`binary_sensor.hems_konfiguration` (device_class `problem`) prüft jeden Zyklus,
+ob die Konfiguration für den Auto-Modus taugt — die Antwort auf „Kann ich
+scharfschalten?". **An = Problem**: harte Fehler immer, eine Überlappung nur im
+Auto-Modus (im Beobachten-/Aus-Modus sind aktive Automationen ja erwünscht).
+Alles Weitere steht in den Attributen:
+
+- `bereit_fuer_auto` — keine harten Fehler.
+- `auto_schaltet` — welche Rollen der Auto-Modus tatsächlich stellt (die mit
+  konfiguriertem Steuer-Entity); der Rest bleibt reine Beobachtung.
+- `fehler` — der Auto-Modus würde scheitern: Steuer-Entity existiert nicht,
+  falsche Domain, Richtungs-Select ohne Optionswerte.
+- `warnungen` — funktioniert, aber Vorsicht: nur ein Speicher-Setpoint gesetzt,
+  Warmwasser ohne Sperrfenster (24/7 an), …
+- `ueberlappung` — **der Scharfschalt-Killer**: aktive Automationen, die auf
+  dieselbe Steuer-Entity schreiben wie HEMS (heuristisch aus den
+  `referenced_entities` der Automationen; Templates/indirekte Referenzen
+  entgehen). Vor dem Auto-Modus die jeweilige Automation deaktivieren.
+- `ueberlappungspruefung` — `ok` oder `nicht verfügbar` (falls HA die
+  Automations-Referenzen intern nicht hergibt).
+
+Fehler und Warnungen werden zusätzlich bei Änderung ins Log geschrieben.
 
 ## Heizkreis (Wärmepumpe)
 
@@ -268,5 +338,7 @@ Damit der Hausakku dabei nicht still ins Auto leerläuft, rechnet die Saldo-
 Regelung die aktuelle Wallbox-Leistung (`wallbox_w`) aus dem Saldo heraus, den
 sie ausregelt: Der Akku hält seinen SoC, das Zwangs-Delta kommt aus dem Netz
 ("Akku schonen"). Liefert die PV gerade Überschuss, lädt der Akku daraus wie
-gewohnt weiter — er wird nur nicht zusätzlich für die Wallbox entladen. Wie
-alle Empfehlungen wird auch diese in Phase 1 nur angezeigt, nicht ausgeführt.
+gewohnt weiter — er wird nur nicht zusätzlich für die Wallbox entladen. Im
+Modus `auto` wird die Zwangsladung tatsächlich geschaltet (max. Ladestrom auf
+`current_entity`, `switch_entity` an); das reguläre Überschussladen bleibt
+dagegen bei der bestehenden Automation (siehe [Auto-Modus](#auto-modus-aktuierung)).

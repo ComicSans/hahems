@@ -50,7 +50,10 @@
           "reserve_soc": "Reserve-SoC (%)",
           "max_charge_w": "Max. Ladeleistung (W)",
           "max_discharge_w": "Max. Entladeleistung (W)",
-          "cold_reserve": "Kaltreserve"
+          "cold_reserve": "Kaltreserve",
+          "mode_entity": "Richtungs-Select (optional, z. B. Zendure ac_mode)",
+          "mode_charge_option": "Richtungs-Option beim Laden",
+          "mode_discharge_option": "Richtungs-Option beim Entladen"
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
@@ -78,7 +81,8 @@
           "boost_soc_on": "PV-Boost: Speicher-SoC ab (%)",
           "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
           "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
-          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)"
+          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)",
+          "control_entity": "Steuer-Entity (water_heater) für Auto-Modus"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
@@ -202,7 +206,10 @@
           "vlt_min_c": "Minimaler Vorlauf (°C)",
           "vlt_min_cold_c": "Minimaler Vorlauf bei Kälte (°C)",
           "vlt_max_c": "Maximaler Vorlauf (°C)",
-          "cool_vlt_c": "Kühl-Vorlauf (°C)"
+          "cool_vlt_c": "Kühl-Vorlauf (°C)",
+          "control_entity": "Steuer-Entity (climate) für Auto-Modus",
+          "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
+          "season_select_entity": "Saison-Richtung input_select (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -266,7 +273,10 @@
           "reserve_soc": "Reserve-SoC (%)",
           "max_charge_w": "Max. Ladeleistung (W)",
           "max_discharge_w": "Max. Entladeleistung (W)",
-          "cold_reserve": "Kaltreserve"
+          "cold_reserve": "Kaltreserve",
+          "mode_entity": "Richtungs-Select (optional, z. B. Zendure ac_mode)",
+          "mode_charge_option": "Richtungs-Option beim Laden",
+          "mode_discharge_option": "Richtungs-Option beim Entladen"
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
@@ -294,7 +304,8 @@
           "boost_soc_on": "PV-Boost: Speicher-SoC ab (%)",
           "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
           "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
-          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)"
+          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)",
+          "control_entity": "Steuer-Entity (water_heater) für Auto-Modus"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
@@ -382,7 +393,10 @@
           "reserve_soc": "Reserve-SoC (%)",
           "max_charge_w": "Max. Ladeleistung (W)",
           "max_discharge_w": "Max. Entladeleistung (W)",
-          "cold_reserve": "Kaltreserve"
+          "cold_reserve": "Kaltreserve",
+          "mode_entity": "Richtungs-Select (optional, z. B. Zendure ac_mode)",
+          "mode_charge_option": "Richtungs-Option beim Laden",
+          "mode_discharge_option": "Richtungs-Option beim Entladen"
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
@@ -410,7 +424,8 @@
           "boost_soc_on": "PV-Boost: Speicher-SoC ab (%)",
           "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
           "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
-          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)"
+          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)",
+          "control_entity": "Steuer-Entity (water_heater) für Auto-Modus"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
@@ -519,7 +534,10 @@
           "vlt_min_c": "Minimaler Vorlauf (°C)",
           "vlt_min_cold_c": "Minimaler Vorlauf bei Kälte (°C)",
           "vlt_max_c": "Maximaler Vorlauf (°C)",
-          "cool_vlt_c": "Kühl-Vorlauf (°C)"
+          "cool_vlt_c": "Kühl-Vorlauf (°C)",
+          "control_entity": "Steuer-Entity (climate) für Auto-Modus",
+          "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
+          "season_select_entity": "Saison-Richtung input_select (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -556,7 +574,10 @@
           "vlt_min_c": "Minimaler Vorlauf (°C)",
           "vlt_min_cold_c": "Minimaler Vorlauf bei Kälte (°C)",
           "vlt_max_c": "Maximaler Vorlauf (°C)",
-          "cool_vlt_c": "Kühl-Vorlauf (°C)"
+          "cool_vlt_c": "Kühl-Vorlauf (°C)",
+          "control_entity": "Steuer-Entity (climate) für Auto-Modus",
+          "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
+          "season_select_entity": "Saison-Richtung input_select (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
