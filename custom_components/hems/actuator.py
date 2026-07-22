@@ -51,6 +51,7 @@ class Actuator:
         await self._guard(self._apply_wp, reg, plan, name="Wärmepumpe")
         await self._guard(self._apply_battery, reg, plan, name="Speicher")
         await self._guard(self._apply_modulated, reg, plan, name="Lasten")
+        await self._guard(self._apply_switchable, reg, plan, name="Schaltlasten")
 
     async def release_battery(self, reg: DeviceRegistry) -> None:
         """Akku-Setpoints einmalig auf 0/0 (passiv) setzen — beim Verlassen des
@@ -279,3 +280,23 @@ class Actuator:
                 or self._age(s) >= timedelta(minutes=m.min_on_min)
             ):
                 await self._turn(m.switch_entity, False)
+
+    async def _apply_switchable(self, reg: DeviceRegistry, plan: PlanResult) -> None:
+        """Schaltbare Lasten auf die empfohlene An/Aus-Lage schalten. Die
+        Anti-Takt-Sperren (min_on/min_off/max_block) sind bereits im Planner
+        verrechnet — die Empfehlung ist endgültig; _turn schaltet nur, wenn der
+        Ist-Zustand abweicht."""
+        rec = plan.schaltbare
+        if rec is None or not reg.switchables:
+            return
+        by_id = {sp.id: sp for sp in rec.lasten}
+        for s in reg.switchables:
+            sp = by_id.get(s.id)
+            if sp is None:
+                continue
+            try:
+                await self._turn(s.switch_entity, sp.an)
+            except Exception as err:  # noqa: BLE001 – eine Last reißt nie die andern
+                _LOGGER.warning(
+                    "HEMS-Actuator: Schaltlast %s fehlgeschlagen: %s", s.name, err
+                )

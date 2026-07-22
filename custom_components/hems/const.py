@@ -186,6 +186,19 @@ EV_DEMAND_GRACE_S = 180.0
 # Leistung, entfällt der Cooldown sofort.
 EV_EMPTY_COOLDOWN_S = 1800.0
 
+# Schaltbare Lasten (nur an/aus), überschussgesteuert. SWITCH_SURPLUS_MARGIN_W ist
+# die Hysterese-Marge: einschalten erst ab erwartet_w + Marge, ausschalten erst
+# unter erwartet_w − Marge, damit die Empfehlung nicht am Rand flattert.
+# DEFAULT_SWITCHABLE_EXPECTED_W ist die konservativ hohe Annahme der
+# Leistungsaufnahme, solange eine Last noch nie im An-Zustand gemessen wurde —
+# lieber später einschalten als Netzbezug provozieren; der Coordinator lernt den
+# echten Wert beim ersten Lauf.
+SWITCH_SURPLUS_MARGIN_W = 200.0
+DEFAULT_SWITCHABLE_EXPECTED_W = 2000.0
+# Ab dieser gemessenen An-Leistung lernt der Coordinator die erwartete Leistung
+# einer schaltbaren Last (darunter gilt sie als „an, aber zieht nichts").
+SWITCH_LEARN_FLOOR_W = 20.0
+
 # Wärmepumpen-Verbrauchsmodell für die Bedarfsprognose (Tag und Nacht):
 # P(Stunde) = Basis + k × max(0, Heizgrenze − Außentemperatur). Basis ist die
 # mittlere WP-Leistung oberhalb der Heizgrenze (Warmwasser, Standby), k wird

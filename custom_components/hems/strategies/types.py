@@ -174,6 +174,58 @@ class EvControlResult:
 
 
 @dataclass
+class SwitchableState:
+    """Zustand einer schaltbaren Last (nur an/aus) für die Überschussregelung.
+
+    `erwartet_w` ist die vom Coordinator gelernte Leistungsaufnahme im An-Zustand
+    (letzter gemessener Bezug); solange die Last noch nie lief, greift ein
+    konservativer Fallback. `an_seit_s`/`aus_seit_s` liefern die Mindestlauf-/
+    Mindestpausenzeit-Sperren gegen Schützflattern, `max_block_min` erzwingt ein
+    Einschalten, wenn HEMS die Last zu lange ausgehalten hat. `priority` (klein =
+    wichtiger) entscheidet, welche Last bei knappem Überschuss zuerst weicht.
+    """
+
+    name: str
+    id: str = ""
+    priority: int = 1
+    power_w: float | None = None       # gemessener Bezug (An-Zustand)
+    erwartet_w: float | None = None    # gelernte Leistung im An-Zustand
+    ist_an: bool = False
+    an_seit_s: float | None = None
+    aus_seit_s: float | None = None
+    min_on_min: int = 20
+    min_off_min: int = 10
+    max_block_min: int = 120
+
+
+@dataclass
+class SwitchableSetpoint:
+    """Empfehlung für eine einzelne schaltbare Last (an/aus)."""
+
+    name: str
+    an: bool
+    id: str = ""
+    grund: str = ""  # Kurzbegründung (Transparenz)
+
+
+@dataclass
+class SwitchableResult:
+    """Empfehlung der Schaltlast-Regelung über alle schaltbaren Lasten.
+
+    Schaltbare Lasten bekommen Überschuss VOR dem Headroom der modulierbaren
+    Lasten: reicht er nicht, drosseln die modulierbaren Lasten herunter (geben
+    Überschuss frei), bevor eine schaltbare Last abgeschaltet wird. `soll_w` ist
+    die erwartete Leistung aller empfohlen-eingeschalteten Lasten, `delta_w` die
+    Differenz zur aktuell gemessenen Schaltlast (neue/wegfallende Last), mit der
+    der modulierbare Regler seinen Überschuss bereinigt.
+    """
+
+    lasten: list[SwitchableSetpoint]
+    soll_w: float = 0.0
+    delta_w: float = 0.0
+
+
+@dataclass
 class HeatingResult:
     """Empfehlung für den Heizkreis: Modus plus Vorlauf-Sollwert."""
 
@@ -316,6 +368,9 @@ class PlanInput:
     # Modulierbare Lasten (Wallboxen …) für die Überschussregelung. Leer =
     # keine Wallbox konfiguriert; dann bleibt die alte, ungeprüfte Empfehlung.
     modulateds: list[ModulatedState] = field(default_factory=list)
+    # Schaltbare Lasten (nur an/aus) für die Überschussregelung. Leer = keine
+    # konfiguriert; dann bleibt die Schaltlast-Empfehlung leer.
+    switchables: list[SwitchableState] = field(default_factory=list)
     # Wärmepumpen-Verbrauchsmodell. Ist es gesetzt, ist das Lastprofil
     # WP-bereinigt (der Coordinator zieht die WP-Statistik beim Lernen ab)
     # und die WP wird hier explizit temperaturabhängig aufgeschlagen —
@@ -396,6 +451,7 @@ class PlanResult:
     regelung: ControlResult | None = None
     # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).
     ev_regelung: EvControlResult | None = None
+    schaltbare: SwitchableResult | None = None
     # Heizkreis-Empfehlung (None, wenn kein Heizkreis konfiguriert ist).
     heizung: HeatingResult | None = None
     empfehlung: str = "keine Daten"

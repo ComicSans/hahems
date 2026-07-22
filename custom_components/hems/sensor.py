@@ -301,6 +301,12 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             ]
             if d.plan.ev_regelung
             else [],
+            "schaltbare": [
+                {"name": sp.name, "an": sp.an, "grund": sp.grund}
+                for sp in d.plan.schaltbare.lasten
+            ]
+            if d.plan.schaltbare
+            else [],
             "prioritaeten": d.plan.prioritaeten,
             "speicher_bedarf_kwh": d.plan.speicher_bedarf_kwh,
             "speicher_kapazitaet_kwh": d.plan.speicher_kapazitaet_kwh,

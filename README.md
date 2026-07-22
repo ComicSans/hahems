@@ -243,6 +243,28 @@ Umgesetzt in `strategies/coordination.py`: der reservierte Überschuss wird dem
 Lasten-Regler vorenthalten; den Rest holt sich die Speicher-Regelung über ihr
 normales Saldo-Residuum. Die Regelmathematik beider Regler bleibt unverändert.
 
+### Schaltbare Lasten (überschussgesteuert)
+
+Schaltbare Lasten (nur an/aus, z. B. eine Umwälzpumpe) schaltet HEMS im
+Auto-Modus überschussgesteuert: ein, solange der Überschuss ihre **erwartete
+Leistung** deckt, aus, wenn er fehlt. Die erwartete Leistung wird aus der
+`power_entity` gelernt (letzter gemessener An-Wert); bis dahin greift ein
+konservativer Fallback (lieber später einschalten als Netzbezug provozieren).
+
+Prioritätsreihenfolge, wenn der Überschuss nicht für alle reicht:
+
+1. **Modulierbare Lasten drosseln herunter** (geben ihr Headroom auf, behalten
+   aber ihr Minimum) — sie sind der elastische Puffer.
+2. **Schaltbare Lasten** werden abgeschaltet, niedrigste Priorität (`priority`,
+   klein = wichtiger) zuerst.
+3. Der **Akku pausiert** zuletzt — er lädt weiter, solange gedrosselt oder
+   abgeschaltet werden kann.
+
+Anti-Takt: `min_on` hält eine Last an, `min_off` hält sie aus, `max_block`
+erzwingt ein Einschalten, wenn HEMS sie zu lange ausgehalten hat. Umgesetzt in
+`strategies/switchable.py`; die Empfehlung steht als `schaltbare`-Attribut an
+`sensor.hems_empfehlung`, geschaltet wird im Modus `auto`.
+
 ## Optimierungsziel
 
 `select.hems_optimierungsziel` steuert zur Laufzeit, worauf die Speicher-

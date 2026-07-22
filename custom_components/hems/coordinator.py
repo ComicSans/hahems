@@ -34,6 +34,7 @@ from .const import (
     DEFAULT_WP_W_PER_K,
     DOMAIN,
     EV_DEMAND_FLOOR_W,
+    SWITCH_LEARN_FLOOR_W,
     EV_DEMAND_GRACE_S,
     EV_EMPTY_COOLDOWN_S,
     GOAL_SELF_CONSUMPTION,
@@ -56,6 +57,7 @@ from .strategies.types import (
     PlanInput,
     PlanResult,
     StorageState,
+    SwitchableState,
     WpModel,
 )
 
@@ -195,6 +197,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Rotations-Cooldown je Last: Zeitpunkt, bis zu dem eine beobachtet-leere
         # Last in der Rangfolge hinten steht (Name → Ablauf-UTC).
         self._mod_leer_bis: dict[str, datetime] = {}
+        # Gelernte erwartete Leistung schaltbarer Lasten (id → letzter An-Wert).
+        self._sw_erwartet_w: dict[str, float] = {}
 
     # -- Konfiguration -----------------------------------------------------
 
@@ -413,6 +417,41 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     an_seit_s=an_seit_s,
                     nachfrage=nachfrage,
                     leer=leer,
+                )
+            )
+        return states
+
+    def _switchable_states(self, reg: DeviceRegistry, now: datetime) -> list:
+        """Laufzeitzustand der schaltbaren Lasten aus HA-States bauen.
+
+        Der An/Aus-Zustand und die Zeit seit dem letzten Schaltvorgang kommen aus
+        dem Schalter (min_on/min_off/max_block); die erwartete Leistung wird aus
+        `power_entity` gelernt (letzter nennenswerter An-Wert), bis dahin greift
+        im Planner der konservative Fallback.
+        """
+        states = []
+        for s in reg.switchables:
+            power = self._power_w(s.power_entity)
+            st = self.hass.states.get(s.switch_entity)
+            ist_an = bool(st and st.state == "on")
+            seit = (
+                (now - st.last_changed).total_seconds() if st is not None else None
+            )
+            if ist_an and power is not None and power > SWITCH_LEARN_FLOOR_W:
+                self._sw_erwartet_w[s.id] = power
+            states.append(
+                SwitchableState(
+                    name=s.name,
+                    id=s.id,
+                    priority=s.priority,
+                    power_w=power,
+                    erwartet_w=self._sw_erwartet_w.get(s.id),
+                    ist_an=ist_an,
+                    an_seit_s=seit if ist_an else None,
+                    aus_seit_s=seit if not ist_an else None,
+                    min_on_min=s.min_on_min,
+                    min_off_min=s.min_off_min,
+                    max_block_min=s.max_block_min,
                 )
             )
         return states
@@ -920,6 +959,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             )
 
         modulateds = self._modulated_states(reg, now)
+        switchables = self._switchable_states(reg, now)
 
         # Lastmodell zuerst: der Aufruf lernt auch das WP-Modell, das unten
         # in den PlanInput einfließt.
@@ -988,6 +1028,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 else 200,
                 heating=heating,
                 modulateds=modulateds,
+                switchables=switchables,
                 wp_model=self._wp_model,
                 temp_forecast_c=temp_forecast or None,
                 flags=self._plan_flags,

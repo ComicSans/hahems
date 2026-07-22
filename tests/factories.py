@@ -113,6 +113,35 @@ def heating(
     )
 
 
+def switchable(
+    name: str = "Pumpe",
+    *,
+    id: str = "sw1",
+    priority: int = 1,
+    power_w: float | None = None,
+    erwartet_w: float | None = 1500.0,
+    ist_an: bool = False,
+    an_seit_s: float | None = None,
+    aus_seit_s: float | None = None,
+    min_on_min: int = 20,
+    min_off_min: int = 10,
+    max_block_min: int = 120,
+) -> P.SwitchableState:
+    return P.SwitchableState(
+        name=name,
+        id=id,
+        priority=priority,
+        power_w=power_w,
+        erwartet_w=erwartet_w,
+        ist_an=ist_an,
+        an_seit_s=an_seit_s,
+        aus_seit_s=aus_seit_s,
+        min_on_min=min_on_min,
+        min_off_min=min_off_min,
+        max_block_min=max_block_min,
+    )
+
+
 def plan_input(
     *,
     now: datetime = NOON,
@@ -133,6 +162,7 @@ def plan_input(
     wallbox_w: float | None = None,
     ev_force: bool = False,
     priority_mode: str = "auto",
+    switchables: list[P.SwitchableState] | None = None,
     flags: P.PlanFlags | None = None,
     thermal_present: bool = False,
     thermal_temp: float | None = None,
@@ -178,6 +208,7 @@ def plan_input(
         wallbox_w=wallbox_w,
         weather_factor_tomorrow=weather_factor_tomorrow,
         modulateds=modulateds if modulateds is not None else [],
+        switchables=switchables if switchables is not None else [],
         heating=heating_state,
         wp_model=wp_model,
         load_profile_w=load_profile_w,

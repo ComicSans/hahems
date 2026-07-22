@@ -26,6 +26,7 @@ from .strategies.demand import _profile_covers, _window_load_kwh, _wp_window_kwh
 from .strategies.forecast import _discharge_plan, _pv_curve, _soc_forecast
 from .strategies.heating import _heating_plan
 from .strategies.loads import _modulated_control
+from .strategies.switchable import switchable_control
 from .strategies.types import PlanInput, PlanResult, _latch
 from .strategies.water import water_plan
 
@@ -282,14 +283,24 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     # vor der Empfehlungs-Priorisierung laufen, die die WW-Flags nur noch liest.
     water_plan(inp, result)
 
-    # Modulierbare Lasten zuerst: Überschuss-Ladeströme bestimmen. Die
-    # Reihenfolge ist bewusst — der Speicher-Regler bekommt anschließend den um
-    # die neuen Last-Sollwerte bereinigten Saldo, damit die Lasten vor der
-    # Akku-Entladung heruntergeregelt werden. Bei Akku-Ladevorrang (priority_mode)
-    # reserviert der Akku vorab einen Teil des Überschusses (coordination), den
-    # der Lasten-Regler dann nicht mehr sieht.
+    # Schaltbare Lasten (nur an/aus) zuerst entscheiden: sie haben Vorrang vor
+    # dem Headroom der modulierbaren Lasten. Ihre NEUE Leistung (delta_w) wird
+    # unten vom Überschuss der modulierbaren abgezogen, damit diese
+    # herunterdrosseln und die Leistung freigeben, statt eine schaltbare Last
+    # abzuschalten.
+    result.schaltbare = switchable_control(inp, result)
+    schaltbar_delta = result.schaltbare.delta_w if result.schaltbare else 0.0
+
+    # Modulierbare Lasten: Überschuss-Ladeströme bestimmen. Die Reihenfolge ist
+    # bewusst — der Speicher-Regler bekommt anschließend den um die neuen
+    # Last-Sollwerte bereinigten Saldo, damit die Lasten vor der Akku-Entladung
+    # heruntergeregelt werden. Reserviert werden der Akku-Ladevorrang
+    # (coordination) und die neue Schaltlast-Leistung; beides sieht der
+    # Lasten-Regler dann nicht mehr als frei an.
     lade_reservierung = coordination.akku_ladereservierung(inp, result)
-    result.ev_regelung = _modulated_control(inp, result, lade_reservierung)
+    result.ev_regelung = _modulated_control(
+        inp, result, lade_reservierung + max(0.0, schaltbar_delta)
+    )
     # Für die Empfehlungs-Zeile: lädt mindestens eine Last?
     result.flags.ev_bereit = bool(
         result.ev_regelung
