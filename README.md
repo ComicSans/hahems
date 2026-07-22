@@ -321,7 +321,7 @@ zu leer in die Nacht zu gehen). Der aktuelle Deckel steht als
 Der Actuator ist bewusst konservativ: Er schreibt **nur** auf konfigurierte
 Steuer-Entitäten (sonst reine Beobachtung, auch im Auto-Modus), **nur bei
 Wertänderung** (idempotent, kein Bus-Spam), **nie** auf eine fehlende/unbekannte
-Empfehlung, und **isoliert Fehler je Gerät**. Reihenfolge WW → WP → Akku → E-Auto.
+Empfehlung, und **isoliert Fehler je Gerät**. Reihenfolge WW → WP → Akku → E-Auto → Schaltlasten.
 
 Steuer-Entitäten je Rolle (alle optional, im Options-Flow zu setzen):
 
@@ -330,20 +330,23 @@ Steuer-Entitäten je Rolle (alle optional, im Options-Flow zu setzen):
 | Warmwasser | `ww_soll_c` + Status | `control_entity` (water_heater) | on/off + `set_temperature` |
 | Wärmepumpe | `heizung.modus`/`vlt`/`leise` | `control_entity` (climate), `silent_switch_entity`, `season_select_entity` | `set_hvac_mode` + `set_temperature` + Silent + Saison |
 | Speicher | `regelung` (Zuteilung je Einheit) | `charge_setpoint_entity`, `discharge_setpoint_entity`, optional `mode_entity` + `mode_charge/discharge_option` | `number.set_value` (+ `select_option`) |
-| E-Auto | nur Zwangsladung | `current_entity`, `switch_entity` (Rolle „Modulierbare Last") | `number.set_value` + on/off |
+| E-Auto / mod. Last | `ev_regelung` (Sollstrom je Last) | `current_entity`, `switch_entity` (Rolle „Modulierbare Last") | `number.set_value` + on/off |
+| Schaltbare Last | `schaltbare` (an/aus) | `switch_entity` (Rolle „Schaltbare Last") | on/off |
 
-Zwei Einschränkungen für das Scharfschalten:
+Im Auto-Modus stellt HEMS den **PV-Überschuss-Ladestrom** der Wallbox selbst: der
+Lasten-Regler (`strategies/loads.py`) bestimmt je modulierbarer Last den
+Sollstrom aus dem Überschuss, der Actuator schreibt ihn auf `current_entity` und
+schaltet `switch_entity`. Die Zwangsladung (`switch.hems_e_auto_zwangsladung`)
+überschreibt das mit vollen Ampere. Fehlt Saldo- oder Leistungsmessung, gibt der
+Regler keine Empfehlung ab und lässt die Last unangetastet (Fail-safe).
+
+Eine Einschränkung für das Scharfschalten:
 
 1. **Warmwasser-Nacht-Aus braucht das Sperrfenster.** HEMS meldet WW nur während
    des konfigurierten Sperrfensters (`block_start`/`block_end`) als „aus", sonst
    „basis" (Grundtemperatur). Ohne gesetztes Fenster hält der Auto-Modus WW rund
    um die Uhr an. Das Sperrfenster ist eine feste Uhrzeit, kann die saisonale
    Tag/Nacht-Umschaltung der alten Automation also nur annähern.
-2. **E-Auto: nur Zwangsladung.** HEMS modelliert (noch) keinen Überschuss-
-   Ladestrom. Im Auto-Modus wird nur die Zwangsladung
-   (`switch.hems_e_auto_zwangsladung`) auf `current_entity`/`switch_entity`
-   geschaltet; das PV-Überschussladen bleibt bei der bestehenden Automation.
-   → E-Auto-Automationen vorerst aktiv lassen.
 
 ## Config-Sanity-Check
 
