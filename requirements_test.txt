@@ -1,0 +1,5 @@
+# Test-Abhängigkeiten der reinen Planner-Logik (HA-frei, siehe tests/conftest.py).
+# Bewusst ohne Home Assistant / pytest-homeassistant-custom-component: die
+# Regel-Logik ist HA-frei testbar, und HA unterstützt die hier genutzte
+# Python-Version nicht zwingend.
+pytest>=8,<10
