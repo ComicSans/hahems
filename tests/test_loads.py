@@ -62,3 +62,39 @@ def test_zwangsladung_volle_ampere():
     assert ev.zwang is True
     assert ev.lasten[0].laden is True
     assert ev.lasten[0].strom_a == wb.max_a
+
+
+def test_wallbox_haelt_mindestpause_nach_abschalten():
+    # Gerade abgeschaltet (aus_seit_s 60 s < min_off 10 min): trotz reichlich
+    # Überschuss bleibt die Wallbox aus — Schützschutz gegen zu häufiges Takten.
+    wb = load(
+        "WB", power_w=0.0, ist_an=False, aus_seit_s=60.0, min_off_min=10,
+    )
+    r = P.compute_plan(
+        plan_input(socs=[60, 60, 60], saldo_w=-8000, modulateds=[wb], wallbox_w=0.0)
+    )
+    assert r.ev_regelung.lasten[0].laden is False
+    assert r.ev_regelung.soll_summe_w == 0
+
+
+def test_wallbox_startet_nach_abgelaufener_mindestpause():
+    # Pause vorbei (aus_seit_s 700 s > min_off 10 min = 600 s): darf wieder an.
+    wb = load(
+        "WB", power_w=0.0, ist_an=False, aus_seit_s=700.0, min_off_min=10,
+    )
+    r = P.compute_plan(
+        plan_input(socs=[60, 60, 60], saldo_w=-8000, modulateds=[wb], wallbox_w=0.0)
+    )
+    assert r.ev_regelung.lasten[0].laden is True
+
+
+def test_wallbox_ohne_schalter_hat_keine_mindestpause():
+    # Ohne Schalter füllt der Coordinator aus_seit_s nicht (None) — die
+    # Pausen-Sperre greift nicht, die Last folgt allein dem Überschuss.
+    wb = load(
+        "WB", power_w=0.0, ist_an=False, aus_seit_s=None, min_off_min=10,
+    )
+    r = P.compute_plan(
+        plan_input(socs=[60, 60, 60], saldo_w=-8000, modulateds=[wb], wallbox_w=0.0)
+    )
+    assert r.ev_regelung.lasten[0].laden is True

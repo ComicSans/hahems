@@ -168,6 +168,7 @@ class ModulatedLoad:
     max_a: float = 16
     phases: int = 3
     min_on_min: int = 10
+    min_off_min: int = 10
     priority: int = 1
 
 

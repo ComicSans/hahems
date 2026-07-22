@@ -133,6 +133,7 @@
           "max_a": "Maximalstrom (A)",
           "phases": "Phasen",
           "min_on_min": "Mindestlaufzeit (min)",
+          "min_off_min": "Mindestpause (min)",
           "priority": "Priorität"
         },
         "data_description": {
@@ -357,6 +358,7 @@
           "max_a": "Maximalstrom (A)",
           "phases": "Phasen",
           "min_on_min": "Mindestlaufzeit (min)",
+          "min_off_min": "Mindestpause (min)",
           "priority": "Priorität"
         },
         "data_description": {
@@ -478,6 +480,7 @@
           "max_a": "Maximalstrom (A)",
           "phases": "Phasen",
           "min_on_min": "Mindestlaufzeit (min)",
+          "min_off_min": "Mindestpause (min)",
           "priority": "Priorität"
         },
         "data_description": {

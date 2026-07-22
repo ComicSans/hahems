@@ -118,6 +118,16 @@ def _modulated_control(
             and m.an_seit_s < m.min_on_min * 60
         )
 
+    def _locked_off(m: ModulatedState) -> bool:
+        """Innerhalb der Mindestpause aus (Schützschutz, darf nicht sofort wieder
+        an). Greift nur mit Schalter — ohne schaltet HEMS die Last nicht, dann
+        bleibt aus_seit_s None."""
+        return (
+            not m.ist_an
+            and m.aus_seit_s is not None
+            and m.aus_seit_s < m.min_off_min * 60
+        )
+
     def _rotation_credit(m: ModulatedState) -> float:
         """Energie (kWh), die m in einer Mindestlaufzeit bei Mindestleistung
         sammelt — Hysterese, damit eine laufende Last erst weicht, wenn eine
@@ -151,6 +161,12 @@ def _modulated_control(
             # An, aber leer und Mindestlaufzeit vorbei → abschalten, Slot frei
             # für eine nachfragende Last.
             if m.ist_an and not _locked_on(m) and not _demanding(m):
+                continue
+            # Mindestpause nach dem Abschalten: eine gerade abgeschaltete Last
+            # bleibt aus, bis die Pause abgelaufen ist — auch wenn wieder
+            # Überschuss anliegt (Schützschutz gegen zu häufiges Takten). Der
+            # frei bleibende Überschuss geht solange in den Akku.
+            if _locked_off(m):
                 continue
             # Schmitt-Band: an-Last hält bis min_w−Marge, aus-Last startet erst
             # ab min_w+Marge. Ein min_on-Lock zwingt ohnehin an (Taktschutz).

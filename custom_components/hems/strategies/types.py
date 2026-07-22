@@ -96,11 +96,13 @@ class ModulatedState:
     max_a: float = 16.0
     priority: int = 1
     min_on_min: int = 10
+    min_off_min: int = 10
     hat_schalter: bool = True
     power_w: float | None = None
     energie_heute_kwh: float = 0.0
     ist_an: bool = False
     an_seit_s: float | None = None
+    aus_seit_s: float | None = None
     nachfrage: bool = False
     # Vom Coordinator gesetzt: an, aber nach der Anlaufzeit ohne nennenswerte
     # Leistung (kein/volles Auto) — wird in der Rotationsrangfolge nach hinten

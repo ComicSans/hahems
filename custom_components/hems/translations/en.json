@@ -133,6 +133,7 @@
           "max_a": "Maximum current (A)",
           "phases": "Phases",
           "min_on_min": "Minimum runtime (min)",
+          "min_off_min": "Minimum pause (min)",
           "priority": "Priority"
         },
         "data_description": {
@@ -357,6 +358,7 @@
           "max_a": "Maximum current (A)",
           "phases": "Phases",
           "min_on_min": "Minimum runtime (min)",
+          "min_off_min": "Minimum pause (min)",
           "priority": "Priority"
         },
         "data_description": {
@@ -478,6 +480,7 @@
           "max_a": "Maximum current (A)",
           "phases": "Phases",
           "min_on_min": "Minimum runtime (min)",
+          "min_off_min": "Minimum pause (min)",
           "priority": "Priority"
         },
         "data_description": {

@@ -59,6 +59,9 @@ def load(
     energie_heute_kwh: float = 0.0,
     ist_an: bool = False,
     an_seit_s: float | None = None,
+    aus_seit_s: float | None = None,
+    min_on_min: int = 10,
+    min_off_min: int = 10,
     nachfrage: bool = False,
     leer: bool = False,
 ) -> P.ModulatedState:
@@ -69,10 +72,13 @@ def load(
         max_a=max_a,
         phases=phases,
         priority=priority,
+        min_on_min=min_on_min,
+        min_off_min=min_off_min,
         power_w=power_w,
         energie_heute_kwh=energie_heute_kwh,
         ist_an=ist_an,
         an_seit_s=an_seit_s,
+        aus_seit_s=aus_seit_s,
         nachfrage=nachfrage,
         leer=leer,
     )

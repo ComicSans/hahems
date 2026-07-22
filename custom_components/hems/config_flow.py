@@ -250,6 +250,7 @@ MODULATED_SCHEMA = vol.Schema(
         vol.Required("max_a", default=16): _number(1, 32, "A"),
         vol.Required("phases", default=3): _number(1, 3, ""),
         vol.Required("min_on_min", default=10): _number(0, 240, "min"),
+        vol.Required("min_off_min", default=10): _number(0, 240, "min"),
         vol.Required("priority", default=1): _number(1, 10, ""),
     }
 )

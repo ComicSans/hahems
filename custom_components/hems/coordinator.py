@@ -370,11 +370,18 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     if s is not None and ist_an
                     else None
                 )
+                aus_seit_s = (
+                    (now - s.last_changed).total_seconds()
+                    if s is not None and not ist_an
+                    else None
+                )
             else:
                 # Ohne Schalter gibt es keinen von HEMS geschützten Schütz; die
-                # Last gilt als an, sobald sie Leistung zieht (keine min_on-Sperre).
+                # Last gilt als an, sobald sie Leistung zieht (keine min_on-/
+                # min_off-Sperre, da HEMS sie nicht schaltet).
                 ist_an = bool(power and power > 0)
                 an_seit_s = None
+                aus_seit_s = None
             nachfrage = bool(power is not None and power > EV_DEMAND_FLOOR_W)
 
             # Leer-Cooldown: an und nach der Anlaufzeit ohne nennenswerte
@@ -410,11 +417,13 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     max_a=m.max_a,
                     priority=m.priority,
                     min_on_min=m.min_on_min,
+                    min_off_min=m.min_off_min,
                     hat_schalter=bool(m.switch_entity),
                     power_w=power,
                     energie_heute_kwh=round(self._mod_energy_kwh.get(key, 0.0), 3),
                     ist_an=ist_an,
                     an_seit_s=an_seit_s,
+                    aus_seit_s=aus_seit_s,
                     nachfrage=nachfrage,
                     leer=leer,
                 )
