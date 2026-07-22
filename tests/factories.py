@@ -142,6 +142,9 @@ def plan_input(
     thermal_legionella_windows: list[tuple[datetime, datetime]] | None = None,
     thermal_legionella_target: float = 60.0,
     heating_state: P.HeatingState | None = None,
+    wp_model: P.WpModel | None = None,
+    load_profile_w: dict[tuple[int, int], float] | None = None,
+    temp_forecast_c: dict[datetime, float] | None = None,
 ) -> P.PlanInput:
     if storage_states is None:
         storage_states = storages(socs if socs is not None else [60, 60, 60])
@@ -176,6 +179,9 @@ def plan_input(
         weather_factor_tomorrow=weather_factor_tomorrow,
         modulateds=modulateds if modulateds is not None else [],
         heating=heating_state,
+        wp_model=wp_model,
+        load_profile_w=load_profile_w,
+        temp_forecast_c=temp_forecast_c,
         horizon_start=now.replace(hour=0, minute=0),
         horizon_end=(now + timedelta(days=1)).replace(hour=0, minute=0),
         today_sunrise=sunrise,
