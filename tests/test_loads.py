@@ -25,12 +25,18 @@ def test_zu_kleiner_ueberschuss_startet_wallbox_nicht():
     assert r.ev_regelung.soll_summe_w == 0
 
 
-def test_wallbox_laedt_und_akku_bekommt_residuum():
-    # WB zieht 4200 W, Überschuss vor Akku 6200 W. WB bekommt den Löwenanteil,
-    # der Akku regelt auf das kleine Residuum.
+def test_wallbox_laedt_und_akku_bekommt_residuum_ev_first():
+    # ev_first (altes Verhalten): WB zieht 4200 W, Überschuss vor Akku 6200 W,
+    # WB bekommt den Löwenanteil, der Akku regelt auf das kleine Residuum.
     wb = load("WB", power_w=4200.0, ist_an=True, an_seit_s=1200, nachfrage=True)
     r = P.compute_plan(
-        plan_input(socs=[60, 60, 60], saldo_w=-2000, modulateds=[wb], wallbox_w=4200.0)
+        plan_input(
+            socs=[60, 60, 60],
+            saldo_w=-2000,
+            modulateds=[wb],
+            wallbox_w=4200.0,
+            priority_mode="ev_first",
+        )
     )
     ev = r.ev_regelung
     assert ev.ueberschuss_w == 6200

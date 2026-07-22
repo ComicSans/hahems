@@ -35,7 +35,9 @@ def _ampere(watt: float, m: ModulatedState) -> float:
     return float(max(m.min_a, min(math.floor(watt / volt), m.max_a)))
 
 
-def _modulated_control(inp: PlanInput, res: PlanResult) -> EvControlResult | None:
+def _modulated_control(
+    inp: PlanInput, res: PlanResult, lade_reservierung: float = 0.0
+) -> EvControlResult | None:
     """Modulierbare Lasten (Wallboxen) am Überschuss VOR dem Akku führen —
     HEMS besitzt den Ladestrom.
 
@@ -88,6 +90,14 @@ def _modulated_control(inp: PlanInput, res: PlanResult) -> EvControlResult | Non
     # Überschuss vor dem Akku: Ist-Last aller Wallboxen und Akkuleistung heraus-
     # rechnen. Bewusst ohne Regel-Offset (der gilt nur der Akku-Ruhelage).
     avail_w = -(inp.saldo_w - mess_summe + bat_ist)
+    # Akku-Ladevorrang (coordination): den reservierten Überschuss abziehen,
+    # damit der Speicher-Regler ihn über sein Saldo-Residuum bekommt. Aber nur
+    # den Teil OBERHALB der Minima bereits laufender Lasten — ein ladendes Auto
+    # behält sein Minimum und wird nie abgeregelt.
+    if lade_reservierung > 0:
+        laufende_minima = sum(m.min_w for m in loads if m.ist_an)
+        reservierbar = max(0.0, avail_w - laufende_minima)
+        avail_w -= min(lade_reservierung, reservierbar)
     margin = EV_SURPLUS_MARGIN_W
 
     def _demanding(m: ModulatedState) -> bool:

@@ -210,15 +210,38 @@ Aus Netzsaldo und gemessener Speicherleistung berechnet der Planner eine
 Regel-Empfehlung je Speicher (`sensor.hems_speicher_regelung`):
 Proportionalregler mit Priorität "Bezug minimieren" — schnell gegen teuren
 Netzbezug, gemächlich beim Laden, Sollwert leicht in die Einspeisung
-verschoben, Totband gegen Dauerkorrekturen. Entladen wird proportional zur
-verfügbaren Energie oberhalb der Reserve verteilt, Laden proportional zur
-freien Kapazität. Speicher ohne SoC-Wert fallen aus der Zuteilung.
+verschoben, Totband gegen Dauerkorrekturen. **Laden** verteilt parallel
+proportional zur freien Kapazität — mehrere Akkus laden gleichzeitig (niedrigere
+C-Rate je Akku, SoC-Ausgleich), außer der Überschuss reicht nur für weniger
+Einheiten über dem Mindest-Setpoint (dann Rückfall auf die leersten zuerst).
+**Entladen** wird greedy zugeteilt (ein Akku zur Zeit, mit Auswahl-Hysterese
+gegen Umschaltverschleiß). Speicher ohne SoC-Wert fallen aus der Zuteilung.
 
 Ein als **Kaltreserve** markierter Speicher entlädt erst mit, wenn der
 mittlere SoC der übrigen unter 40 % fällt, und scheidet oberhalb von 45 %
 wieder aus (Hysterese); geladen wird er immer mit. Im Modus `beobachten` wird
 die Empfehlung nur angezeigt; im Modus `auto` schreibt HEMS die Zuteilung auf
 die Lade-/Entlade-Sollwerte der Speicher (siehe [Auto-Modus](#auto-modus-aktuierung)).
+
+### Ladevorrang Akku ↔ Wallbox
+
+Bei PV-Überschuss teilt HEMS die Ladehoheit nach dem Prioritätsmodus
+(`priority_mode` aus der Einrichtung) auf:
+
+- **ev_first**: die Wallbox bedient sich zuerst am Überschuss, der Akku bekommt
+  den Rest.
+- **battery_first**: der Akku bekommt die Oberhand auf den Überschuss **oberhalb
+  des Wallbox-Minimums**. Ein bereits ladendes Auto behält sein Minimum (wird
+  nie abgeregelt), zusätzlicher Überschuss geht aber zuerst in den Akku. Ist der
+  Akku am Tagesdeckel (~78 %), reserviert er nichts mehr und die Wallbox bekommt
+  den vollen Überschuss.
+- **auto**: bei knappem Tagesertrag (`knapp`) wie battery_first, sonst wie
+  ev_first — dieselbe Logik, nach der die Empfehlung schon den Akku vor das Auto
+  stellt.
+
+Umgesetzt in `strategies/coordination.py`: der reservierte Überschuss wird dem
+Lasten-Regler vorenthalten; den Rest holt sich die Speicher-Regelung über ihr
+normales Saldo-Residuum. Die Regelmathematik beider Regler bleibt unverändert.
 
 ## Optimierungsziel
 

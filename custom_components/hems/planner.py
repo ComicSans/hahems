@@ -20,6 +20,7 @@ from .const import (
     PRIORITY_EV_FIRST,
     STORAGE_DAY_HOLD_SOC,
 )
+from .strategies import coordination
 from .strategies.battery import _lade_deckel_soc, _storage_control
 from .strategies.demand import _profile_covers, _window_load_kwh, _wp_window_kwh
 from .strategies.forecast import _discharge_plan, _pv_curve, _soc_forecast
@@ -284,8 +285,11 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     # Modulierbare Lasten zuerst: Überschuss-Ladeströme bestimmen. Die
     # Reihenfolge ist bewusst — der Speicher-Regler bekommt anschließend den um
     # die neuen Last-Sollwerte bereinigten Saldo, damit die Lasten vor der
-    # Akku-Entladung heruntergeregelt werden.
-    result.ev_regelung = _modulated_control(inp, result)
+    # Akku-Entladung heruntergeregelt werden. Bei Akku-Ladevorrang (priority_mode)
+    # reserviert der Akku vorab einen Teil des Überschusses (coordination), den
+    # der Lasten-Regler dann nicht mehr sieht.
+    lade_reservierung = coordination.akku_ladereservierung(inp, result)
+    result.ev_regelung = _modulated_control(inp, result, lade_reservierung)
     # Für die Empfehlungs-Zeile: lädt mindestens eine Last?
     result.flags.ev_bereit = bool(
         result.ev_regelung
