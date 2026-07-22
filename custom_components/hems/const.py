@@ -108,6 +108,22 @@ CONTROL_ZERO_FEEDIN_OFFSET_W = 100.0
 RESERVE_SOC_ON = 40.0
 RESERVE_SOC_OFF = 45.0
 
+# Speicher-Auswahl-Hysterese ("erst einen Akku nutzen, dann den nächsten").
+# Die Zuteilung bündelt greedy auf den Speicher mit der meisten verfügbaren
+# Energie (bzw. freien Kapazität beim Laden). Bei fast gleichem SoC rotiert die
+# Führung sonst jeden Zyklus, weil der arbeitende Speicher minimal unter die
+# anderen fällt — jede Umschaltung ist eine kurze Leistungslücke (Netz-Spike)
+# und ein Schaltvorgang, der die Akku-Elektronik verschleißt. LEAD_HYST_SOC ist
+# der SoC-Vorsprung (in Prozentpunkten), den der aktuell arbeitende Speicher in
+# der Rangfolge behält, bevor ein voller Speicher übernimmt: der Bonus
+# verschiebt NUR die Reihenfolge, nie die Teilnahme-Schranke (Reserve-Grenze,
+# Kaltreserve-Ausschluss bleiben unberührt). Größer = weniger Wechsel, aber ein
+# Speicher altert etwas ungleicher; ~12 % ≈ ein Wechsel je 12 % Entladung.
+# LEAD_POWER_W ist die |Leistung|, ab der ein Speicher als "arbeitend" gilt
+# (über dem Mess-/Standby-Rauschen, unter dem kleinsten Setpoint von 60 W).
+CONTROL_LEAD_HYST_SOC = 12.0
+CONTROL_LEAD_POWER_W = 30.0
+
 # Heizkreis: Modus-Schwellen (Außentemperatur, mit Hysterese), Sommersperre
 # fürs Heizen und witterungsgeführte Vorlaufkurve. Die Wärmeanforderung der
 # Räume (0–100 %) hebt die Kurve um bis zu HEATING_DEMAND_SHIFT_K an; ohne

@@ -14,6 +14,8 @@ from .const import (
     CONTROL_GAIN_CHARGE,
     CONTROL_GAIN_DISCHARGE,
     CONTROL_GAIN_FACTORS,
+    CONTROL_LEAD_HYST_SOC,
+    CONTROL_LEAD_POWER_W,
     CONTROL_MIN_SETPOINT_W,
     CONTROL_TARGET_OFFSET_W,
     CONTROL_ZERO_FEEDIN_OFFSET_W,
@@ -1255,10 +1257,34 @@ def _storage_control(
         Akku ins Netz laufen ließe). Das Bündeln gleicht zugleich die SoCs an
         (leerste/vollste Einheit zuerst). Ein Rest unter dem Mindest-Setpoint
         bleibt ungestellt — konservativ: nie mehr kommandieren als der bereits
-        gain-/offset-gedämpfte Zielwert hergibt, damit kein Netzbezug entsteht."""
+        gain-/offset-gedämpfte Zielwert hergibt, damit kein Netzbezug entsteht.
+
+        Auswahl-Hysterese: Der aktuell arbeitende Speicher (gemessene Leistung in
+        Zuteilungsrichtung über LEAD_POWER_W) behält in der Rangfolge einen
+        SoC-Vorsprung von LEAD_HYST_SOC, damit die Führung nicht bei jedem
+        minimalen SoC-Crossover rotiert — jede Umschaltung ist eine kurze
+        Leistungslücke (Netz-Spike) und ein Schaltvorgang, der die Akku-
+        Elektronik verschleißt. Der Bonus verschiebt NUR die Reihenfolge; die
+        Teilnahme-Schranke unten prüft weiter den rohen `anteil`, sodass
+        Reserve-Grenze und Kaltreserve-Ausschluss unberührt bleiben. Reicht ein
+        Speicher nicht (soll > seine Grenze), füllt die Schleife den nächsten
+        weiterhin auf — der Bonus ordnet nur um, und die Reihenfolge ist
+        belanglos, sobald ohnehin alle gebraucht werden."""
+
+        def _rang(paar: tuple[StorageState, float]) -> float:
+            s, anteil = paar
+            p = s.power_w or 0.0
+            arbeitet = (p < -CONTROL_LEAD_POWER_W) if laden else (p > CONTROL_LEAD_POWER_W)
+            bonus = (
+                CONTROL_LEAD_HYST_SOC / 100.0 * s.capacity_kwh
+                if arbeitet and anteil > 0
+                else 0.0
+            )
+            return anteil + bonus
+
         rest = gesamt
         watts: dict[str, float] = {}
-        for s, anteil in sorted(anteile, key=lambda p: p[1], reverse=True):
+        for s, anteil in sorted(anteile, key=_rang, reverse=True):
             grenze = s.max_charge_w if laden else s.max_discharge_w
             watt = min(rest, grenze)
             if anteil <= 0 or watt < CONTROL_MIN_SETPOINT_W:
