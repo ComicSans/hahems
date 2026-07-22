@@ -134,6 +134,26 @@ def _storage_control(
     max_lad = sum(s.max_charge_w for s in known)
     soll = max(-max_lad, min(bat_ist + fehler * gain, max_ent))
 
+    # Asymmetrie gegen Laden-in-den-Netzbezug: Die Wallbox-Herausrechnung oben
+    # soll den Akku nur davon abhalten, FÜR die Wallbox zu ENTLADEN — sie darf
+    # ihn aber nicht gegen echten Netzbezug WEITERLADEN lassen. Regelt HEMS die
+    # Wallbox herunter (dann inp.saldo_w > saldo_w), unterstellt der bereinigte
+    # Saldo, ihre Last sei schon weg; folgt das Auto erst im nächsten Zyklus
+    # (Totzeit) oder hängt es an seinem Mindeststrom, lädt der Akku sonst in den
+    # Bezug hinein (bis hin zu halluzinierter Einspeisung, wenn der bereinigte
+    # Saldo ins Minus kippt). Beim Laden (soll < 0) daher zusätzlich den ECHTEN
+    # Saldo prüfen — über denselben Gain geglättet — und die Ladung höchstens
+    # bis zur Ruhelage zurücknehmen. Der Entlade-Zweig (soll > 0) bleibt der
+    # wallbox-bereinigten Logik überlassen (kein Entladen für die Wallbox).
+    if soll < 0 and inp.saldo_w > saldo_w:
+        fehler_roh = inp.saldo_w + offset
+        gain_roh = min(
+            1.0,
+            (CONTROL_GAIN_DISCHARGE if fehler_roh > 0 else CONTROL_GAIN_CHARGE)
+            * faktor,
+        )
+        soll = max(-max_lad, min(0.0, max(soll, bat_ist + fehler_roh * gain_roh)))
+
     ctrl = ControlResult(
         modus="pausiert",
         fehler_w=round(fehler, 0),

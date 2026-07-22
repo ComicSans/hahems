@@ -116,3 +116,40 @@ def test_koordination_konvergiert_ueber_zyklen():
     bat_span = max(t[1] for t in tail) - min(t[1] for t in tail)
     assert ev_span < 50, f"EV pendelt: {tail}"
     assert bat_span < 50, f"Akku pendelt: {tail}"
+
+
+def test_akku_laedt_nicht_gegen_netzbezug_wenn_wallbox_gedrosselt_wird():
+    """Regression (aus Live-Daten, 07:53): echter Netzbezug ~1,5 kW, das Auto
+    zieht real ~1,8 kW, aber der Überschuss reicht nicht für das 6-A-Minimum —
+    HEMS regelt die Wallbox auf 0. Der wallbox-bereinigte Saldo kippt dann in
+    eine (halluzinierte) Einspeisung; ohne die Lade-Asymmetrie lädt der Akku
+    dagegen und verstärkt den Bezug. Erwartung: der Akku lädt NICHT."""
+    wb = load(
+        "WB", min_a=6, max_a=16, phases=1, power_w=1841.0,
+        ist_an=True, an_seit_s=3600.0, nachfrage=True,
+    )
+    r = P.compute_plan(
+        plan_input(
+            storage_states=[storage(f"L{i+1}", 60.0, power_w=-25.0) for i in range(3)],
+            saldo_w=1573.0,
+            wallbox_w=1841.0,
+            modulateds=[wb],
+            priority_mode="auto",
+            gain_level="max",
+        )
+    )
+    # Die Wallbox wird wegen zu kleinem Überschuss heruntergeregelt ...
+    assert r.ev_regelung.soll_summe_w < 1841
+    # ... und der Akku lädt trotz bereinigter „Einspeisung" nicht gegen den
+    # echten Netzbezug (ohne die Asymmetrie lädt er hier ~256 W).
+    assert r.regelung.modus != "laden"
+    assert r.regelung.soll_w >= 0
+    assert all(z.watt == 0 for z in r.regelung.zuteilung)
+
+
+def test_lade_asymmetrie_ist_noop_ohne_wallbox():
+    """Ohne Wallbox-Herausrechnung (inp.saldo_w == saldo_w) greift die
+    Asymmetrie nicht — bei Netzbezug entlädt der Regler unverändert normal."""
+    r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=1500.0))
+    assert r.regelung.modus == "entladen"
+    assert sum(zuteilung(r).values()) > 0
