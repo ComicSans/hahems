@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from hems import planner as P
 from hems.const import GAIN_NORMAL, GOAL_SELF_CONSUMPTION
+from hems.strategies import types as P
 
 UTC = timezone.utc
 

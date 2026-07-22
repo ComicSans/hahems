@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from factories import plan_input
 from hems import planner as P
+from hems.strategies.types import PlanFlags
 
 
 def test_plan_grundfelder():
@@ -19,7 +20,7 @@ def test_plan_grundfelder():
 def test_flags_werden_fortgeschrieben():
     r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=-1500))
     # PlanFlags-Objekt im Ergebnis, unabhängig vom Eingabe-Objekt.
-    assert isinstance(r.flags, P.PlanFlags)
+    assert isinstance(r.flags, PlanFlags)
 
 
 def test_leere_speicher_liste_kein_absturz():

@@ -48,7 +48,8 @@ from .actuator import Actuator
 from .changelog import ChangeLog, decision_snapshot, diff_snapshots
 from .config_check import ConfigCheck, check_config
 from .models import DeviceRegistry, parse_devices
-from .planner import (
+from .planner import block_windows, compute_plan, weekly_windows
+from .strategies.types import (
     HeatingState,
     ModulatedState,
     PlanFlags,
@@ -56,9 +57,6 @@ from .planner import (
     PlanResult,
     StorageState,
     WpModel,
-    block_windows,
-    compute_plan,
-    weekly_windows,
 )
 
 _LOGGER = logging.getLogger(__name__)

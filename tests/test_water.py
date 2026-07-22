@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from factories import NOON, plan_input
 from hems import planner as P
+from hems.strategies.types import PlanResult
 
 
-def _ww(**kw) -> P.PlanResult:
+def _ww(**kw) -> PlanResult:
     return P.compute_plan(plan_input(**kw))
 
 

@@ -21,7 +21,7 @@ from datetime import timedelta
 from homeassistant.core import HomeAssistant
 
 from .models import DeviceRegistry
-from .planner import PlanResult
+from .strategies.types import PlanResult
 
 _LOGGER = logging.getLogger(__name__)
 

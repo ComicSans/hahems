@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from factories import heating, plan_input
 from hems import planner as P
+from hems.strategies.types import HeatingResult
 
 
-def _hz(**kw) -> P.HeatingResult:
+def _hz(**kw) -> HeatingResult:
     return P.compute_plan(plan_input(thermal_present=False, **kw)).heizung
 
 
