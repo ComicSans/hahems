@@ -1,0 +1,33 @@
+name: Release
+
+# HACS installiert diese Integration ordner-basiert (kein Zip-Asset nötig):
+# es genügt ein GitHub-Release, dessen Tag der Version in manifest.json
+# entspricht. Dieser Workflow ist der Wächter dagegen, dass beides auseinander-
+# läuft — er schlägt fehl, wenn Tag und manifest.json-Version nicht passen.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Zu prüfender Tag, z. B. v1.0.0"
+        required: true
+
+jobs:
+  verify-version:
+    name: Tag == manifest.json version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Versionen vergleichen
+        run: |
+          tag="${{ github.event.release.tag_name || github.event.inputs.tag }}"
+          tag="${tag#v}"
+          manifest=$(python3 -c "import json; print(json.load(open('custom_components/hems/manifest.json'))['version'])")
+          echo "Release-Tag: $tag"
+          echo "manifest.json: $manifest"
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::Release-Tag ($tag) weicht von manifest.json ($manifest) ab. Bitte manifest.json bumpen, committen und neu taggen."
+            exit 1
+          fi
+          echo "OK — Version stimmt überein."

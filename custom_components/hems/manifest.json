@@ -1,14 +1,14 @@
 {
   "domain": "hems",
   "name": "HEMS",
-  "codeowners": [],
+  "after_dependencies": ["recorder"],
+  "codeowners": ["@ComicSans"],
   "config_flow": true,
   "dependencies": ["sun", "http", "frontend", "panel_custom", "websocket_api"],
-  "after_dependencies": ["recorder"],
   "documentation": "https://github.com/ComicSans/hahems",
   "integration_type": "hub",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/ComicSans/hahems/issues",
   "requirements": [],
-  "version": "0.9.0"
+  "version": "1.0.0"
 }

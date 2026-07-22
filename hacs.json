@@ -1,4 +1,5 @@
 {
   "name": "HEMS",
-  "homeassistant": "2024.12.0"
+  "homeassistant": "2024.12.0",
+  "render_readme": true
 }
