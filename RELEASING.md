@@ -32,19 +32,22 @@ Die Quelldatei ist [`assets/icon.svg`](assets/icon.svg); daraus abgeleitet:
 - `assets/icon.png` — 256×256, randlos getrimmt
 - `assets/icon@2x.png` — 512×512
 
-Damit das Icon in der Home-Assistant-Oberfläche (Integrationsseite, HACS)
-erscheint, müssen die PNGs ins offizielle
-[home-assistant/brands](https://github.com/home-assistant/brands)-Repo. Die
-fertige Ordnerstruktur liegt unter [`brands/`](brands/) bereit:
+Die PNGs liegen zusätzlich unter
+[`custom_components/hems/brand/`](custom_components/hems/brand/) —
+HACS nutzt diesen lokalen Ort als Brand-Fallback, sodass das Icon **ohne**
+externen PR sofort in HACS erscheint:
 
 ```
-brands/custom_integrations/hems/icon.png      (256×256)
-brands/custom_integrations/hems/icon@2x.png   (512×512)
+custom_components/hems/brand/icon.png      (256×256)
+custom_components/hems/brand/icon@2x.png   (512×512)
 ```
 
-PR-Ablauf: `home-assistant/brands` forken, den Inhalt von `brands/` ins
-Fork-Root kopieren (Zielpfad `custom_integrations/hems/…`) und einen PR öffnen.
-Nach dem Merge lädt Home Assistant das Icon automatisch über die Domain `hems`.
+Damit das Icon auch außerhalb von HACS (native Integrationsseite von Home
+Assistant) erscheint, gehören die PNGs zusätzlich ins offizielle
+[home-assistant/brands](https://github.com/home-assistant/brands)-Repo:
+`home-assistant/brands` forken, die beiden PNGs nach
+`custom_integrations/hems/icon.png` bzw. `…/icon@2x.png` legen und einen PR
+öffnen. Nach dem Merge lädt Home Assistant das Icon über die Domain `hems`.
 
 ### Icon neu rendern
 
