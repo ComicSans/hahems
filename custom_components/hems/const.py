@@ -124,6 +124,19 @@ RESERVE_SOC_OFF = 45.0
 CONTROL_LEAD_HYST_SOC = 12.0
 CONTROL_LEAD_POWER_W = 30.0
 
+# Akku-Schonung: Ladedeckel über den Tag. Kalendarische Alterung ist bei hohem
+# SoC am größten — ein bei 100 % dösender Akku altert schneller als einer bei
+# ~78 %. Deshalb wird tagsüber nur bis STORAGE_DAY_HOLD_SOC geladen; erst in den
+# letzten STORAGE_FULL_CHARGE_LEAD_H vor Sonnenuntergang steigt der Deckel linear
+# auf 100 %, sodass der Speicher ~zum Sonnenuntergang voll für die Nacht ist und
+# möglichst wenig Zeit bei 100 % verbringt. Der Deckel begrenzt nur das Laden
+# (kein Zwangsentladen, wenn der SoC schon darüber liegt) und wird sofort auf
+# 100 % aufgehoben, sobald Nachtdeckung vor Schonung geht: Ziel verlangt
+# Vollladung (Nulleinspeisung/Vollladen), morgen wird es knapp, oder der
+# Restertrag heute reicht nicht mehr, um später von HOLD auf 100 % nachzuladen.
+STORAGE_DAY_HOLD_SOC = 78.0
+STORAGE_FULL_CHARGE_LEAD_H = 3.0
+
 # Heizkreis: Modus-Schwellen (Außentemperatur, mit Hysterese), Sommersperre
 # fürs Heizen und witterungsgeführte Vorlaufkurve. Die Wärmeanforderung der
 # Räume (0–100 %) hebt die Kurve um bis zu HEATING_DEMAND_SHIFT_K an; ohne

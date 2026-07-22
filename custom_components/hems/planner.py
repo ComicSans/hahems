@@ -41,6 +41,8 @@ from .const import (
     RESERVE_SOC_ON,
     SILENT_VLT_OFF_C,
     SILENT_VLT_ON_C,
+    STORAGE_DAY_HOLD_SOC,
+    STORAGE_FULL_CHARGE_LEAD_H,
 )
 
 # Hysterese-Schwellen. Jede Ja/Nein-Entscheidung des Planners hat ein Ein- und
@@ -411,6 +413,10 @@ class PlanResult:
     speicher_kapazitaet_kwh: float = 0.0
     speicher_ziel_soc: float | None = None
     speicher_bedarf_kwh: float = 0.0
+    # Ladedeckel jetzt (Akku-Schonung): SoC-Obergrenze, bis zu der die
+    # Saldo-Regelung gerade laden darf. Tagsüber < 100 %, zum Abend hin per
+    # Rampe auf 100 % — außer Nachtdeckung geht vor Schonung (dann 100 %).
+    lade_deckel_soc: float | None = None
     sonnenfenster_h: float = 0.0
     morgen_knapp: bool = False
     kapazitaet_frei: bool = False
@@ -582,18 +588,21 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     result.speicher_kapazitaet_kwh = round(cap, 2)
     known = [s for s in inp.storages if s.soc is not None]
     speicher_frei_kwh = 0.0
+    # Voll laden, wenn morgen wenig kommt ODER das Ziel es verlangt:
+    # Nulleinspeisung braucht maximale Aufnahmekapazität gegen Export,
+    # Vollladen hält das Ziel ohnehin dauerhaft auf 100 %. Getrennt vom
+    # Ladedeckel weiter unten: ziel_voll steuert das Nacht-Ziel (ziel_kwh),
+    # der Deckel nur die Tages-Ladeobergrenze.
+    ziel_voll = result.morgen_knapp or inp.goal in (
+        GOAL_ZERO_FEEDIN,
+        GOAL_FULL_CHARGE,
+    )
+    voll_noetig = ziel_voll
     if known and cap > 0:
         available = sum(s.soc / 100 * s.capacity_kwh for s in known)
         reserve = sum(s.reserve_soc / 100 * s.capacity_kwh for s in inp.storages)
         result.speicher_verfuegbar_kwh = round(available, 2)
         result.speicher_soc = round(available / cap * 100, 1)
-        # Voll laden, wenn morgen wenig kommt ODER das Ziel es verlangt:
-        # Nulleinspeisung braucht maximale Aufnahmekapazität gegen Export,
-        # Vollladen hält das Ziel ohnehin dauerhaft auf 100 %.
-        ziel_voll = result.morgen_knapp or inp.goal in (
-            GOAL_ZERO_FEEDIN,
-            GOAL_FULL_CHARGE,
-        )
         ziel_kwh = (
             cap if ziel_voll else min(cap, result.nachtdefizit_kwh + reserve)
         )
@@ -619,6 +628,19 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     result.ueberschuss_rest_kwh = round(
         max(0.0, inp.pv_remaining_kwh - expected_day_kwh), 2
     )
+
+    # Ladedeckel jetzt (Akku-Schonung): tagsüber HOLD, zum Abend per Rampe auf
+    # 100 %. Aufgehoben, sobald Nachtdeckung vor Schonung geht — Ziel/morgen
+    # knapp (ziel_voll), es ist Nacht (kein Überschuss zu erwarten), oder der
+    # Restertrag heute reicht nicht mehr, um später von HOLD auf 100 %
+    # nachzuladen (dann sofort voll laden, statt zu leer in die Nacht zu gehen).
+    if known and cap > 0:
+        topup_kwh = (100.0 - STORAGE_DAY_HOLD_SOC) / 100.0 * cap
+        heute_knapp = result.ueberschuss_rest_kwh < topup_kwh
+        voll_noetig = ziel_voll or heute_knapp or ist_nacht
+        result.lade_deckel_soc = round(
+            _lade_deckel_soc(inp, voll_noetig, inp.now), 1
+        )
 
     # Kapazität frei: Kann ein zusätzlicher Verbraucher free_kwh über free_h
     # ziehen, ohne Reserve und Nachtdeckung anzutasten? Anrechenbar sind der
@@ -706,7 +728,9 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     # SoC-Prognose ab jetzt bis zum Horizontende. Bewusst nicht rückwirkend:
     # bekannt ist nur der aktuelle Stand, alles davor wäre erfunden.
     if known and cap > 0:
-        result.soc_prognose = _soc_forecast(inp, result, available, reserve, cap)
+        result.soc_prognose = _soc_forecast(
+            inp, result, available, reserve, cap, voll_noetig
+        )
 
     result.prioritaeten = _priorities(inp, result)
     result.empfehlung = (
@@ -935,12 +959,38 @@ def _pv_power_at(curve: list[PvSlot], t: datetime) -> float:
     return 0.0
 
 
+def _lade_deckel_soc(inp: PlanInput, voll_noetig: bool, t: datetime) -> float:
+    """Zeitabhängiger Ladedeckel (SoC-%) zum Zeitpunkt t — Akku-Schonung.
+
+    Tagsüber wird nur bis STORAGE_DAY_HOLD_SOC geladen (kalendarische Alterung
+    ist bei hohem SoC am größten). Erst in den letzten STORAGE_FULL_CHARGE_LEAD_H
+    vor Sonnenuntergang steigt der Deckel linear auf 100 %, sodass der Speicher
+    ~zum Sonnenuntergang voll für die Nacht ist und möglichst wenig Zeit bei
+    100 % verbringt. `voll_noetig` (Ziel/morgen knapp/heute zu wenig Ertrag zum
+    späteren Nachladen — sowie Nacht, dann ohnehin kein Überschuss) hebt den
+    Deckel sofort auf 100 %: Nachtdeckung geht vor Schonung.
+
+    Nur eine Ladeobergrenze, kein Entladebefehl — liegt der SoC bereits über dem
+    Deckel, bleibt er stehen (die Regelung lädt ihn nur nicht weiter).
+    """
+    if voll_noetig:
+        return 100.0
+    h_bis_sonnenuntergang = (inp.sunset - t).total_seconds() / 3600
+    if h_bis_sonnenuntergang <= 0:
+        return 100.0
+    if h_bis_sonnenuntergang >= STORAGE_FULL_CHARGE_LEAD_H:
+        return STORAGE_DAY_HOLD_SOC
+    anteil = 1.0 - h_bis_sonnenuntergang / STORAGE_FULL_CHARGE_LEAD_H
+    return STORAGE_DAY_HOLD_SOC + anteil * (100.0 - STORAGE_DAY_HOLD_SOC)
+
+
 def _soc_forecast(
     inp: PlanInput,
     res: PlanResult,
     available_kwh: float,
     reserve_kwh: float,
     cap_kwh: float,
+    voll_noetig: bool = False,
 ) -> list[SocPoint]:
     """Stündlicher Vorwärtslauf des Speicherstands ab jetzt.
 
@@ -962,7 +1012,12 @@ def _soc_forecast(
         balance_w = _pv_power_at(res.pv_kurve, t) - _total_load_w(inp, t)
         if balance_w >= 0:
             charge_w = min(balance_w, max_charge_w)
-            energy = min(cap_kwh, energy + charge_w * hours / 1000)
+            # Ladedeckel mitführen (Akku-Schonung): nie über den Deckel laden,
+            # aber einen bereits höheren Stand nicht künstlich absenken.
+            deckel_kwh = max(
+                energy, _lade_deckel_soc(inp, voll_noetig, t) / 100 * cap_kwh
+            )
+            energy = min(deckel_kwh, energy + charge_w * hours / 1000)
         else:
             discharge_w = min(-balance_w, max_discharge_w)
             energy = max(reserve_kwh, energy - discharge_w * hours / 1000)
@@ -1312,9 +1367,12 @@ def _storage_control(
         ctrl.zuteilung = _verteile(anteile, soll, laden=False)
     elif soll < -CONTROL_DEADBAND_W:
         ctrl.modus = "laden"
-        # Freie Kapazität bis 100 % — wer mehr Platz hat, bekommt mehr.
+        # Freie Kapazität bis zum Ladedeckel (Akku-Schonung: tagsüber < 100 %,
+        # zum Abend voll) — wer mehr Platz hat, bekommt mehr. Speicher über dem
+        # Deckel bekommen 0 (kein Zwangsentladen; Überschuss geht ggf. ins Netz).
+        deckel = res.lade_deckel_soc if res.lade_deckel_soc is not None else 100.0
         anteile = [
-            (s, max(0.0, (100 - s.soc) / 100 * s.capacity_kwh)) for s in known
+            (s, max(0.0, (deckel - s.soc) / 100 * s.capacity_kwh)) for s in known
         ]
         ctrl.zuteilung = _verteile(anteile, -soll, laden=True)
     else:

@@ -243,6 +243,23 @@ Es wird als Attribut `ziel` an `sensor.hems_empfehlung` gespiegelt.
   eigenverbrauch. Das ist die manuelle Variante der automatischen
   Schlechtwetter-Vollladung (`morgen_knapp`).
 
+### Akku-Schonung: Ladedeckel über den Tag
+
+Unabhängig vom Ziel begrenzt ein zeitabhängiger **Ladedeckel** die Live-Ladung,
+um die Akkus zu schonen (kalendarische Alterung ist bei hohem SoC am größten).
+Tagsüber wird nur bis `STORAGE_DAY_HOLD_SOC` (Standard 78 %) geladen; erst in den
+letzten `STORAGE_FULL_CHARGE_LEAD_H` Stunden (Standard 3 h) vor Sonnenuntergang
+steigt der Deckel per Rampe auf 100 %, sodass der Speicher ~zum Sonnenuntergang
+voll für die Nacht ist und möglichst wenig Zeit bei 100 % verbringt. Der Deckel
+begrenzt nur das Laden — liegt der SoC schon darüber, wird nicht zwangsentladen.
+
+Der Deckel wird sofort auf 100 % aufgehoben, sobald Nachtdeckung vor Schonung
+geht: Ziel verlangt Vollladung (`nulleinspeisung`/`vollladen`), morgen wird es
+knapp (`morgen_knapp`), oder der erwartete Restertrag heute reicht nicht mehr,
+um später von 78 % auf 100 % nachzuladen (dann wird sofort voll geladen, statt
+zu leer in die Nacht zu gehen). Der aktuelle Deckel steht als
+`lade_deckel_soc` im Plan und begrenzt auch die SoC-Prognose der Plankarte.
+
 ## Auto-Modus (Aktuierung)
 
 `select.hems_modus` hat drei Stufen — sie trennen **denken** (Planner),
