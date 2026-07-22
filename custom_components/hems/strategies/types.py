@@ -47,6 +47,8 @@ class HeatingState:
     heat_off_c: float
     cool_on_c: float
     cool_off_c: float
+    frost_on_c: float  # Frostschutz greift ab dieser Außentemperatur (mit Hysterese)
+    frost_off_c: float  # ... und lässt erst darüber wieder los
     curve_base_c: float
     curve_slope: float
     vlt_min_c: float
@@ -237,6 +239,7 @@ class HeatingResult:
     t_aussen_c: float | None = None
     sommer_sperre: bool = False
     leise_empfohlen: bool | None = None  # Flüsterbetrieb reicht (niedriger Vorlauf)
+    frostschutz: bool = False  # Heizen nur wegen Frostschutz erzwungen (Sperre übersteuert)
 
 
 @dataclass
@@ -267,6 +270,8 @@ class PlanFlags:
     wp_heizen: bool = False
     wp_kuehlen: bool = False
     wp_leise: bool = False
+    # Frostschutz-Trigger: eigener Latch, unabhängig vom Heiz-/Sperr-Zustand.
+    wp_frost: bool = False
     # E-Auto: Überschuss reicht (mit Marge) für die Wallbox-Mindestleistung.
     # Start konservativ False, damit der erste Lauf nach einem Neustart nicht
     # sofort "E-Auto laden" meldet, ohne den Momentanüberschuss zu kennen.

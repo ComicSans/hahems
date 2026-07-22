@@ -35,6 +35,8 @@ from .const import (
     DEFAULT_CURVE_SLOPE,
     DEFAULT_FREE_H,
     DEFAULT_FREE_KWH,
+    DEFAULT_HEAT_FROST_OFF_C,
+    DEFAULT_HEAT_FROST_ON_C,
     DEFAULT_HEAT_LOCK_FROM,
     DEFAULT_HEAT_LOCK_TO,
     DEFAULT_HEAT_OFF_C,
@@ -201,6 +203,12 @@ HEATING_SCHEMA = vol.Schema(
         ),
         vol.Required("cool_off_c", default=DEFAULT_COOL_OFF_C): _number(
             10, 35, "°C", 0.5
+        ),
+        vol.Required("frost_on_c", default=DEFAULT_HEAT_FROST_ON_C): _number(
+            -10, 15, "°C", 0.5
+        ),
+        vol.Required("frost_off_c", default=DEFAULT_HEAT_FROST_OFF_C): _number(
+            -10, 15, "°C", 0.5
         ),
         vol.Required(
             "heat_lock_from_month", default=DEFAULT_HEAT_LOCK_FROM

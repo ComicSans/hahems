@@ -96,7 +96,10 @@ def decision_snapshot(mode: str, goal: str, ev_force: bool, plan: Any) -> dict:
 
     heiz = getattr(plan, "heizung", None)
     if heiz is not None:
-        snap["wp_modus"] = (heiz.modus, _WP_LABEL.get(heiz.modus, heiz.modus))
+        disp = _WP_LABEL.get(heiz.modus, heiz.modus)
+        if getattr(heiz, "frostschutz", False):
+            disp = f"{disp} (Frostschutz)"
+        snap["wp_modus"] = (heiz.modus, disp)
         if heiz.vlt_ziel_c is not None:
             vlt = round(heiz.vlt_ziel_c)
             snap["wp_vlt"] = (vlt, f"{vlt} °C")

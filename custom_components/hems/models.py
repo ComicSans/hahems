@@ -19,6 +19,8 @@ from .const import (
     DEFAULT_COOL_VLT_C,
     DEFAULT_CURVE_BASE_C,
     DEFAULT_CURVE_SLOPE,
+    DEFAULT_HEAT_FROST_OFF_C,
+    DEFAULT_HEAT_FROST_ON_C,
     DEFAULT_HEAT_LOCK_FROM,
     DEFAULT_HEAT_LOCK_TO,
     DEFAULT_HEAT_OFF_C,
@@ -133,8 +135,12 @@ class HeatingCircuit:
     heat_off_c: float = DEFAULT_HEAT_OFF_C
     cool_on_c: float = DEFAULT_COOL_ON_C
     cool_off_c: float = DEFAULT_COOL_OFF_C
-    # Sommersperre: in diesen Monaten (einschließlich) wird Heizen nie
-    # empfohlen, egal wie kalt es ist.
+    # Frostschutz-Schwellen (mit Hysterese): erzwingen Heizen bei tiefer
+    # Außentemperatur, auch während der Sommersperre.
+    frost_on_c: float = DEFAULT_HEAT_FROST_ON_C
+    frost_off_c: float = DEFAULT_HEAT_FROST_OFF_C
+    # Sommersperre: in diesen Monaten (einschließlich) wird Heizen nur noch vom
+    # Frostschutz erzwungen, sonst nie empfohlen.
     heat_lock_from_month: int = DEFAULT_HEAT_LOCK_FROM
     heat_lock_to_month: int = DEFAULT_HEAT_LOCK_TO
     curve_base_c: float = DEFAULT_CURVE_BASE_C

@@ -159,6 +159,13 @@ DEFAULT_VLT_MAX_C = 45
 DEFAULT_COOL_VLT_C = 21
 HEATING_DEMAND_SHIFT_K = 5.0
 HEATING_COLD_THRESHOLD_C = 5.0
+# Frostschutz: Fällt die Außentemperatur unter DEFAULT_HEAT_FROST_ON_C, wird
+# Heizen erzwungen — auch bei aktiver Sommersperre, gegen die es sonst kein
+# Durchgriff gibt und in deren Monaten (Mai–Sep) Spätfröste real sind. Eigene
+# Hysterese (on < off) verhindert Takten um die Schwelle. off ≤ heat_on_c,
+# damit Frost- und Regelbetrieb sich nicht überlappen.
+DEFAULT_HEAT_FROST_ON_C = 6.0
+DEFAULT_HEAT_FROST_OFF_C = 8.0
 # Flüster-Empfehlung: bei niedrigem Vorlauf-Soll reicht der leise Betrieb,
 # bei hohem braucht die Anlage volle Leistung (Hysterese dazwischen).
 SILENT_VLT_ON_C = 35

@@ -269,6 +269,7 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "vorlauf_ziel_c": d.plan.heizung.vlt_ziel_c,
             "aussentemperatur_c": d.plan.heizung.t_aussen_c,
             "sommersperre": d.plan.heizung.sommer_sperre,
+            "frostschutz": d.plan.heizung.frostschutz,
             "leise_empfohlen": d.plan.heizung.leise_empfohlen,
             # Gelerntes Verbrauchsmodell für die Bedarfsprognose
             "verbrauchsmodell": d.wp_modell,

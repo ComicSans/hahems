@@ -965,6 +965,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 heat_off_c=heating_cfg.heat_off_c,
                 cool_on_c=heating_cfg.cool_on_c,
                 cool_off_c=heating_cfg.cool_off_c,
+                frost_on_c=heating_cfg.frost_on_c,
+                frost_off_c=heating_cfg.frost_off_c,
                 curve_base_c=heating_cfg.curve_base_c,
                 curve_slope=heating_cfg.curve_slope,
                 vlt_min_c=heating_cfg.vlt_min_c,
