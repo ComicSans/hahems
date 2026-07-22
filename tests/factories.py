@@ -78,6 +78,41 @@ def load(
     )
 
 
+def heating(
+    *,
+    name: str = "HK",
+    outdoor_temp_c: float | None = 5.0,
+    demand_pct: float | None = 50.0,
+    heat_locked: bool = False,
+    heat_on_c: float = 14.0,
+    heat_off_c: float = 17.0,
+    cool_on_c: float = 25.0,
+    cool_off_c: float = 23.0,
+    curve_base_c: float = 40.0,
+    curve_slope: float = 0.8,
+    vlt_min_c: float = 28.0,
+    vlt_min_cold_c: float = 32.0,
+    vlt_max_c: float = 45.0,
+    cool_vlt_c: float = 18.0,
+) -> P.HeatingState:
+    return P.HeatingState(
+        name=name,
+        outdoor_temp_c=outdoor_temp_c,
+        demand_pct=demand_pct,
+        heat_locked=heat_locked,
+        heat_on_c=heat_on_c,
+        heat_off_c=heat_off_c,
+        cool_on_c=cool_on_c,
+        cool_off_c=cool_off_c,
+        curve_base_c=curve_base_c,
+        curve_slope=curve_slope,
+        vlt_min_c=vlt_min_c,
+        vlt_min_cold_c=vlt_min_cold_c,
+        vlt_max_c=vlt_max_c,
+        cool_vlt_c=cool_vlt_c,
+    )
+
+
 def plan_input(
     *,
     now: datetime = NOON,
@@ -98,6 +133,14 @@ def plan_input(
     wallbox_w: float | None = None,
     ev_force: bool = False,
     flags: P.PlanFlags | None = None,
+    thermal_present: bool = False,
+    thermal_temp: float | None = None,
+    thermal_base: float = 48.0,
+    thermal_comfort: float = 60.0,
+    thermal_block_windows: list[tuple[datetime, datetime]] | None = None,
+    thermal_legionella_windows: list[tuple[datetime, datetime]] | None = None,
+    thermal_legionella_target: float = 60.0,
+    heating_state: P.HeatingState | None = None,
 ) -> P.PlanInput:
     if storage_states is None:
         storage_states = storages(socs if socs is not None else [60, 60, 60])
@@ -117,16 +160,20 @@ def plan_input(
         storages=storage_states,
         night_load_w=night_load_w,
         baseline_load_w=baseline_load_w,
-        thermal_temp=None,
-        thermal_base=48,
-        thermal_comfort=60,
-        thermal_present=False,
+        thermal_temp=thermal_temp,
+        thermal_base=thermal_base,
+        thermal_comfort=thermal_comfort,
+        thermal_present=thermal_present,
+        thermal_block_windows=thermal_block_windows or [],
+        thermal_legionella_windows=thermal_legionella_windows or [],
+        thermal_legionella_target=thermal_legionella_target,
         goal=goal,
         gain_level=gain_level,
         ev_force=ev_force,
         wallbox_w=wallbox_w,
         weather_factor_tomorrow=weather_factor_tomorrow,
         modulateds=modulateds if modulateds is not None else [],
+        heating=heating_state,
         horizon_start=now.replace(hour=0, minute=0),
         horizon_end=(now + timedelta(days=1)).replace(hour=0, minute=0),
         today_sunrise=sunrise,
