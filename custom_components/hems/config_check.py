@@ -99,6 +99,9 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
                 f"{ctx}: mode_charge/discharge_option ohne Richtungs-Select — "
                 f"wirkungslos"
             )
+        _need(
+            s.soc_set_entity, ("number", "input_number"), ctx, "Ziel-SoC (soc_set)"
+        )
 
     # --- Warmwasser ---------------------------------------------------------
     for t in reg.thermals:

@@ -55,7 +55,8 @@
           "cold_reserve": "Kaltreserve",
           "mode_entity": "Richtungs-Select (optional, z. B. Zendure ac_mode)",
           "mode_charge_option": "Richtungs-Option beim Laden",
-          "mode_discharge_option": "Richtungs-Option beim Entladen"
+          "mode_discharge_option": "Richtungs-Option beim Entladen",
+          "soc_set_entity": "Ziel-SoC-Entity (soc_set, geräteseitiger Ladedeckel, optional)"
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
@@ -278,7 +279,8 @@
           "cold_reserve": "Kaltreserve",
           "mode_entity": "Richtungs-Select (optional, z. B. Zendure ac_mode)",
           "mode_charge_option": "Richtungs-Option beim Laden",
-          "mode_discharge_option": "Richtungs-Option beim Entladen"
+          "mode_discharge_option": "Richtungs-Option beim Entladen",
+          "soc_set_entity": "Ziel-SoC-Entity (soc_set, geräteseitiger Ladedeckel, optional)"
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
@@ -398,7 +400,8 @@
           "cold_reserve": "Kaltreserve",
           "mode_entity": "Richtungs-Select (optional, z. B. Zendure ac_mode)",
           "mode_charge_option": "Richtungs-Option beim Laden",
-          "mode_discharge_option": "Richtungs-Option beim Entladen"
+          "mode_discharge_option": "Richtungs-Option beim Entladen",
+          "soc_set_entity": "Ziel-SoC-Entity (soc_set, geräteseitiger Ladedeckel, optional)"
         },
         "data_description": {
           "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",

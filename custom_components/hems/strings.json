@@ -55,7 +55,8 @@
           "cold_reserve": "Cold reserve",
           "mode_entity": "Direction select (optional, e.g. Zendure ac_mode)",
           "mode_charge_option": "Direction option when charging",
-          "mode_discharge_option": "Direction option when discharging"
+          "mode_discharge_option": "Direction option when discharging",
+          "soc_set_entity": "Target SoC entity (soc_set, device-side charge cap, optional)"
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
@@ -278,7 +279,8 @@
           "cold_reserve": "Cold reserve",
           "mode_entity": "Direction select (optional, e.g. Zendure ac_mode)",
           "mode_charge_option": "Direction option when charging",
-          "mode_discharge_option": "Direction option when discharging"
+          "mode_discharge_option": "Direction option when discharging",
+          "soc_set_entity": "Target SoC entity (soc_set, device-side charge cap, optional)"
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",
@@ -398,7 +400,8 @@
           "cold_reserve": "Cold reserve",
           "mode_entity": "Direction select (optional, e.g. Zendure ac_mode)",
           "mode_charge_option": "Direction option when charging",
-          "mode_discharge_option": "Direction option when discharging"
+          "mode_discharge_option": "Direction option when discharging",
+          "soc_set_entity": "Target SoC entity (soc_set, device-side charge cap, optional)"
         },
         "data_description": {
           "charge_setpoint_entity": "Number entity HEMS can use to set the current charging power.",

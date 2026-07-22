@@ -134,6 +134,7 @@ STORAGE_SCHEMA = vol.Schema(
         vol.Optional("mode_entity"): _entity(["select", "input_select"]),
         vol.Optional("mode_charge_option"): selector.TextSelector(),
         vol.Optional("mode_discharge_option"): selector.TextSelector(),
+        vol.Optional("soc_set_entity"): _entity(["number", "input_number"]),
         vol.Required("capacity_kwh"): _number(0.1, 100, "kWh", 0.01),
         vol.Required("reserve_soc", default=DEFAULT_RESERVE_SOC): _number(0, 100, "%"),
         vol.Required("max_charge_w", default=DEFAULT_MAX_CHARGE_W): _number(

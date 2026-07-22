@@ -68,6 +68,11 @@ class Storage:
     mode_entity: str | None = None
     mode_charge_option: str | None = None
     mode_discharge_option: str | None = None
+    # Optionaler geräteseitiger Ziel-SoC (z. B. Zendure soc_set): wird jeden
+    # Zyklus auf den Ladedeckel gesetzt. Nötig für Geräte, die im Lademodus
+    # nach ihrem EIGENEN Ziel-SoC laden und den Leistungs-Setpoint (charge)
+    # dabei ignorieren — dann kappt erst der Ziel-SoC das Laden am Deckel.
+    soc_set_entity: str | None = None
     # Kaltreserve: nimmt am Entladen erst teil, wenn der mittlere SoC der
     # übrigen Speicher die Reserve-Schwelle unterschreitet (mit Hysterese).
     # Geladen wird sie immer mit, proportional zur freien Kapazität.

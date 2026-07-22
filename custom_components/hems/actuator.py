@@ -203,6 +203,14 @@ class Actuator:
             return
         alloc = {z.name: z.watt for z in ctrl.zuteilung}
         for s in reg.storages:
+            # Geräteseitigen Ladedeckel setzen (z. B. Zendure soc_set): der
+            # Planner deckelt das Laden über die Leistungs-Zuteilung (0 W über
+            # dem Deckel), aber manche Geräte laden im Lademodus nach ihrem
+            # EIGENEN Ziel-SoC weiter und ignorieren den 0-W-Setpoint. Erst der
+            # auf den Deckel gezogene Ziel-SoC stoppt sie zuverlässig. Der Deckel
+            # rampt abends selbst auf 100 % — die Nachtdeckung bleibt erhalten.
+            if s.soc_set_entity and plan.lade_deckel_soc is not None:
+                await self._set_number(s.soc_set_entity, plan.lade_deckel_soc)
             if not s.charge_setpoint_entity and not s.discharge_setpoint_entity:
                 continue
             watt = alloc.get(s.name, 0.0) or 0.0
