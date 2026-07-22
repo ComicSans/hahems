@@ -73,11 +73,18 @@ def test_max_block_erzwingt_an():
 # --- Hysterese ----------------------------------------------------------------
 def test_hysterese_laufende_last_bleibt_laenger_an():
     # Überschuss knapp unter erwartet: eine laufende Last (an) bleibt an
-    # (Schwelle erwartet-Marge), eine wartende bliebe aus (erwartet+Marge).
-    frei = 1400  # zwischen erwartet-200 und erwartet+200 (erwartet 1500)
+    # (Schwelle erwartet-Marge = 1300).
     an = switchable("An", id="a", erwartet_w=1500, ist_an=True, an_seit_s=99999, power_w=1400)
-    r = _plan([an], socs=[60, 60, 60], saldo_w=-frei)
+    r = _plan([an], socs=[60, 60, 60], saldo_w=-1400)
     assert _an(r, "An") is True
+
+
+def test_hysterese_wartende_last_bleibt_aus():
+    # Gleicher Überschuss (1600), aber eine wartende (aus) Last startet erst ab
+    # erwartet+Marge = 1700 — bleibt also aus. Belegt die andere Hysterese-Seite.
+    aus = switchable("Aus", id="b", erwartet_w=1500, ist_an=False, aus_seit_s=None)
+    r = _plan([aus], socs=[60, 60, 60], saldo_w=-1600)
+    assert _an(r, "Aus") is False
 
 
 # --- Kernanforderung: modulierbare Last drosselt vor Abschaltung --------------
