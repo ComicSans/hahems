@@ -1,34 +1,55 @@
 """Charakterisierung der Saldo-Speicherregelung (`_storage_control`).
 
-Nagelt das heutige Verhalten fest, BEVOR paralleles Laden (Schritt 2) und der
-Domänen-Refactor (Schritt 3) kommen. Die Ladeverteilung ist heute greedy
-(ein Akku voll, dann der nächste) — die betreffenden Erwartungen werden in
-Schritt 2 bewusst auf paralleles Laden umgestellt; alles andere bleibt gleich.
+Laden verteilt parallel (proportional zur freien Kapazität), Entladen greedy
+mit Auswahl-Hysterese (ein Akku zur Zeit, gegen Verschleiß).
 """
 from __future__ import annotations
 
 from factories import plan_input, storage, storages, zuteilung
 from hems import planner as P
 
+from hems.const import CONTROL_MIN_SETPOINT_W
 
-# --- Laden (heutiges greedy-Verhalten) ----------------------------------------
-def test_laden_greedy_fuellt_einen_akku_zuerst():
-    # -3000 W Überschuss, Gain 0.5 => Soll ~ -1487 W. Greedy: L1 an sein Max
-    # (1200), Rest (~288) auf L2, L3 leer.
+
+# --- Laden: parallel auf mehrere Akkus ----------------------------------------
+def test_laden_verteilt_parallel_gleichmaessig():
+    # -3000 W, Gain 0.5 => Soll ~ -1488 W. Gleiche SoCs => gleichmäßig auf alle
+    # drei (statt einen voll, dann den nächsten).
     r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=-3000))
     assert r.regelung.modus == "laden"
     z = zuteilung(r)
-    assert z["L1"] == 1200
-    assert z["L2"] == 288
-    assert z["L3"] == 0
+    assert z["L1"] == z["L2"] == z["L3"] == 496
+    assert sum(z.values()) == 1488
 
 
-def test_laden_moderat_nur_ein_akku():
+def test_laden_moderat_immer_noch_parallel():
     r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=-1000))
     z = zuteilung(r)
-    assert z["L1"] == 488
-    assert z["L2"] == 0
-    assert z["L3"] == 0
+    assert z["L1"] == z["L2"] == z["L3"] == 162
+
+
+def test_laden_proportional_zur_freien_kapazitaet():
+    # Leerster Akku bekommt am meisten (SoC-Ausgleich).
+    r = P.compute_plan(plan_input(socs=[40, 60, 70], saldo_w=-2000))
+    z = zuteilung(r)
+    assert z["L1"] > z["L2"] > z["L3"] > 0
+
+
+def test_laden_zu_klein_faellt_auf_einen_akku_zurueck():
+    # Sehr kleiner Überschuss: 3-fach-Split läge unter dem Mindest-Setpoint und
+    # würde auf 0 runden (Überschuss liefe ins Netz). Rückfall auf einen Akku.
+    r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=-200))
+    z = zuteilung(r)
+    gestellt = [w for w in z.values() if w > 0]
+    assert len(gestellt) == 1
+    assert gestellt[0] >= CONTROL_MIN_SETPOINT_W
+
+
+def test_laden_grosser_ueberschuss_alle_unter_max():
+    r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=-6000))
+    z = zuteilung(r)
+    assert all(0 < w <= 1200 for w in z.values())
+    assert len({z["L1"], z["L2"], z["L3"]}) == 1  # gleichmäßig
 
 
 # --- Entladen (greedy + Auswahl-Hysterese, bewusst so) ------------------------

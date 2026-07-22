@@ -1301,35 +1301,28 @@ def _storage_control(
         reserve_namen=[s.name for s in inp.storages if s.cold_reserve],
     )
 
-    def _verteile(
-        anteile: list[tuple[StorageState, float]], gesamt: float, laden: bool
-    ) -> list[StorageSetpoint]:
-        """Gesamtleistung greedy zuteilen: die Einheit mit der meisten freien
-        Kapazität (Laden) bzw. verfügbaren Energie (Entladen) zuerst füllen, dann
-        die nächste. Bewusst NICHT proportional zerstäuben — bei N Einheiten läge
-        sonst jeder Anteil unter dem Mindest-Setpoint und würde auf 0 gerundet
-        (Totzone ~N×min, die in Nulleinspeisung Klein­überschüsse trotz freiem
-        Akku ins Netz laufen ließe). Das Bündeln gleicht zugleich die SoCs an
-        (leerste/vollste Einheit zuerst). Ein Rest unter dem Mindest-Setpoint
-        bleibt ungestellt — konservativ: nie mehr kommandieren als der bereits
-        gain-/offset-gedämpfte Zielwert hergibt, damit kein Netzbezug entsteht.
+    def _verteile_entladen(
+        anteile: list[tuple[StorageState, float]], gesamt: float
+    ) -> dict[str, float]:
+        """Entladeleistung greedy zuteilen: die Einheit mit der meisten
+        verfügbaren Energie zuerst voll ausschöpfen, dann die nächste. Bewusst
+        NICHT proportional zerstäuben — bei N Einheiten läge sonst jeder Anteil
+        unter dem Mindest-Setpoint und würde auf 0 gerundet (Totzone ~N×min).
+        Das Bündeln reduziert zugleich das Schütz-/Umschalt-Flattern: es
+        entlädt möglichst nur ein Akku zur Zeit (Verschleiß der Akku-Elektronik).
 
-        Auswahl-Hysterese: Der aktuell arbeitende Speicher (gemessene Leistung in
-        Zuteilungsrichtung über LEAD_POWER_W) behält in der Rangfolge einen
-        SoC-Vorsprung von LEAD_HYST_SOC, damit die Führung nicht bei jedem
-        minimalen SoC-Crossover rotiert — jede Umschaltung ist eine kurze
-        Leistungslücke (Netz-Spike) und ein Schaltvorgang, der die Akku-
-        Elektronik verschleißt. Der Bonus verschiebt NUR die Reihenfolge; die
-        Teilnahme-Schranke unten prüft weiter den rohen `anteil`, sodass
-        Reserve-Grenze und Kaltreserve-Ausschluss unberührt bleiben. Reicht ein
-        Speicher nicht (soll > seine Grenze), füllt die Schleife den nächsten
-        weiterhin auf — der Bonus ordnet nur um, und die Reihenfolge ist
-        belanglos, sobald ohnehin alle gebraucht werden."""
+        Auswahl-Hysterese: Der aktuell arbeitende Speicher (gemessene Leistung
+        über LEAD_POWER_W) behält in der Rangfolge einen SoC-Vorsprung von
+        LEAD_HYST_SOC, damit die Führung nicht bei jedem minimalen SoC-Crossover
+        rotiert. Der Bonus verschiebt NUR die Reihenfolge; die Teilnahme-Schranke
+        unten prüft weiter den rohen `anteil` (Reserve-Grenze, Kaltreserve-
+        Ausschluss bleiben unberührt). Reicht ein Speicher nicht (soll > seine
+        Grenze), füllt die Schleife den nächsten weiter auf."""
 
         def _rang(paar: tuple[StorageState, float]) -> float:
             s, anteil = paar
             p = s.power_w or 0.0
-            arbeitet = (p < -CONTROL_LEAD_POWER_W) if laden else (p > CONTROL_LEAD_POWER_W)
+            arbeitet = p > CONTROL_LEAD_POWER_W
             bonus = (
                 CONTROL_LEAD_HYST_SOC / 100.0 * s.capacity_kwh
                 if arbeitet and anteil > 0
@@ -1338,15 +1331,93 @@ def _storage_control(
             return anteil + bonus
 
         rest = gesamt
-        watts: dict[str, float] = {}
+        watts: dict[str, float] = {s.name: 0.0 for s, _ in anteile}
         for s, anteil in sorted(anteile, key=_rang, reverse=True):
-            grenze = s.max_charge_w if laden else s.max_discharge_w
-            watt = min(rest, grenze)
+            watt = min(rest, s.max_discharge_w)
             if anteil <= 0 or watt < CONTROL_MIN_SETPOINT_W:
-                watts[s.name] = 0.0
                 continue
             watts[s.name] = watt
             rest -= watt
+        return watts
+
+    def _verteile_laden(
+        anteile: list[tuple[StorageState, float]], gesamt: float
+    ) -> dict[str, float]:
+        """Ladeleistung PARALLEL auf mehrere Akkus verteilen — proportional zur
+        freien Kapazität (gleicht die SoCs an, hält die C-Rate je Akku niedrig),
+        aber nur auf so viele Einheiten, dass jeder Anteil ≥ Mindest-Setpoint
+        bleibt. Sonst fiele bei N Einheiten jeder Anteil unter den Mindestwert
+        und würde auf 0 gerundet (Totzone ~N×min) — der Überschuss liefe trotz
+        freiem Akku ins Netz. Reicht die Leistung nur für weniger Einheiten,
+        fällt die Verteilung schrittweise auf die Akkus mit der meisten freien
+        Kapazität zurück (leerste zuerst). Anders als beim Entladen ist paralleles
+        Laden gewollt: mehrere Akkus gleichzeitig laden ist schonender und
+        schneller, und Ladeflattern ist unkritisch (kein Richtungswechsel)."""
+
+        def _fuellen(einheiten: list[tuple[StorageState, float]]) -> dict[str, float]:
+            # Proportional zur freien Kapazität, iterativ auf max_charge_w
+            # gedeckelt: was eine gedeckelte Einheit nicht aufnimmt, fließt an
+            # die übrigen.
+            soll = {s.name: 0.0 for s, _ in einheiten}
+            aktiv = [(s, f) for s, f in einheiten if f > 0]
+            rest = gesamt
+            while rest > 1e-6 and aktiv:
+                frei_summe = sum(f for _, f in aktiv)
+                basis = rest
+                naechste: list[tuple[StorageState, float]] = []
+                gedeckelt = False
+                for s, f in aktiv:
+                    zusatz = basis * f / frei_summe
+                    platz = s.max_charge_w - soll[s.name]
+                    if zusatz >= platz:
+                        soll[s.name] += platz
+                        rest -= platz
+                        gedeckelt = True
+                    else:
+                        soll[s.name] += zusatz
+                        rest -= zusatz
+                        naechste.append((s, f))
+                aktiv = naechste
+                if not gedeckelt:
+                    break
+            return soll
+
+        # Kandidaten mit freier Kapazität, leerste (meiste freie kWh) zuerst.
+        kandidaten = sorted(
+            [(s, a) for s, a in anteile if a > 0], key=lambda p: p[1], reverse=True
+        )
+        watts: dict[str, float] = {s.name: 0.0 for s, _ in anteile}
+        while kandidaten:
+            soll = _fuellen(kandidaten)
+            positive = [w for w in soll.values() if w > 0]
+            # Kleinster gestellter Anteil zu klein? Schwächste Einheit (wenigste
+            # freie Kapazität = letzte im sortierten Feld) fallen lassen und
+            # erneut auf die übrigen verteilen.
+            if (
+                positive
+                and min(positive) < CONTROL_MIN_SETPOINT_W
+                and len(kandidaten) > 1
+            ):
+                kandidaten.pop()
+                continue
+            for name, w in soll.items():
+                watts[name] = w if w >= CONTROL_MIN_SETPOINT_W else 0.0
+            break
+        return watts
+
+    def _verteile(
+        anteile: list[tuple[StorageState, float]], gesamt: float, laden: bool
+    ) -> list[StorageSetpoint]:
+        """Gesamtleistung je Speicher zuteilen. Laden verteilt parallel
+        (proportional zur freien Kapazität), Entladen greedy mit Auswahl-
+        Hysterese (ein Akku zur Zeit, gegen Verschleiß). Ein Rest unter dem
+        Mindest-Setpoint bleibt ungestellt — konservativ: nie mehr kommandieren
+        als der gain-/offset-gedämpfte Zielwert hergibt (kein Netzbezug)."""
+        watts = (
+            _verteile_laden(anteile, gesamt)
+            if laden
+            else _verteile_entladen(anteile, gesamt)
+        )
         return [
             StorageSetpoint(name=s.name, watt=round(watts[s.name]))
             for s, _a in anteile
