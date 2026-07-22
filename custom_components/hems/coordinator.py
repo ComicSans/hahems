@@ -20,6 +20,7 @@ from .const import (
     CONF_FREE_H,
     CONF_FREE_KWH,
     CONF_INVERT,
+    CONF_INVERT_PV,
     CONF_METER,
     CONF_NIGHT_W,
     CONF_PRIORITY_MODE,
@@ -832,6 +833,11 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             else [d.get("power_now") for d in self.entry.options.get(CONF_DEVICES, [])]
         )
         data.pv_power_now_w = self._sum_power(pv_sources)
+        # Wechselrichter mit umgekehrtem Vorzeichen (negativ = Erzeugung) hier
+        # normalisieren — vor pv_minus_battery und allen Folgeberechnungen, die
+        # positiv = Erzeugung erwarten.
+        if data.pv_power_now_w is not None and self._opt(CONF_INVERT_PV, False):
+            data.pv_power_now_w = -data.pv_power_now_w
 
         # Ist-Leistungen für den Lastfluss.
         # Batterie-Konvention: positiv = Entladen ins Haus, negativ = Laden.

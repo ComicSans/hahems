@@ -5,6 +5,10 @@ DOMAIN = "hems"
 CONF_METER = "meter_entity"
 CONF_PV_POWER = "pv_power_entity"
 CONF_INVERT = "invert_meter"
+# Manche Wechselrichter melden die PV-Leistung mit umgekehrtem Vorzeichen
+# (negativ = Erzeugung). Ist die Option aktiv, dreht der Coordinator das
+# Vorzeichen der gemessenen PV-Momentanleistung vor allen Weiterberechnungen.
+CONF_INVERT_PV = "invert_pv_power"
 # Manche Anlagen messen PV und Akku am selben Punkt (Hybrid-Wechselrichter):
 # der PV-Sensor enthält dann die Akkuleistung — Entladen treibt den PV-Wert
 # hoch, Laden senkt ihn. Ist die Option aktiv, rechnet der Coordinator die

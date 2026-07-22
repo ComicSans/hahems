@@ -14,6 +14,7 @@ from .const import (
     CONF_FREE_H,
     CONF_FREE_KWH,
     CONF_INVERT,
+    CONF_INVERT_PV,
     CONF_METER,
     CONF_NIGHT_W,
     CONF_PRIORITY_MODE,
@@ -289,6 +290,7 @@ GENERAL_SCHEMA = vol.Schema(
         vol.Required(CONF_METER): _entity(device_class="power"),
         vol.Required(CONF_INVERT, default=False): selector.BooleanSelector(),
         vol.Optional(CONF_PV_POWER): _entity(device_class="power"),
+        vol.Required(CONF_INVERT_PV, default=False): selector.BooleanSelector(),
         vol.Required(
             CONF_PV_MINUS_BATTERY, default=False
         ): selector.BooleanSelector(),
