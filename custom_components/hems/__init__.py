@@ -14,8 +14,9 @@ from homeassistant.core import HomeAssistant
 
 from .changelog import ChangeLog
 from .config_ws import async_register_ws
-from .const import DOMAIN
+from .const import CONF_DEVICES, DOMAIN, ROLE_SWITCHABLE
 from .coordinator import HemsCoordinator
+from .power_memory import PowerMemory
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
@@ -94,6 +95,28 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     hass.data[FRONTEND_REGISTERED] = True
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Optionen auf das aktuelle Schema heben.
+
+    1 → 2: Schaltbare Lasten kennen `heat_coupled`. Bis dahin galten *alle*
+    schaltbaren Lasten als Wärmepumpe (ihre Leistung floss gesammelt ins
+    Heizgradstunden-Modell). Bestehende Einträge bekommen das Flag deshalb auf
+    True — sonst verlöre eine laufende Installation ihr WP-Modell stillschweigend
+    und würde das Nachtdefizit unterschätzen. Neue Lasten starten auf False.
+    """
+    if entry.version >= 2:
+        return True
+
+    devices = [dict(d) for d in entry.options.get(CONF_DEVICES, [])]
+    for device in devices:
+        if device.get("role") == ROLE_SWITCHABLE and "heat_coupled" not in device:
+            device["heat_coupled"] = True
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_DEVICES: devices}, version=2
+    )
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_register_frontend(hass)
     async_register_ws(hass)
@@ -104,6 +127,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     changelog = ChangeLog(hass)
     await changelog.async_load()
     coordinator.changelog = changelog
+    # Gelernte Schaltlast-Leistungen laden, bevor der erste Plan rechnet —
+    # sonst startet jede Last wieder beim 2-kW-Fallback.
+    power_memory = PowerMemory(hass)
+    await power_memory.async_load()
+    coordinator.power_memory = power_memory
     await coordinator.async_config_entry_first_refresh()
     # Quellen sind nach einem Neustart evtl. noch nicht bereit: sofort neu
     # rechnen, sobald sie verfügbar werden, statt bis zum nächsten Poll zu warten.
@@ -123,7 +151,10 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
-        # Ausstehende Log-Einträge vor dem Reload/Entladen sichern.
+        # Ausstehende Log-Einträge und gelernte Leistungen vor dem
+        # Reload/Entladen sichern.
         if coordinator.changelog is not None:
             await coordinator.changelog.async_flush()
+        if coordinator.power_memory is not None:
+            await coordinator.power_memory.async_flush()
     return unloaded

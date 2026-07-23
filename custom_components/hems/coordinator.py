@@ -51,6 +51,7 @@ from .changelog import ChangeLog, decision_snapshot, diff_snapshots
 from .config_check import ConfigCheck, check_config
 from .models import DeviceRegistry, parse_devices
 from .planner import block_windows, compute_plan, weekly_windows
+from .power_memory import PowerMemory
 from .strategies.types import (
     HeatingState,
     ModulatedState,
@@ -141,6 +142,9 @@ class HemsData:
         # Pro-Speicher-Momentaufnahme für die Lastfluss-Karte
         # (Name, SoC %, Ist-Leistung W, Kapazität kWh).
         self.speicher_liste: list[dict] = []
+        # Pro-Schaltlast-Momentaufnahme für die Lastfluss-Karte (Name,
+        # Priorität, An/Aus, Ist- und erwartete Leistung, Begründung).
+        self.schaltlasten: list[dict] = []
 
 
 class HemsCoordinator(DataUpdateCoordinator[HemsData]):
@@ -198,8 +202,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Rotations-Cooldown je Last: Zeitpunkt, bis zu dem eine beobachtet-leere
         # Last in der Rangfolge hinten steht (Name → Ablauf-UTC).
         self._mod_leer_bis: dict[str, datetime] = {}
-        # Gelernte erwartete Leistung schaltbarer Lasten (id → letzter An-Wert).
-        self._sw_erwartet_w: dict[str, float] = {}
+        # Gelernte erwartete Leistung schaltbarer Lasten (id → letzter An-Wert),
+        # über Neustarts hinweg persistiert (vom Setup gesetzt).
+        self.power_memory: PowerMemory | None = None
 
     # -- Konfiguration -----------------------------------------------------
 
@@ -447,15 +452,24 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             seit = (
                 (now - st.last_changed).total_seconds() if st is not None else None
             )
-            if ist_an and power is not None and power > SWITCH_LEARN_FLOOR_W:
-                self._sw_erwartet_w[s.id] = power
+            if (
+                self.power_memory is not None
+                and ist_an
+                and power is not None
+                and power > SWITCH_LEARN_FLOOR_W
+            ):
+                self.power_memory.learn(s.id, power)
             states.append(
                 SwitchableState(
                     name=s.name,
                     id=s.id,
                     priority=s.priority,
                     power_w=power,
-                    erwartet_w=self._sw_erwartet_w.get(s.id),
+                    erwartet_w=(
+                        self.power_memory.get(s.id)
+                        if self.power_memory is not None
+                        else None
+                    ),
                     ist_an=ist_an,
                     an_seit_s=seit if ist_an else None,
                     aus_seit_s=seit if not ist_an else None,
@@ -534,11 +548,20 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         return self._night_load_w
 
     async def _wp_hourly_stats(self, now: datetime) -> dict[float, float] | None:
-        """Stündliche WP-Leistung (Summe der Leistungs-Entitäten aller
-        schaltbaren Lasten) je Statistik-Zeitstempel — Basis für die
-        Profilbereinigung und das Verbrauchsmodell."""
+        """Stündliche WP-Leistung je Statistik-Zeitstempel — Basis für die
+        Profilbereinigung und das Verbrauchsmodell.
+
+        Nur heizungsgekoppelte Schaltlasten (`heat_coupled`) zählen. Eine
+        überschussgesteuerte Last (Pool, Luftentfeuchter) folgt keiner
+        Außentemperatur; sie würde die Heizgradstunden-Regression verzerren
+        (zu hohe Basisleistung) und zugleich fälschlich aus dem Lastprofil
+        herausgerechnet. Solche Lasten bleiben im Profil und werden über ihr
+        gelerntes `erwartet_w` geregelt.
+        """
         entities = [
-            s.power_entity for s in self.registry.switchables if s.power_entity
+            s.power_entity
+            for s in self.registry.switchables
+            if s.power_entity and s.heat_coupled
         ]
         if not entities:
             return None
@@ -859,7 +882,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             data.pv_power_now_w = round(
                 max(0.0, data.pv_power_now_w - data.batterie_w), 0
             )
-        data.wp_w = self._sum_power([s.power_entity for s in reg.switchables])
+        # Nur die heizungsgekoppelten Lasten sind „die Wärmepumpe"; alle
+        # übrigen Schaltlasten stehen einzeln in data.schaltlasten (siehe
+        # unten) statt anonym in dieser Summe.
+        data.wp_w = self._sum_power(
+            [s.power_entity for s in reg.switchables if s.heat_coupled]
+        )
         data.wallbox_w = self._sum_power([m.power_entity for m in reg.modulateds])
 
         # Sonnenstände: nächster Untergang, danach der folgende Aufgang
@@ -1052,6 +1080,30 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             )
         )
         self._plan_flags = data.plan.flags
+
+        # Pro-Schaltlast-Zeilen für die Lastfluss-Karte. Erst hier, weil die
+        # Empfehlung (an/aus samt Begründung) aus dem eben gelaufenen Plan
+        # kommt; ohne Empfehlung (kein Saldo) bleibt nur der Ist-Zustand.
+        empfehlung = (
+            {sp.id: sp for sp in data.plan.schaltbare.lasten}
+            if data.plan.schaltbare is not None
+            else {}
+        )
+        data.schaltlasten = [
+            {
+                "name": st.name,
+                "prio": st.priority,
+                "ist_an": st.ist_an,
+                "watt": st.power_w,
+                "erwartet_w": st.erwartet_w,
+                "soll_an": empfehlung[st.id].an if st.id in empfehlung else None,
+                "grund": empfehlung[st.id].grund if st.id in empfehlung else "",
+                "heizung": next(
+                    (s.heat_coupled for s in reg.switchables if s.id == st.id), False
+                ),
+            }
+            for st in switchables
+        ]
 
         data.ziel = self.goal
         data.ev_zwang = self.ev_force

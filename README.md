@@ -247,9 +247,24 @@ normales Saldo-Residuum. Die Regelmathematik beider Regler bleibt unverändert.
 
 Schaltbare Lasten (nur an/aus, z. B. eine Umwälzpumpe) schaltet HEMS im
 Auto-Modus überschussgesteuert: ein, solange der Überschuss ihre **erwartete
-Leistung** deckt, aus, wenn er fehlt. Die erwartete Leistung wird aus der
-`power_entity` gelernt (letzter gemessener An-Wert); bis dahin greift ein
-konservativer Fallback (lieber später einschalten als Netzbezug provozieren).
+Leistung** deckt, aus, wenn er fehlt. Beliebig viele Lasten sind möglich; jede
+hat ihre eigenen Zeiten, ihre eigene Priorität und ihre eigene gelernte
+Leistung.
+
+Die erwartete Leistung wird je Last aus ihrer `power_entity` gelernt (letzter
+gemessener An-Wert) und über Neustarts hinweg persistiert
+(`power_memory.py`). Ohne Leistungsmessung greift dauerhaft ein konservativer
+Fallback von 2000 W (lieber später einschalten als Netzbezug provozieren) —
+eine kleine Last wird dann praktisch nie zugeschaltet; der Config-Check warnt
+davor.
+
+**Heizungsgekoppelt (`heat_coupled`):** nur Lasten, deren Verbrauch der
+Außentemperatur folgt (Wärmepumpe, Heizstab), fließen in das
+Heizgradstunden-Modell für die Bedarfsprognose ein und werden aus dem gelernten
+Lastprofil herausgerechnet. Eine überschussgesteuerte Last (Pool,
+Luftentfeuchter) hat keinen Temperaturbezug — sie würde die Regression
+verzerren (zu hohe Basisleistung → überschätztes Nachtdefizit) und bleibt
+deshalb ohne das Flag im normalen Lastprofil.
 
 Prioritätsreihenfolge, wenn der Überschuss nicht für alle reicht:
 
@@ -263,7 +278,9 @@ Prioritätsreihenfolge, wenn der Überschuss nicht für alle reicht:
 Anti-Takt: `min_on` hält eine Last an, `min_off` hält sie aus, `max_block`
 erzwingt ein Einschalten, wenn HEMS sie zu lange ausgehalten hat. Umgesetzt in
 `strategies/switchable.py`; die Empfehlung steht als `schaltbare`-Attribut an
-`sensor.hems_empfehlung`, geschaltet wird im Modus `auto`.
+`sensor.hems_empfehlung`, geschaltet wird im Modus `auto`. Die Lastfluss-Karte
+zeigt jede Last als eigene Zeile mit Priorität, Ist-/Erwartungsleistung und der
+Begründung der Empfehlung (Attribut `schaltlasten` an `sensor.hems_lastfluss`).
 
 ## Optimierungsziel
 

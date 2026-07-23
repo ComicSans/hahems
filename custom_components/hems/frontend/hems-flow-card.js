@@ -6,6 +6,9 @@
  * Attribute trägt:
  *   pv_w, netz_w (positiv = Bezug), batterie_w (positiv = Entladen),
  *   haus_w, wp_w, wallbox_w, speicher_soc, pv_geschaetzt
+ * plus Aufschlüsselungen für die Zeilen unter dem Diagramm:
+ *   speicher[] (name, soc, watt), schaltlasten[] (name, prio, ist_an,
+ *   soll_an, watt, erwartet_w, grund)
  * plus Status der Regelungen für die Chips:
  *   regelung_modus, regelung_w, ww_soll_c, ww_status, wp_modus, wp_vlt_c
  *
@@ -198,7 +201,9 @@ class HemsFlowCard extends HTMLElement {
     };
     const regelungLabel = { laden: "Laden", entladen: "Entladen", pausiert: "Pausiert" };
     const chips = [
-      a.wp_w != null ? `♨️ Wärmepumpe ${fmtW(a.wp_w)}` : null,
+      // Kein Sammel-Chip für die Wärmepumpe mehr: schaltbare Lasten stehen
+      // jetzt einzeln als Zeilen (Name, Priorität, Empfehlung) unter dem
+      // Diagramm — die WP ist eine davon.
       a.wp_modus != null && a.wp_vlt_c != null
         ? `🌡 WP ${a.wp_modus === "kuehlen" ? "kühlt" : a.wp_modus} · VLT ${Math.round(a.wp_vlt_c)} °C`
         : null,
@@ -244,6 +249,40 @@ class HemsFlowCard extends HTMLElement {
     const storageBlock = storageRows
       ? `<div class="storages">${storageRows}</div>`
       : "";
+
+    // Pro-Schaltlast-Zeilen: Punkt = Ist-Zustand, dahinter Name, Priorität
+    // (1 = wichtigste, entscheidet wer bei knappem Überschuss zuerst weicht)
+    // und die Begründung der Empfehlung. Weicht die Empfehlung vom Ist ab
+    // (Auto-Modus schaltet erst im nächsten Zyklus, oder HEMS beobachtet nur),
+    // zeigt ein Pfeil die Zielrichtung. Rechts die gemessene Leistung, im
+    // Aus-Zustand die gelernte Erwartung in Klammern.
+    const loads = Array.isArray(a.schaltlasten) ? a.schaltlasten : [];
+    const loadRows = loads
+      .map((l) => {
+        const name = esc(l.name != null ? String(l.name) : "Last");
+        const an = l.ist_an === true;
+        const wechsel = l.soll_an != null && l.soll_an !== an;
+        const watt =
+          l.watt != null
+            ? fmtW(l.watt)
+            : l.erwartet_w != null
+              ? `(${fmtW(l.erwartet_w)})`
+              : "–";
+        const grund = esc(l.grund != null ? String(l.grund) : "");
+        return `<div class="sw-row">
+          <span class="sw-dot${an ? " on" : ""}"></span>
+          <span class="st-name" title="${name}">${name}</span>
+          <span class="sw-prio" title="Priorität ${l.prio ?? "?"}">P${
+            l.prio ?? "?"
+          }</span>
+          <span class="sw-grund" title="${grund}">${
+            wechsel ? `→ ${l.soll_an ? "an" : "aus"} · ` : ""
+          }${grund}</span>
+          <span class="st-watt">${watt}</span>
+        </div>`;
+      })
+      .join("");
+    const loadBlock = loadRows ? `<div class="storages">${loadRows}</div>` : "";
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -355,6 +394,39 @@ class HemsFlowCard extends HTMLElement {
           font-variant-numeric: tabular-nums;
           color: var(--primary-text-color, #212121);
         }
+        /* Pro-Schaltlast-Zeilen — gleiches Raster wie die Speicherzeilen,
+           statt SoC-Balken aber Priorität und Begründung. */
+        .sw-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+        }
+        .sw-dot {
+          flex: 0 0 auto;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--divider-color, #e0e0e0);
+        }
+        .sw-dot.on { background: ${NODES.pv.color}; }
+        .sw-prio {
+          flex: 0 0 auto;
+          padding: 1px 6px;
+          border-radius: 8px;
+          font-size: 11px;
+          font-variant-numeric: tabular-nums;
+          background: var(--secondary-background-color, #f5f5f5);
+          color: var(--secondary-text-color, #727272);
+        }
+        .sw-grund {
+          flex: 1 1 auto;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--secondary-text-color, #727272);
+        }
       </style>
       <ha-card ${this._config.title ? `header="${this._config.title}"` : ""}>
         <div class="container">
@@ -365,6 +437,7 @@ class HemsFlowCard extends HTMLElement {
           </svg>
         </div>
         ${storageBlock}
+        ${loadBlock}
         ${chips ? `<div class="footer">${chips}</div>` : ""}
       </ha-card>`;
   }

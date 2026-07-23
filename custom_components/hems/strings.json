@@ -114,13 +114,15 @@
           "min_on_min": "Minimum runtime (min)",
           "min_off_min": "Minimum pause (min)",
           "max_block_min": "Max. block duration per day (min)",
-          "priority": "Priority"
+          "priority": "Priority",
+          "heat_coupled": "Heating-coupled (heat pump, heating rod)"
         },
         "data_description": {
           "min_on_min": "Once switched on, the device stays on for at least this long.",
           "min_off_min": "After switching off, the device stays off for at least this long.",
           "max_block_min": "The device is never blocked for longer than this per day.",
-          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
+          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
+          "heat_coupled": "Only for loads whose consumption follows the outdoor temperature (heat pump, heating rod). Only those feed the heating-degree-hour model used for demand forecasting. Surplus-driven loads such as a pool pump or dehumidifier stay off."
         }
       },
       "add_modulated": {
@@ -343,13 +345,15 @@
           "min_on_min": "Minimum runtime (min)",
           "min_off_min": "Minimum pause (min)",
           "max_block_min": "Max. block duration per day (min)",
-          "priority": "Priority"
+          "priority": "Priority",
+          "heat_coupled": "Heating-coupled (heat pump, heating rod)"
         },
         "data_description": {
           "min_on_min": "Once switched on, the device stays on for at least this long.",
           "min_off_min": "After switching off, the device stays off for at least this long.",
           "max_block_min": "The device is never blocked for longer than this per day.",
-          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
+          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
+          "heat_coupled": "Only for loads whose consumption follows the outdoor temperature (heat pump, heating rod). Only those feed the heating-degree-hour model used for demand forecasting. Surplus-driven loads such as a pool pump or dehumidifier stay off."
         }
       },
       "add_modulated": {
@@ -465,13 +469,15 @@
           "min_on_min": "Minimum runtime (min)",
           "min_off_min": "Minimum pause (min)",
           "max_block_min": "Max. block duration per day (min)",
-          "priority": "Priority"
+          "priority": "Priority",
+          "heat_coupled": "Heating-coupled (heat pump, heating rod)"
         },
         "data_description": {
           "min_on_min": "Once switched on, the device stays on for at least this long.",
           "min_off_min": "After switching off, the device stays off for at least this long.",
           "max_block_min": "The device is never blocked for longer than this per day.",
-          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
+          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
+          "heat_coupled": "Only for loads whose consumption follows the outdoor temperature (heat pump, heating rod). Only those feed the heating-degree-hour model used for demand forecasting. Surplus-driven loads such as a pool pump or dehumidifier stay off."
         }
       },
       "edit_modulated": {

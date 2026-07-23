@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from homeassistant.core import HomeAssistant
 
-from .const import MODE_AUTO
+from .const import DEFAULT_SWITCHABLE_EXPECTED_W, MODE_AUTO
 from .models import DeviceRegistry
 
 
@@ -137,6 +137,32 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
             )
         else:
             c.info.append(f"{ctx}: kein Steuer-Entity — nur Beobachtung")
+
+    # --- Schaltbare Lasten --------------------------------------------------
+    for s in reg.switchables:
+        ctx = f"Schaltbare Last '{s.name}'"
+        _mark("Schaltbare Lasten")
+        _need(
+            s.switch_entity,
+            ("switch", "climate", "input_boolean"),
+            ctx,
+            "Schalter",
+        )
+        if not s.power_entity:
+            # Ohne Messung lässt sich die Leistungsaufnahme nicht lernen; es
+            # bleibt beim konservativ hohen Fallback. Eine kleine Last wird so
+            # praktisch nie eingeschaltet.
+            c.warnings.append(
+                f"{ctx}: keine Leistungsmessung — HEMS rechnet dauerhaft mit "
+                f"{DEFAULT_SWITCHABLE_EXPECTED_W:.0f} W und schaltet die Last "
+                f"erst ab so viel Überschuss ein"
+            )
+        if s.heat_coupled and not reg.heatings:
+            c.info.append(
+                f"{ctx}: als heizungsgekoppelt markiert, aber kein Heizkreis "
+                f"konfiguriert — ohne Außentemperatur gibt es kein "
+                f"Verbrauchsmodell"
+            )
 
     # --- E-Auto (Modulierbare Last) ----------------------------------------
     for m in reg.modulateds:

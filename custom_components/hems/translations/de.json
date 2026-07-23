@@ -114,13 +114,15 @@
           "min_on_min": "Mindestlaufzeit (min)",
           "min_off_min": "Mindestpause (min)",
           "max_block_min": "Max. Sperrdauer pro Tag (min)",
-          "priority": "Priorität"
+          "priority": "Priorität",
+          "heat_coupled": "Heizungsgekoppelt (Wärmepumpe, Heizstab)"
         },
         "data_description": {
           "min_on_min": "Ist das Gerät einmal an, bleibt es mindestens so lange eingeschaltet.",
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
           "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
-          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
+          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
+          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet."
         }
       },
       "add_modulated": {
@@ -343,13 +345,15 @@
           "min_on_min": "Mindestlaufzeit (min)",
           "min_off_min": "Mindestpause (min)",
           "max_block_min": "Max. Sperrdauer pro Tag (min)",
-          "priority": "Priorität"
+          "priority": "Priorität",
+          "heat_coupled": "Heizungsgekoppelt (Wärmepumpe, Heizstab)"
         },
         "data_description": {
           "min_on_min": "Ist das Gerät einmal an, bleibt es mindestens so lange eingeschaltet.",
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
           "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
-          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
+          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
+          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet."
         }
       },
       "add_modulated": {
@@ -465,13 +469,15 @@
           "min_on_min": "Mindestlaufzeit (min)",
           "min_off_min": "Mindestpause (min)",
           "max_block_min": "Max. Sperrdauer pro Tag (min)",
-          "priority": "Priorität"
+          "priority": "Priorität",
+          "heat_coupled": "Heizungsgekoppelt (Wärmepumpe, Heizstab)"
         },
         "data_description": {
           "min_on_min": "Ist das Gerät einmal an, bleibt es mindestens so lange eingeschaltet.",
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
           "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
-          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
+          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
+          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet."
         }
       },
       "edit_modulated": {

@@ -161,6 +161,12 @@ class SwitchableLoad:
     min_off_min: int = 10
     max_block_min: int = 120
     priority: int = 1
+    # Heizungsgekoppelt: die Last folgt der Außentemperatur (Wärmepumpe,
+    # Heizstab) und wird deshalb im Heizgradstunden-Modell mitgelernt und aus
+    # dem Lastprofil herausgerechnet. Nur solche Lasten dürfen dort einfließen —
+    # eine überschussgesteuerte Last (Pool, Entfeuchter) hat keinen
+    # Temperaturbezug und würde die Regression verzerren.
+    heat_coupled: bool = False
 
 
 @dataclass

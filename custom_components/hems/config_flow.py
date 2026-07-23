@@ -246,6 +246,7 @@ SWITCHABLE_SCHEMA = vol.Schema(
         vol.Required("min_off_min", default=10): _number(0, 240, "min"),
         vol.Required("max_block_min", default=120): _number(0, 720, "min"),
         vol.Required("priority", default=1): _number(1, 10, ""),
+        vol.Required("heat_coupled", default=False): selector.BooleanSelector(),
     }
 )
 
@@ -317,7 +318,8 @@ GENERAL_SCHEMA = vol.Schema(
 
 
 class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    # 2: schaltbare Lasten kennen `heat_coupled` (siehe async_migrate_entry).
+    VERSION = 2
 
     def __init__(self) -> None:
         self._general: dict = {}
