@@ -20,12 +20,46 @@ zu lange ausgehalten hat (z. B. eine Umwälzpumpe, die laufen muss).
 """
 from __future__ import annotations
 
-from ..const import DEFAULT_SWITCHABLE_EXPECTED_W, SWITCH_SURPLUS_MARGIN_W
+from ..const import (
+    DEFAULT_SWITCHABLE_EXPECTED_W,
+    SWITCH_LEARN_DECAY,
+    SWITCH_LEARN_WARMUP_S,
+    SWITCH_SURPLUS_MARGIN_W,
+)
 from .types import PlanInput, PlanResult, SwitchableResult, SwitchableSetpoint
 
 
 def _erwartet_w(s) -> float:
     return s.erwartet_w if s.erwartet_w and s.erwartet_w > 0 else DEFAULT_SWITCHABLE_EXPECTED_W
+
+
+def lern_leistung(
+    alt: float | None,
+    mess: float,
+    an_seit_s: float | None,
+    *,
+    floor_w: float,
+) -> float | None:
+    """Neuen `erwartet_w`-Wert aus einer Messung im An-Zustand bilden.
+
+    `None` heißt „diese Messung taugt nicht zum Lernen" — der bisherige Wert
+    bleibt stehen. Verworfen wird innerhalb der Anlaufkarenz (der Verbraucher ist
+    noch nicht auf Leistung) und unterhalb des Bodens (Standby, Regelung,
+    Umwälzpumpe).
+
+    Übernommen wird asymmetrisch: nach oben sofort, weil eine unterschätzte Last
+    zu früh eingeschaltet wird und Netzbezug provoziert; nach unten nur gedämpft,
+    damit eine Teillastphase den gelernten Wert nicht auf ihren Momentanwert
+    zieht. Der gedämpfte Wert nähert sich der Messung über mehrere Zyklen und
+    steht dabei nie unter ihr.
+    """
+    if an_seit_s is None or an_seit_s < SWITCH_LEARN_WARMUP_S:
+        return None
+    if mess < floor_w:
+        return None
+    if alt is None or mess >= alt:
+        return round(mess, 1)
+    return round(alt + SWITCH_LEARN_DECAY * (mess - alt), 1)
 
 
 def switchable_control(inp: PlanInput, res: PlanResult) -> SwitchableResult | None:

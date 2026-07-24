@@ -251,12 +251,25 @@ Leistung** deckt, aus, wenn er fehlt. Beliebig viele Lasten sind möglich; jede
 hat ihre eigenen Zeiten, ihre eigene Priorität und ihre eigene gelernte
 Leistung.
 
-Die erwartete Leistung wird je Last aus ihrer `power_entity` gelernt (letzter
-gemessener An-Wert) und über Neustarts hinweg persistiert
-(`power_memory.py`). Ohne Leistungsmessung greift dauerhaft ein konservativer
-Fallback von 2000 W (lieber später einschalten als Netzbezug provozieren) —
-eine kleine Last wird dann praktisch nie zugeschaltet; der Config-Check warnt
-davor.
+Die erwartete Leistung wird je Last aus ihrer `power_entity` gelernt und über
+Neustarts hinweg persistiert (`power_memory.py`). Ohne Leistungsmessung greift
+dauerhaft ein konservativer Fallback von 2000 W (lieber später einschalten als
+Netzbezug provozieren) — eine kleine Last wird dann praktisch nie zugeschaltet;
+der Config-Check warnt davor.
+
+Gelernt wird nicht jeder Messwert, sondern nach drei Regeln:
+
+- **Anlaufkarenz (5 min):** Direkt nach dem Einschalten ist der Verbraucher noch
+  nicht auf Leistung. Die Karenz läuft nach einem HA-Neustart neu an, weil
+  `last_changed` dann auf den Neustart zeigt.
+- **Boden:** Unterhalb 20 W gilt eine Last als „an, aber zieht nichts".
+  Heizungsgekoppelte Lasten haben einen eigenen Boden von 500 W — bei einer
+  Wärmepumpe ziehen Regelung, Umwälzpumpe und Ventile ein paar hundert Watt,
+  lange bevor der Kompressor auf Leistung ist.
+- **Asymmetrie:** nach oben sofort, nach unten nur zu 25 % pro Messung. Eine
+  unterschätzte Last wird zu früh eingeschaltet und provoziert Netzbezug; eine
+  Teillastphase soll den gelernten Wert deshalb nicht auf ihren Momentanwert
+  ziehen.
 
 **Heizungsgekoppelt (`heat_coupled`):** nur Lasten, deren Verbrauch der
 Außentemperatur folgt (Wärmepumpe, Heizstab), fließen in das

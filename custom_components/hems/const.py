@@ -209,6 +209,23 @@ DEFAULT_SWITCHABLE_EXPECTED_W = 2000.0
 # Ab dieser gemessenen An-Leistung lernt der Coordinator die erwartete Leistung
 # einer schaltbaren Last (darunter gilt sie als „an, aber zieht nichts").
 SWITCH_LEARN_FLOOR_W = 20.0
+# Heizungsgekoppelte Lasten (Wärmepumpe) haben einen ausgeprägten Anlauf: Regler,
+# Umwälzpumpe und Ventile ziehen ein paar hundert Watt, lange bevor der
+# Kompressor auf Leistung ist. Mit dem allgemeinen 20-W-Boden würde dieser
+# Zwischenstand als „erwartete Leistung" gelernt — die Last gälte fortan als
+# Kleinverbraucher, würde bei minimalem Überschuss eingeschaltet und beim
+# nächsten Zyklus wegen des realen Bezugs sofort wieder abgeschaltet (Takten).
+SWITCH_LEARN_FLOOR_HEAT_W = 500.0
+# Anlaufkarenz: erst nach dieser Laufzeit im An-Zustand ist eine Messung
+# repräsentativ. Deckt zugleich den Neustartfall ab — nach einem HA-Neustart
+# zeigt `last_changed` auf den Neustart, die Karenz läuft also neu an, statt
+# einen zufälligen Momentanwert zu übernehmen.
+SWITCH_LEARN_WARMUP_S = 300.0
+# Asymmetrisches Lernen: nach oben sofort (eine unterschätzte Last provoziert
+# Netzbezug), nach unten nur mit diesem Anteil pro Messung. Sonst zieht jede
+# Teillast- oder Taktpause den gelernten Wert nach unten und die Last wird zu
+# früh eingeschaltet.
+SWITCH_LEARN_DECAY = 0.25
 
 # Wärmepumpen-Verbrauchsmodell für die Bedarfsprognose (Tag und Nacht):
 # P(Stunde) = Basis + k × max(0, Heizgrenze − Außentemperatur). Basis ist die

@@ -35,13 +35,14 @@ from .const import (
     DEFAULT_WP_W_PER_K,
     DOMAIN,
     EV_DEMAND_FLOOR_W,
-    SWITCH_LEARN_FLOOR_W,
     EV_DEMAND_GRACE_S,
     EV_EMPTY_COOLDOWN_S,
     GOAL_SELF_CONSUMPTION,
     MODE_AUTO,
     MODE_OBSERVE,
     PRIORITY_AUTO,
+    SWITCH_LEARN_FLOOR_HEAT_W,
+    SWITCH_LEARN_FLOOR_W,
     WEATHER_CONDITION_FACTORS,
     WP_MODEL_DAYS,
     WP_MODEL_MIN_HOURS,
@@ -52,6 +53,7 @@ from .config_check import ConfigCheck, check_config
 from .models import DeviceRegistry, parse_devices
 from .planner import block_windows, compute_plan, weekly_windows
 from .power_memory import PowerMemory
+from .strategies.switchable import lern_leistung
 from .strategies.types import (
     HeatingState,
     ModulatedState,
@@ -441,8 +443,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
 
         Der An/Aus-Zustand und die Zeit seit dem letzten Schaltvorgang kommen aus
         dem Schalter (min_on/min_off/max_block); die erwartete Leistung wird aus
-        `power_entity` gelernt (letzter nennenswerter An-Wert), bis dahin greift
-        im Planner der konservative Fallback.
+        `power_entity` gelernt (nach Anlaufkarenz, asymmetrisch gedämpft — siehe
+        `lern_leistung`), bis dahin greift im Planner der konservative Fallback.
         """
         states = []
         for s in reg.switchables:
@@ -452,13 +454,21 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             seit = (
                 (now - st.last_changed).total_seconds() if st is not None else None
             )
-            if (
-                self.power_memory is not None
-                and ist_an
-                and power is not None
-                and power > SWITCH_LEARN_FLOOR_W
-            ):
-                self.power_memory.learn(s.id, power)
+            if self.power_memory is not None and ist_an and power is not None:
+                # Wärmepumpen laufen mit hohem Standby-Sockel an — für sie gilt
+                # ein deutlich höherer Boden als für eine kleine Steckdosenlast.
+                neu = lern_leistung(
+                    self.power_memory.get(s.id),
+                    power,
+                    seit,
+                    floor_w=(
+                        SWITCH_LEARN_FLOOR_HEAT_W
+                        if s.heat_coupled
+                        else SWITCH_LEARN_FLOOR_W
+                    ),
+                )
+                if neu is not None:
+                    self.power_memory.learn(s.id, neu)
             states.append(
                 SwitchableState(
                     name=s.name,

@@ -1,8 +1,10 @@
 """Gelernte Leistungsaufnahme schaltbarer Lasten, über Neustarts hinweg.
 
 Die erwartete Leistung einer schaltbaren Last (`erwartet_w`) wird aus ihrem
-Leistungssensor gelernt: der letzte nennenswerte Messwert im An-Zustand. Ohne
-Persistenz fiele dieser Wert bei jedem Neustart auf den konservativen Fallback
+Leistungssensor gelernt; welcher Wert daraus hervorgeht, entscheidet
+`strategies.switchable.lern_leistung` (Anlaufkarenz, Boden je nach
+Heizungskopplung, asymmetrische Dämpfung). Hier liegt nur die Ablage. Ohne
+Persistenz fiele der Wert bei jedem Neustart auf den konservativen Fallback
 `DEFAULT_SWITCHABLE_EXPECTED_W` (2000 W) zurück — eine kleine Last (z. B. ein
 300-W-Luftentfeuchter) bräuchte dann erst wieder 2,2 kW Überschuss, um
 überhaupt eingeschaltet zu werden, und würde ohne dieses Einschalten nie neu
@@ -48,7 +50,7 @@ class PowerMemory:
 
     @callback
     def learn(self, load_id: str, watt: float) -> None:
-        """Neuen Messwert übernehmen und (verzögert) sichern."""
+        """Bereits gebildeten Lernwert übernehmen und (verzögert) sichern."""
         if self._watt.get(load_id) == watt:
             return
         self._watt[load_id] = watt
