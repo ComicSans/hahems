@@ -168,7 +168,9 @@ class EvControlResult:
     alle Minima, entscheidet Priorität (grob) und Energie-Fairness (Rotation
     innerhalb gleichrangiger Lasten), welche laufen. `soll_summe_w` ist die
     Summe der Sollleistung (Kopplung an den Speicher-Regler). `zwang` markiert
-    die Sofortladung (volle Ampere, unabhängig vom Überschuss).
+    die Sofortladung: sie garantiert, DASS jede Last läuft (an Auswahl, Rotation
+    und Mindestpause vorbei), nicht wie schnell — der Sollwert folgt weiter dem
+    Überschuss und sinkt bei Defizit auf die Untergrenze.
     """
 
     lasten: list[ModulatedSetpoint]

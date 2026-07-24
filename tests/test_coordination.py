@@ -153,3 +153,29 @@ def test_lade_asymmetrie_ist_noop_ohne_wallbox():
     r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=1500.0))
     assert r.regelung.modus == "entladen"
     assert sum(zuteilung(r).values()) > 0
+
+
+def test_zwang_bei_defizit_laesst_den_akku_in_ruhe():
+    """Zwangsladung + Netzbezug: die Wallbox fällt auf ihre Untergrenze, der
+    Akku springt aber NICHT für sie ein.
+
+    Der Speicher-Regler rechnet bei Zwang die gemessene Wallbox-Last komplett
+    aus dem Saldo heraus ("Akku schonen", siehe README). Seit die Zwangsladung
+    moduliert wird, ist diese Kopplung nicht mehr offensichtlich — der Test
+    hält sie fest: ohne die Wallbox stünde der Saldo bei −200 W (Einspeisung),
+    der Akku hat also keinen Grund zu entladen.
+    """
+    wb = load("WB", power_w=4200.0, ist_an=True, an_seit_s=3600, nachfrage=True)
+    r = P.compute_plan(
+        plan_input(
+            socs=[60, 60, 60],
+            saldo_w=4000.0,      # 4200 W Wallbox, 200 W Einspeisung sonst
+            modulateds=[wb],
+            wallbox_w=4200.0,
+            ev_force=True,
+        )
+    )
+    # Wallbox: läuft, aber auf der Untergrenze (kein Überschuss für mehr).
+    assert r.ev_regelung.lasten[0].strom_a == wb.min_a
+    # Akku: entlädt nicht, um den Zwangsbezug zu decken.
+    assert r.regelung.modus != "entladen"

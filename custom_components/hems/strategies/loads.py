@@ -62,18 +62,28 @@ def _modulated_control(
     autolose Wallbox zieht ~0 und würde sonst als „am wenigsten geladen" jede
     Rotation gewinnen und eine ladende verdrängen.
 
-    Zwangsladung: alle Lasten volle Ampere. Ohne Saldo/Leistungsmessung keine
-    Empfehlung (Fail-safe: Lasten unangetastet, externe Automation zuständig).
+    Zwangsladung: jede Last läuft garantiert — sie fällt nicht durch das
+    Schmitt-Band, die Rotation oder die Mindestpause. Ihr Sollwert folgt aber
+    weiterhin dem Überschuss und sinkt bei Defizit bis auf die Untergrenze
+    (min_a), statt stur volle Ampere aus dem Netz zu ziehen. Der Zwang garantiert
+    also *dass* geladen wird, nicht *wie schnell*.
+
+    Ohne Saldo/Leistungsmessung gibt es nichts zu modulieren: mit Zwang dann
+    volle Ampere (Fail-safe „jetzt laden"), ohne Zwang keine Empfehlung
+    (Fail-safe: Lasten unangetastet, externe Automation zuständig).
     """
     loads = inp.modulateds
     if not loads:
         return None
 
-    if inp.ev_force:
+    zwang = inp.ev_force
+    if inp.saldo_w is None or inp.wallbox_w is None:
+        if not zwang:
+            return None
         lasten = [
             ModulatedSetpoint(
                 name=m.name, id=m.id, laden=True, strom_a=m.max_a,
-                soll_w=m.max_w, grund="Zwang",
+                soll_w=m.max_w, grund="Zwang (ungeregelt)",
             )
             for m in loads
         ]
@@ -81,9 +91,6 @@ def _modulated_control(
             lasten=lasten, ueberschuss_w=0.0,
             soll_summe_w=sum(m.max_w for m in loads), zwang=True,
         )
-
-    if inp.saldo_w is None or inp.wallbox_w is None:
-        return None
 
     bat_ist = sum(s.power_w for s in inp.storages if s.power_w is not None)
     mess_summe = sum(m.power_w or 0.0 for m in loads)
@@ -158,20 +165,24 @@ def _modulated_control(
         # gesperrt-an ist — beide liefen kurz (Akku müsste die Überlappung
         # decken). So wartet die Rotation, bis die alte Last abschaltbereit ist.
         for m in sorted(tier, key=lambda m: (not _locked_on(m), _rang(m))):
-            # An, aber leer und Mindestlaufzeit vorbei → abschalten, Slot frei
-            # für eine nachfragende Last.
-            if m.ist_an and not _locked_on(m) and not _demanding(m):
-                continue
-            # Mindestpause nach dem Abschalten: eine gerade abgeschaltete Last
-            # bleibt aus, bis die Pause abgelaufen ist — auch wenn wieder
-            # Überschuss anliegt (Schützschutz gegen zu häufiges Takten). Der
-            # frei bleibende Überschuss geht solange in den Akku.
-            if _locked_off(m):
-                continue
+            # Zwangsladung überspringt die gesamte Auswahl: die Last läuft, egal
+            # ob sie leer ist, gerade pausiert oder der Überschuss trägt. Erst
+            # die Sollwert-Verteilung unten regelt sie auf ihre Untergrenze.
+            if not zwang:
+                # An, aber leer und Mindestlaufzeit vorbei → abschalten, Slot
+                # frei für eine nachfragende Last.
+                if m.ist_an and not _locked_on(m) and not _demanding(m):
+                    continue
+                # Mindestpause nach dem Abschalten: eine gerade abgeschaltete
+                # Last bleibt aus, bis die Pause abgelaufen ist — auch wenn
+                # wieder Überschuss anliegt (Schützschutz gegen zu häufiges
+                # Takten). Der frei bleibende Überschuss geht solange in den Akku.
+                if _locked_off(m):
+                    continue
             # Schmitt-Band: an-Last hält bis min_w−Marge, aus-Last startet erst
             # ab min_w+Marge. Ein min_on-Lock zwingt ohnehin an (Taktschutz).
             schwelle = m.min_w - margin if m.ist_an else m.min_w + margin
-            if _locked_on(m) or remaining >= schwelle:
+            if zwang or _locked_on(m) or remaining >= schwelle:
                 run.append(m)
                 # Nur reservieren, was real gezogen wird: eine an-gesperrte Last
                 # ohne Auto belegt keine Kapazität.
@@ -205,10 +216,14 @@ def _modulated_control(
             strom_a = _ampere(soll[m.id], m)
             watt = strom_a * m.phases * EV_VOLTAGE_PER_PHASE_V
             zieht = _demanding(m) or not m.ist_an
+            if zwang:
+                grund = "Zwang" if zieht else "Zwang, kein Auto"
+            else:
+                grund = "läuft" if zieht else "an, kein Auto"
             lasten.append(
                 ModulatedSetpoint(
                     name=m.name, id=m.id, laden=True, strom_a=strom_a,
-                    soll_w=watt, grund="läuft" if zieht else "an, kein Auto",
+                    soll_w=watt, grund=grund,
                 )
             )
             if zieht:
@@ -224,4 +239,5 @@ def _modulated_control(
         lasten=lasten,
         ueberschuss_w=round(avail_w),
         soll_summe_w=round(soll_summe),
+        zwang=zwang,
     )

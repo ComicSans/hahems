@@ -46,7 +46,8 @@ class Actuator:
     async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Reihenfolge WW → WP → Akku → modulierbare Lasten. Jedes Gerät
         gekapselt. Die Zwangsladung ist bereits in der Empfehlung kodiert
-        (plan.ev_regelung.zwang → volle Ampere je Last)."""
+        (plan.ev_regelung.zwang → jede Last läuft, mit dem dort berechneten
+        Sollstrom zwischen Unter- und Obergrenze)."""
         await self._guard(self._apply_ww, reg, plan, name="Warmwasser")
         await self._guard(self._apply_wp, reg, plan, name="Wärmepumpe")
         await self._guard(self._apply_battery, reg, plan, name="Speicher")

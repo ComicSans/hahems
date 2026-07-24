@@ -307,6 +307,9 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         and any(sp.laden for sp in result.ev_regelung.lasten)
     )
     ev_target_w = None
+    # Bei Zwangsladung bleibt das EV-Target bewusst leer: der Speicher-Regler hat
+    # für diesen Fall einen eigenen Weg (er rechnet die Wallbox-Last komplett aus
+    # dem Saldo heraus, damit der Akku nicht für die erzwungene Ladung entlädt).
     if result.ev_regelung is not None and not result.ev_regelung.zwang:
         # Summe der kommandierten Last-Sollleistung. Nicht laufende Lasten
         # zählen 0, obwohl der Actuator sie ggf. noch auf den Mindeststrom hält
@@ -399,17 +402,25 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
         if res.speicher_bedarf_kwh > 0
         else None
     )
+    # Aktive Lasten mit Sollstrom auflisten (eine oder mehrere).
+    aktiv = (
+        [sp for sp in res.ev_regelung.lasten if sp.laden]
+        if res.ev_regelung is not None
+        else []
+    )
     auto = None
     if inp.ev_force:
-        # Zwangsladung: unabhängig von Überschuss und Mindestleistung.
-        auto = "E-Auto laden (Zwang, unabhängig vom Überschuss)"
+        # Zwangsladung: läuft unabhängig vom Überschuss, der Sollstrom folgt ihm
+        # aber weiterhin (bis herunter auf die Untergrenze). Deshalb steht er in
+        # der Zeile — "unabhängig vom Überschuss" wäre irreführend.
+        if len(aktiv) == 1:
+            auto = f"E-Auto {aktiv[0].strom_a:.0f} A (Zwang)"
+        elif len(aktiv) > 1:
+            teile = ", ".join(f"{sp.name} {sp.strom_a:.0f} A" for sp in aktiv)
+            auto = f"Lasten laden, Zwang ({teile})"
+        else:
+            auto = "E-Auto laden (Zwang)"
     elif res.flags.ev_bereit:
-        # Aktive Lasten mit Sollstrom auflisten (eine oder mehrere).
-        aktiv = (
-            [sp for sp in res.ev_regelung.lasten if sp.laden]
-            if res.ev_regelung is not None
-            else []
-        )
         if len(aktiv) == 1:
             auto = f"E-Auto {aktiv[0].strom_a:.0f} A mit Überschuss"
         elif len(aktiv) > 1:

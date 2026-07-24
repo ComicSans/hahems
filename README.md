@@ -452,14 +452,28 @@ Verhalten: jeder Überschuss über 200 W genügt für die Empfehlung.
 ## E-Auto: Zwangsladung (Force Loading)
 
 `switch.hems_e_auto_zwangsladung` erzwingt die Ladeempfehlung "E-Auto laden
-(Zwang)" — unabhängig von Überschuss und Wallbox-Mindestleistung. Der Zustand
-wird als Attribut `ev_zwang` an `sensor.hems_empfehlung` gespiegelt.
+(Zwang)". Der Zustand wird als Attribut `ev_zwang` an `sensor.hems_empfehlung`
+gespiegelt.
+
+**Der Zwang garantiert, _dass_ geladen wird — nicht, _wie schnell_.** Jede
+modulierbare Last läuft: Sie fällt nicht durch das Schmitt-Band, die Rotation
+zwischen gleichrangigen Lasten oder die Mindestpause. Ihr Sollstrom folgt aber
+weiterhin dem Überschuss und sinkt bei Defizit bis auf die Untergrenze (`min_a`),
+statt stur volle Ampere aus dem Netz zu ziehen. Liegt reichlich Überschuss an,
+geht sie bis `max_a` hoch.
+
+Wie ohne Zwang startet eine ausgeschaltete Wallbox erst am Minimum und bekommt
+mehr, sobald sie im Folgezyklus echte Nachfrage nachweist — eine Wallbox ohne
+angestecktes Auto zieht sonst nur eine Phantomlast durch die Bilanz.
+
+Ohne Saldo oder Leistungsmessung gibt es keinen Überschuss zu verteilen: dann
+volle Ampere (Fail-safe „jetzt laden").
 
 Damit der Hausakku dabei nicht still ins Auto leerläuft, rechnet die Saldo-
 Regelung die aktuelle Wallbox-Leistung (`wallbox_w`) aus dem Saldo heraus, den
 sie ausregelt: Der Akku hält seinen SoC, das Zwangs-Delta kommt aus dem Netz
 ("Akku schonen"). Liefert die PV gerade Überschuss, lädt der Akku daraus wie
 gewohnt weiter — er wird nur nicht zusätzlich für die Wallbox entladen. Im
-Modus `auto` wird die Zwangsladung tatsächlich geschaltet (max. Ladestrom auf
+Modus `auto` wird die Zwangsladung tatsächlich geschaltet (Sollstrom auf
 `current_entity`, `switch_entity` an); das reguläre Überschussladen bleibt
 dagegen bei der bestehenden Automation (siehe [Auto-Modus](#auto-modus-aktuierung)).

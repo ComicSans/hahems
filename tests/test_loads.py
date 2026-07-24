@@ -47,21 +47,58 @@ def test_wallbox_laedt_und_akku_bekommt_residuum_ev_first():
     assert sum(zuteilung(r).values()) > 0
 
 
-def test_zwangsladung_volle_ampere():
-    wb = load("WB", power_w=0.0, ist_an=False)
-    r = P.compute_plan(
-        plan_input(
-            socs=[60, 60, 60],
-            saldo_w=500,
-            modulateds=[wb],
-            wallbox_w=0.0,
-            ev_force=True,
-        )
-    )
-    ev = r.ev_regelung
+def _zwang(wb, **kw):
+    return P.compute_plan(
+        plan_input(socs=[60, 60, 60], modulateds=[wb], ev_force=True, **kw)
+    ).ev_regelung
+
+
+def test_zwangsladung_faellt_bei_defizit_auf_die_untergrenze():
+    # Netzbezug statt Überschuss: die Last läuft (Zwang), aber nur mit min_a —
+    # volle Ampere würden den Bezug vervielfachen.
+    wb = load("WB", power_w=4000.0, ist_an=True, an_seit_s=3600, nachfrage=True)
+    ev = _zwang(wb, saldo_w=500, wallbox_w=4000.0)
     assert ev.zwang is True
     assert ev.lasten[0].laden is True
+    assert ev.lasten[0].strom_a == wb.min_a
+
+
+def test_zwangsladung_nutzt_ueberschuss_bis_volle_ampere():
+    # Reichlich Überschuss: der Zwang deckelt nicht nach oben.
+    wb = load("WB", power_w=4000.0, ist_an=True, an_seit_s=3600, nachfrage=True)
+    ev = _zwang(wb, saldo_w=-12000, wallbox_w=4000.0)
     assert ev.lasten[0].strom_a == wb.max_a
+
+
+def test_zwangsladung_uebergeht_mindestpause():
+    # Ohne Zwang bliebe die Last in der Mindestpause aus (Schützschutz); der
+    # Zwang setzt sich darüber hinweg — geladen wird sofort, wenn auch nur mit
+    # der Untergrenze.
+    wb = load("WB", power_w=0.0, ist_an=False, aus_seit_s=60, min_off_min=10)
+    ev = _zwang(wb, saldo_w=500, wallbox_w=0.0)
+    assert ev.lasten[0].laden is True
+    assert ev.lasten[0].strom_a == wb.min_a
+
+
+def test_zwangsladung_ohne_messung_volle_ampere():
+    # Ohne Saldo gibt es keinen Überschuss zu verteilen: Fail-safe „jetzt laden".
+    wb = load("WB", power_w=None, ist_an=False)
+    ev = _zwang(wb, saldo_w=None, wallbox_w=None)
+    assert ev.zwang is True
+    assert ev.lasten[0].strom_a == wb.max_a
+
+
+def test_zwangsladung_zeigt_den_sollstrom_in_der_empfehlung():
+    # Die Empfehlungszeile nennt den tatsächlich kommandierten Strom — bei
+    # Defizit ist das die Untergrenze, nicht "volle Ampere".
+    wb = load("WB", power_w=4000.0, ist_an=True, an_seit_s=3600, nachfrage=True)
+    r = P.compute_plan(
+        plan_input(
+            socs=[60, 60, 60], modulateds=[wb], ev_force=True,
+            saldo_w=500, wallbox_w=4000.0,
+        )
+    )
+    assert "E-Auto 6 A (Zwang)" in r.prioritaeten
 
 
 def test_wallbox_haelt_mindestpause_nach_abschalten():
