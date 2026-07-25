@@ -32,7 +32,7 @@ from .const import (
     DEFAULT_FREE_KWH,
     DEFAULT_GAIN_LEVEL,
     DEFAULT_NIGHT_W,
-    DEFAULT_WP_W_PER_K,
+    DEFAULT_WAERMEPUMPE_W_PER_K,
     DOMAIN,
     EV_DEMAND_FLOOR_W,
     EV_DEMAND_GRACE_S,
@@ -44,8 +44,8 @@ from .const import (
     SWITCH_LEARN_FLOOR_HEAT_W,
     SWITCH_LEARN_FLOOR_W,
     WEATHER_CONDITION_FACTORS,
-    WP_MODEL_DAYS,
-    WP_MODEL_MIN_HOURS,
+    WAERMEPUMPE_MODEL_DAYS,
+    WAERMEPUMPE_MODEL_MIN_HOURS,
 )
 from .actuator import Actuator
 from .changelog import ChangeLog, decision_snapshot, diff_snapshots
@@ -68,7 +68,7 @@ from .strategies.types import (
     PlanResult,
     StorageState,
     SwitchableState,
-    WpModel,
+    WaermepumpeModel,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,8 +108,8 @@ class LoadModelLearner:
         self.load_profile: dict[tuple[int, int], float] | None = None
         self.profile_source: str = "konstante"
         # WP-Verbrauchsmodell (Heizgradstunden), im STATS_CACHE-Takt gelernt.
-        self.wp_model: WpModel | None = None
-        self.wp_model_quelle: str = ""
+        self.waermepumpe_model: WaermepumpeModel | None = None
+        self.waermepumpe_model_quelle: str = ""
 
     async def refresh(self) -> float:
         """Lastmodell lernen: Nacht-Grundlast (Skalar) und 24-h-Lastprofil.
@@ -136,15 +136,15 @@ class LoadModelLearner:
         ):
             return self.night_load_w
 
-        wp_by_ts = await self._wp_hourly_stats(now)
-        self.wp_model, self.wp_model_quelle = await self._learn_wp_model(
-            now, wp_by_ts
+        waermepumpe_by_ts = await self._waermepumpe_hourly_stats(now)
+        self.waermepumpe_model, self.waermepumpe_model_quelle = await self._learn_waermepumpe_model(
+            now, waermepumpe_by_ts
         )
         # Profile nur bereinigen, wenn die WP auch explizit modelliert wird —
         # sonst bliebe ihr Verbrauch komplett unberücksichtigt.
-        wp_abzug = wp_by_ts if self.wp_model is not None else None
-        night_scalar, night_profile = await self._meter_night_stats(now, wp_abzug)
-        house_profile = await self._house_load_profile(now, wp_abzug)
+        waermepumpe_abzug = waermepumpe_by_ts if self.waermepumpe_model is not None else None
+        night_scalar, night_profile = await self._meter_night_stats(now, waermepumpe_abzug)
+        house_profile = await self._house_load_profile(now, waermepumpe_abzug)
 
         if house_profile:
             self.load_profile = house_profile
@@ -155,7 +155,7 @@ class LoadModelLearner:
         else:
             self.load_profile = None
             self.profile_source = "konstante"
-        if self.wp_model is not None:
+        if self.waermepumpe_model is not None:
             self.profile_source += ", wp-bereinigt"
 
         self.night_load_w = (
@@ -164,7 +164,7 @@ class LoadModelLearner:
         self._night_load_fetched = now
         return self.night_load_w
 
-    async def _wp_hourly_stats(self, now: datetime) -> dict[float, float] | None:
+    async def _waermepumpe_hourly_stats(self, now: datetime) -> dict[float, float] | None:
         """Stündliche WP-Leistung je Statistik-Zeitstempel — Basis für die
         Profilbereinigung und das Verbrauchsmodell.
 
@@ -185,7 +185,7 @@ class LoadModelLearner:
         by_ts: dict[float, float] = {}
         for entity in entities:
             rows = await self._statistics_hourly_mean(
-                entity, now - timedelta(days=WP_MODEL_DAYS)
+                entity, now - timedelta(days=WAERMEPUMPE_MODEL_DAYS)
             )
             for row in rows or []:
                 ts, mean = row.get("start"), row.get("mean")
@@ -194,9 +194,9 @@ class LoadModelLearner:
                 by_ts[ts] = by_ts.get(ts, 0.0) + max(0.0, float(mean))
         return by_ts or None
 
-    async def _learn_wp_model(
-        self, now: datetime, wp_by_ts: dict[float, float] | None
-    ) -> tuple[WpModel | None, str]:
+    async def _learn_waermepumpe_model(
+        self, now: datetime, waermepumpe_by_ts: dict[float, float] | None
+    ) -> tuple[WaermepumpeModel | None, str]:
         """Heizgradstunden-Modell der WP lernen: P = Basis + k × (Grenze − T).
 
         Basis ist die mittlere WP-Leistung oberhalb der Heizgrenze
@@ -208,43 +208,43 @@ class LoadModelLearner:
         heating_cfg = (
             self._registry().heatings[0] if self._registry().heatings else None
         )
-        if heating_cfg is None or not wp_by_ts:
+        if heating_cfg is None or not waermepumpe_by_ts:
             return None, ""
         limit = heating_cfg.heat_off_c
         temp_rows = await self._statistics_hourly_mean(
-            heating_cfg.outdoor_temp_entity, now - timedelta(days=WP_MODEL_DAYS)
+            heating_cfg.outdoor_temp_entity, now - timedelta(days=WAERMEPUMPE_MODEL_DAYS)
         )
 
         warm: list[float] = []
         heiz: list[tuple[float, float]] = []  # (Heizgradstunden, Watt)
         for row in temp_rows or []:
             ts, mean = row.get("start"), row.get("mean")
-            if ts is None or mean is None or ts not in wp_by_ts:
+            if ts is None or mean is None or ts not in waermepumpe_by_ts:
                 continue
-            temp, watt = float(mean), wp_by_ts[ts]
+            temp, watt = float(mean), waermepumpe_by_ts[ts]
             if temp >= limit:
                 warm.append(watt)
             else:
                 heiz.append((limit - temp, watt))
 
         base = sum(warm) / len(warm) if warm else 0.0
-        if len(heiz) >= WP_MODEL_MIN_HOURS:
+        if len(heiz) >= WAERMEPUMPE_MODEL_MIN_HOURS:
             hgs = sum(grad for grad, _w in heiz)
             heizenergie = sum(max(0.0, w - base) for _grad, w in heiz)
             if hgs > 0:
                 return (
-                    WpModel(
+                    WaermepumpeModel(
                         base_w=round(base, 1),
                         k_w_per_k=round(heizenergie / hgs, 1),
                         limit_c=limit,
-                        max_w=round(max(wp_by_ts.values()), 0),
+                        max_w=round(max(waermepumpe_by_ts.values()), 0),
                     ),
                     "gelernt",
                 )
         return (
-            WpModel(
+            WaermepumpeModel(
                 base_w=round(base, 1),
-                k_w_per_k=DEFAULT_WP_W_PER_K,
+                k_w_per_k=DEFAULT_WAERMEPUMPE_W_PER_K,
                 limit_c=limit,
                 max_w=None,
             ),
@@ -277,7 +277,7 @@ class LoadModelLearner:
         return stats.get(stat_id, [])
 
     async def _meter_night_stats(
-        self, now: datetime, wp_by_ts: dict[float, float] | None = None
+        self, now: datetime, waermepumpe_by_ts: dict[float, float] | None = None
     ) -> tuple[float | None, dict[tuple[int, int], float] | None]:
         """Nachtlast aus dem rohen Zähler (14 Tage) als Fallback lernen.
 
@@ -302,7 +302,7 @@ class LoadModelLearner:
             utc = dt_util.utc_from_timestamp(ts)
             if dt_util.as_local(utc).hour in NIGHT_HOURS_LOCAL:
                 # Nur Bezug zählt; ein evtl. gedeckelter Zähler liefert eh >= 0
-                watt = float(mean) - (wp_by_ts or {}).get(ts, 0.0)
+                watt = float(mean) - (waermepumpe_by_ts or {}).get(ts, 0.0)
                 by_hour.setdefault(utc.hour, []).append(max(0.0, watt))
         if not by_hour:
             return None, None
@@ -317,7 +317,7 @@ class LoadModelLearner:
         return scalar, profile
 
     async def _house_load_profile(
-        self, now: datetime, wp_by_ts: dict[float, float] | None = None
+        self, now: datetime, waermepumpe_by_ts: dict[float, float] | None = None
     ) -> dict[tuple[int, int], float] | None:
         """Volles 24-h-Lastprofil aus dem rekonstruierten Hausverbrauch lernen.
 
@@ -343,7 +343,7 @@ class LoadModelLearner:
                 continue
             utc = dt_util.utc_from_timestamp(ts)
             daytype = 1 if utc.weekday() >= 5 else 0
-            watt = float(mean) - (wp_by_ts or {}).get(ts, 0.0)
+            watt = float(mean) - (waermepumpe_by_ts or {}).get(ts, 0.0)
             buckets.setdefault((daytype, utc.hour), []).append(max(0.0, watt))
 
         profile = {
@@ -474,12 +474,12 @@ class HemsData:
         self.wetter_faktor_morgen: float | None = None
         self.saldo_w: float | None = None
         self.batterie_w: float | None = None  # positiv = Entladen ins Haus
-        self.wp_w: float | None = None
+        self.waermepumpe_w: float | None = None
         self.wallbox_w: float | None = None
         self.haus_w: float | None = None
         self.lastprofil_quelle: str = ""
         self.lastprofil: list[dict] = []
-        self.wp_modell: dict | None = None
+        self.waermepumpe_modell: dict | None = None
         # Eigene Entity-IDs, aus denen die Plankarte den gemessenen Verlauf
         # des laufenden Tages nachlädt (Slugs sind instanzabhängig).
         self.verlauf_pv_entity: str | None = None
@@ -905,7 +905,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Nur die heizungsgekoppelten Lasten sind „die Wärmepumpe"; alle
         # übrigen Schaltlasten stehen einzeln in data.schaltlasten (siehe
         # unten) statt anonym in dieser Summe.
-        data.wp_w = self._sum_power(
+        data.waermepumpe_w = self._sum_power(
             [s.power_entity for s in reg.switchables if s.heat_coupled]
         )
         data.wallbox_w = self._sum_power([m.power_entity for m in reg.modulateds])
@@ -982,14 +982,14 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         horizon_end = dt_util.as_utc(
             dt_util.start_of_local_day(today_local + timedelta(days=2))
         )
-        ww_sperren = block_windows(
+        warmwasser_sperren = block_windows(
             thermal.block_start if thermal else None,
             thermal.block_end if thermal else None,
             horizon_start,
             horizon_end,
             dt_util.DEFAULT_TIME_ZONE,
         )
-        ww_legionellen = weekly_windows(
+        warmwasser_legionellen = weekly_windows(
             parse_weekday(thermal.legionella_weekday) if thermal else None,
             thermal.legionella_start if thermal else None,
             thermal.legionella_end if thermal else None,
@@ -1030,13 +1030,13 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # in den PlanInput einfließt.
         night_load_w = await self._load_model.refresh()
         temp_forecast = await self._weather.hourly_forecast()
-        if self._load_model.wp_model is not None:
-            data.wp_modell = {
-                "quelle": self._load_model.wp_model_quelle,
-                "basis_w": self._load_model.wp_model.base_w,
-                "k_w_pro_k": self._load_model.wp_model.k_w_per_k,
-                "heizgrenze_c": self._load_model.wp_model.limit_c,
-                "max_w": self._load_model.wp_model.max_w,
+        if self._load_model.waermepumpe_model is not None:
+            data.waermepumpe_modell = {
+                "quelle": self._load_model.waermepumpe_model_quelle,
+                "basis_w": self._load_model.waermepumpe_model.base_w,
+                "k_w_pro_k": self._load_model.waermepumpe_model.k_w_per_k,
+                "heizgrenze_c": self._load_model.waermepumpe_model.limit_c,
+                "max_w": self._load_model.waermepumpe_model.max_w,
             }
 
         data.plan = compute_plan(
@@ -1078,8 +1078,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 tomorrow_sunset=get_astral_event_date(
                     self.hass, "sunset", tomorrow_local
                 ),
-                thermal_block_windows=ww_sperren,
-                thermal_legionella_windows=ww_legionellen,
+                thermal_block_windows=warmwasser_sperren,
+                thermal_legionella_windows=warmwasser_legionellen,
                 thermal_legionella_target=thermal.legionella_target
                 if thermal
                 else 60,
@@ -1094,7 +1094,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 heating=heating,
                 modulateds=modulateds,
                 switchables=switchables,
-                wp_model=self._load_model.wp_model,
+                waermepumpe_model=self._load_model.waermepumpe_model,
                 temp_forecast_c=temp_forecast or None,
                 flags=self._plan_flags,
             )

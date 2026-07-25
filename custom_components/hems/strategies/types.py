@@ -58,7 +58,7 @@ class HeatingState:
 
 
 @dataclass
-class WpModel:
+class WaermepumpeModel:
     """Verbrauchsmodell der Wärmepumpe: P = base_w + k × (Heizgrenze − T).
 
     Vom Coordinator aus der Langzeitstatistik gelernt (oder Richtwert-
@@ -257,23 +257,23 @@ class PlanFlags:
 
     surplus: bool = False
     knapp: bool = True
-    ww_basis: bool = False
-    ww_komfort: bool = False
+    warmwasser_basis: bool = False
+    warmwasser_komfort: bool = False
     wetter_knapp: bool = False
     pv_morgen_knapp: bool = False
     # PV-Boost-Kriterien fürs Warmwasser: Speicher fast voll bzw. kräftige
     # Einspeisung, jeweils mit eigener Ein-/Aus-Schwelle.
-    ww_boost_soc: bool = False
-    ww_boost_saldo: bool = False
+    warmwasser_boost_soc: bool = False
+    warmwasser_boost_saldo: bool = False
     # Kaltreserve der Saldo-Regelung: Reserve-Speicher entladen mit, solange
     # der mittlere SoC der übrigen unten ist.
     kaltreserve: bool = False
     # Heizkreis-Modus (Außentemperatur-Hysterese) und Flüster-Empfehlung.
-    wp_heizen: bool = False
-    wp_kuehlen: bool = False
-    wp_leise: bool = False
+    waermepumpe_heizen: bool = False
+    waermepumpe_kuehlen: bool = False
+    waermepumpe_leise: bool = False
     # Frostschutz-Trigger: eigener Latch, unabhängig vom Heiz-/Sperr-Zustand.
-    wp_frost: bool = False
+    waermepumpe_frost: bool = False
     # E-Auto: Überschuss reicht (mit Marge) für die Wallbox-Mindestleistung.
     # Start konservativ False, damit der erste Lauf nach einem Neustart nicht
     # sofort "E-Auto laden" meldet, ohne den Momentanüberschuss zu kennen.
@@ -319,7 +319,7 @@ class PlanInput:
     thermal_base: float
     thermal_comfort: float
     # Ob überhaupt ein Warmwasser-Gerät konfiguriert ist; ohne eines bleiben
-    # ww_soll_c/ww_status leer, statt den Default-Sollwert zu melden.
+    # warmwasser_soll_c/warmwasser_status leer, statt den Default-Sollwert zu melden.
     thermal_present: bool = True
     priority_mode: str = PRIORITY_AUTO
     # Optimierungsziel (Laufzeit): steuert Ladeziel-SoC und Regler-Offset.
@@ -385,7 +385,7 @@ class PlanInput:
     # und die WP wird hier explizit temperaturabhängig aufgeschlagen —
     # so folgt die Bedarfsprognose der Wettervorhersage statt dem
     # 28-Tage-Mittel hinterherzulaufen.
-    wp_model: WpModel | None = None
+    waermepumpe_model: WaermepumpeModel | None = None
     # Stündliche Temperaturvorhersage (UTC-Stundenanfang → °C) aus der
     # Wetterintegration; fehlende Stunden fallen auf die aktuelle
     # Außentemperatur des Heizkreises zurück.
@@ -426,7 +426,7 @@ class PlanResult:
     nachtdefizit_kwh: float = 0.0
     # Anteil der Wärmepumpe am Nachtdefizit (bereits darin enthalten),
     # nur zur Transparenz separat ausgewiesen.
-    wp_nacht_kwh: float = 0.0
+    waermepumpe_nacht_kwh: float = 0.0
     ueberschuss_rest_kwh: float = 0.0
     speicher_soc: float | None = None
     speicher_verfuegbar_kwh: float = 0.0
@@ -446,14 +446,14 @@ class PlanResult:
     entladeplan: list[DischargeSlot] = field(default_factory=list)
     pv_kurve: list[PvSlot] = field(default_factory=list)
     soc_prognose: list[SocPoint] = field(default_factory=list)
-    ww_gesperrt: bool = False
-    ww_sperrfenster: list[tuple[datetime, datetime]] = field(default_factory=list)
+    warmwasser_gesperrt: bool = False
+    warmwasser_sperrfenster: list[tuple[datetime, datetime]] = field(default_factory=list)
     # Warmwasser-Orchestrierung: empfohlener Sollwert nach Priorität
     # Legionellenschutz > PV-Boost > Basis; in der Sperrzeit None ("aus").
-    ww_soll_c: float | None = None
-    ww_status: str = ""  # "aus" | "legionellenschutz" | "pv_boost" | "basis"
-    ww_legionelle_aktiv: bool = False
-    ww_legionellen_fenster: list[tuple[datetime, datetime]] = field(
+    warmwasser_soll_c: float | None = None
+    warmwasser_status: str = ""  # "aus" | "legionellenschutz" | "pv_boost" | "basis"
+    warmwasser_legionelle_aktiv: bool = False
+    warmwasser_legionellen_fenster: list[tuple[datetime, datetime]] = field(
         default_factory=list
     )
     # Empfehlung der Saldo-Regelung über alle Speicher (None ohne Daten).

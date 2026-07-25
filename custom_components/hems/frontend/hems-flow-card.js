@@ -5,12 +5,12 @@
  * Sensor (Standard: sensor.hems_lastfluss), der alle Leistungen als
  * Attribute trägt:
  *   pv_w, netz_w (positiv = Bezug), batterie_w (positiv = Entladen),
- *   haus_w, wp_w, wallbox_w, speicher_soc, pv_geschaetzt
+ *   haus_w, waermepumpe_w, wallbox_w, speicher_soc, pv_geschaetzt
  * plus Aufschlüsselungen für die Zeilen unter dem Diagramm:
  *   speicher[] (name, soc, watt), schaltlasten[] (name, prio, ist_an,
  *   soll_an, watt, erwartet_w, grund)
  * plus Status der Regelungen für die Chips:
- *   regelung_modus, regelung_w, ww_soll_c, ww_status, wp_modus, wp_vlt_c
+ *   regelung_modus, regelung_w, warmwasser_soll_c, warmwasser_status, waermepumpe_modus, waermepumpe_vlt_c
  *
  * Die Aufteilung auf die Kanten folgt derselben Merit-Order wie der
  * Planner: PV deckt zuerst das Haus, dann die Akkus, der Rest speist ein.
@@ -194,7 +194,7 @@ class HemsFlowCard extends HTMLElement {
       )
       .join("");
 
-    const wwLabel = {
+    const warmwasserLabel = {
       legionellenschutz: "Legionellenschutz",
       pv_boost: "PV-Boost",
       basis: "Basis",
@@ -204,8 +204,8 @@ class HemsFlowCard extends HTMLElement {
       // Kein Sammel-Chip für die Wärmepumpe mehr: schaltbare Lasten stehen
       // jetzt einzeln als Zeilen (Name, Priorität, Empfehlung) unter dem
       // Diagramm — die WP ist eine davon.
-      a.wp_modus != null && a.wp_vlt_c != null
-        ? `🌡 WP ${a.wp_modus === "kuehlen" ? "kühlt" : a.wp_modus} · VLT ${Math.round(a.wp_vlt_c)} °C`
+      a.waermepumpe_modus != null && a.waermepumpe_vlt_c != null
+        ? `🌡 WP ${a.waermepumpe_modus === "kuehlen" ? "kühlt" : a.waermepumpe_modus} · VLT ${Math.round(a.waermepumpe_vlt_c)} °C`
         : null,
       a.wallbox_w != null ? `🚗 Wallbox ${fmtW(a.wallbox_w)}` : null,
       a.regelung_modus != null
@@ -217,10 +217,10 @@ class HemsFlowCard extends HTMLElement {
         : null,
       // "aus (Sperrzeit)" zeigt nur den vom Nutzer selbst konfigurierten
       // Zustand ohne neue Information — Chip bleibt dafür weg.
-      a.ww_status && a.ww_status !== "aus"
-        ? a.ww_soll_c != null
-          ? `🚿 WW ${Math.round(a.ww_soll_c)} °C · ${wwLabel[a.ww_status] ?? a.ww_status}`
-          : `🚿 WW ${wwLabel[a.ww_status] ?? a.ww_status}`
+      a.warmwasser_status && a.warmwasser_status !== "aus"
+        ? a.warmwasser_soll_c != null
+          ? `🚿 WW ${Math.round(a.warmwasser_soll_c)} °C · ${warmwasserLabel[a.warmwasser_status] ?? a.warmwasser_status}`
+          : `🚿 WW ${warmwasserLabel[a.warmwasser_status] ?? a.warmwasser_status}`
         : null,
     ]
       .filter(Boolean)

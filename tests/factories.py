@@ -182,7 +182,7 @@ def plan_input(
     thermal_legionella_windows: list[tuple[datetime, datetime]] | None = None,
     thermal_legionella_target: float = 60.0,
     heating_state: P.HeatingState | None = None,
-    wp_model: P.WpModel | None = None,
+    waermepumpe_model: P.WaermepumpeModel | None = None,
     load_profile_w: dict[tuple[int, int], float] | None = None,
     temp_forecast_c: dict[datetime, float] | None = None,
 ) -> P.PlanInput:
@@ -220,7 +220,7 @@ def plan_input(
         modulateds=modulateds if modulateds is not None else [],
         switchables=switchables if switchables is not None else [],
         heating=heating_state,
-        wp_model=wp_model,
+        waermepumpe_model=waermepumpe_model,
         load_profile_w=load_profile_w,
         temp_forecast_c=temp_forecast_c,
         horizon_start=now.replace(hour=0, minute=0),

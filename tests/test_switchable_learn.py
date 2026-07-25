@@ -38,7 +38,7 @@ def test_standby_unter_boden_lernt_nicht():
     assert lern_leistung(None, 5.0, WARM, floor_w=SWITCH_LEARN_FLOOR_W) is None
 
 
-def test_wp_anlaufsockel_unter_heizboden_lernt_nicht():
+def test_waermepumpe_anlaufsockel_unter_heizboden_lernt_nicht():
     # Der reale Fehlerfall: 204 W Regelung/Umwälzpumpe, Kompressor noch aus.
     assert (
         lern_leistung(None, 203.71, WARM, floor_w=SWITCH_LEARN_FLOOR_HEAT_W) is None

@@ -31,24 +31,24 @@ def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
         return result
     result.t_aussen_c = t
 
-    res.flags.wp_heizen = (
+    res.flags.waermepumpe_heizen = (
         False
         if h.heat_locked
-        else _latch(inp.flags.wp_heizen, t, on=h.heat_on_c, off=h.heat_off_c)
+        else _latch(inp.flags.waermepumpe_heizen, t, on=h.heat_on_c, off=h.heat_off_c)
     )
-    res.flags.wp_kuehlen = _latch(
-        inp.flags.wp_kuehlen, t, on=h.cool_on_c, off=h.cool_off_c
+    res.flags.waermepumpe_kuehlen = _latch(
+        inp.flags.waermepumpe_kuehlen, t, on=h.cool_on_c, off=h.cool_off_c
     )
     # Frostschutz-Latch unabhängig vom Sperr-Zustand: greift auch, wenn die
-    # Sommersperre wp_heizen hart auf False zwingt.
-    res.flags.wp_frost = _latch(
-        inp.flags.wp_frost, t, on=h.frost_on_c, off=h.frost_off_c
+    # Sommersperre waermepumpe_heizen hart auf False zwingt.
+    res.flags.waermepumpe_frost = _latch(
+        inp.flags.waermepumpe_frost, t, on=h.frost_on_c, off=h.frost_off_c
     )
 
-    if res.flags.wp_heizen or res.flags.wp_frost:
+    if res.flags.waermepumpe_heizen or res.flags.waermepumpe_frost:
         # Frostschutz erzwingt Heizen nur, wenn der reguläre Heizbetrieb (evtl.
         # per Sommersperre) aus ist; sonst heizt die Anlage witterungsgeführt.
-        frost_only = res.flags.wp_frost and not res.flags.wp_heizen
+        frost_only = res.flags.waermepumpe_frost and not res.flags.waermepumpe_heizen
         result.modus = "heizen"
         result.frostschutz = frost_only
         vlt_min = (
@@ -62,14 +62,14 @@ def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
                 vlt += h.demand_pct / 100 * HEATING_DEMAND_SHIFT_K
             vlt = max(vlt_min, min(vlt, h.vlt_max_c))
         result.vlt_ziel_c = float(round(vlt))
-        res.flags.wp_leise = _latch(
-            inp.flags.wp_leise,
+        res.flags.waermepumpe_leise = _latch(
+            inp.flags.waermepumpe_leise,
             result.vlt_ziel_c,
             on=SILENT_VLT_ON_C,
             off=SILENT_VLT_OFF_C,
         )
-        result.leise_empfohlen = res.flags.wp_leise
-    elif res.flags.wp_kuehlen:
+        result.leise_empfohlen = res.flags.waermepumpe_leise
+    elif res.flags.waermepumpe_kuehlen:
         result.modus = "kuehlen"
         result.vlt_ziel_c = h.cool_vlt_c
     else:

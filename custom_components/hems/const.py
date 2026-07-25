@@ -233,9 +233,9 @@ SWITCH_LEARN_DECAY = 0.25
 # aus der Langzeitstatistik der WP-Leistung gegen die Außentemperatur gelernt
 # (Heizgradstunden-Regression). Die Heizgrenze ist heat_off_c des Heizkreises.
 # Solange die Historie nicht reicht, greift der grobe Richtwert.
-WP_MODEL_DAYS = 45
-WP_MODEL_MIN_HOURS = 24  # Mindest-Stunden unter der Heizgrenze fürs Lernen
-DEFAULT_WP_W_PER_K = 40.0  # W elektrisch je K unter Heizgrenze (Richtwert EFH)
+WAERMEPUMPE_MODEL_DAYS = 45
+WAERMEPUMPE_MODEL_MIN_HOURS = 24  # Mindest-Stunden unter der Heizgrenze fürs Lernen
+DEFAULT_WAERMEPUMPE_W_PER_K = 40.0  # W elektrisch je K unter Heizgrenze (Richtwert EFH)
 
 # PV-Ertragsfaktor (0–1) je Wetterlage, falls die Vorhersage keinen
 # Bewölkungsgrad liefert. Diffuses Licht bringt auch bedeckt noch Ertrag.

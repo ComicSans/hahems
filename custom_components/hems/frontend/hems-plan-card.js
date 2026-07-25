@@ -9,11 +9,11 @@
  * sensor.hems_entladeplan mit den Attributen:
  *   slots           [{von, bis, watt, soc_erwartet}]  geplante Entladung (Nacht)
  *   pv_kurve        [{von, bis, watt}]                geschätzte PV-Leistung
- *   ww_sperren      [{von, bis}]                      WW-Sperrzeiten
- *   ww_legionellen  [{von, bis}]                      Legionellenschutz-Fenster
- *   ww_soll_c, ww_status                              WW-Sollwert-Empfehlung
+ *   warmwasser_sperren      [{von, bis}]                      WW-Sperrzeiten
+ *   warmwasser_legionellen  [{von, bis}]                      Legionellenschutz-Fenster
+ *   warmwasser_soll_c, warmwasser_status                              WW-Sollwert-Empfehlung
  *   regelung_modus, regelung_w, reserve_aktiv         Speicher-Saldo-Regelung
- *   wp_modus, wp_vlt_c                                Heizkreis-Empfehlung
+ *   waermepumpe_modus, waermepumpe_vlt_c                                Heizkreis-Empfehlung
  *   budget_kwh, pv_rest_heute_kwh, pv_morgen_kwh, speicher_soc, wetter_morgen
  *   verlauf_pv_entity, verlauf_soc_entity             Quellen für den Verlauf
  *
@@ -34,23 +34,23 @@ const W = 480;
 const H = 300;
 // bottom trägt Stundenachse und Warmwasser-Band
 const PAD = { left: 40, right: 34, top: 16, bottom: 52 };
-const WW_BAND = { y: H - 26, h: 11 };
+const WARMWASSER_BAND = { y: H - 26, h: 11 };
 
 const COLOR_PV = "#ff9800";
 const COLOR_PLAN = "#4caf50";
 const COLOR_SOC = "#488fc2";
-const COLOR_WW_OK = "#26a69a";
-const COLOR_WW_BLOCK = "#b0bec5";
-const COLOR_WW_LEGIO = "#7e57c2";
+const COLOR_WARMWASSER_OK = "#26a69a";
+const COLOR_WARMWASSER_BLOCK = "#b0bec5";
+const COLOR_WARMWASSER_LEGIO = "#7e57c2";
 
 // Anzeigetexte für den WW-Status aus dem Planner
-const WW_STATUS_LABEL = {
+const WARMWASSER_STATUS_LABEL = {
   aus: "aus (Sperrzeit)",
   legionellenschutz: "Legionellenschutz",
   pv_boost: "PV-Boost",
   basis: "Basis",
 };
-const WP_MODUS_LABEL = {
+const WAERMEPUMPE_MODUS_LABEL = {
   heizen: "heizen",
   kuehlen: "kühlen",
   aus: "aus",
@@ -349,32 +349,32 @@ class HemsPlanCard extends HTMLElement {
 
     // Warmwasser-Band: durchgehend "verfügbar", darüber Sperrfenster (grau)
     // und Legionellenschutz-Fenster (violett, erhöhter Sollwert).
-    const wwWindows = (key) =>
+    const warmwasserWindows = (key) =>
       (a[key] || [])
         .map((s) => ({ von: new Date(s.von), bis: new Date(s.bis) }))
         .filter((s) => s.bis.getTime() > t0 && s.von.getTime() < t1);
-    const wwSegment = (s, color, cls, title) => {
+    const warmwasserSegment = (s, color, cls, title) => {
       const bx = x(Math.max(t0, s.von.getTime()));
       const bw = Math.max(1, x(Math.min(t1, s.bis.getTime())) - bx);
-      return `<rect class="${cls}" x="${bx.toFixed(1)}" y="${WW_BAND.y}"
-        width="${bw.toFixed(1)}" height="${WW_BAND.h}" fill="${color}"
+      return `<rect class="${cls}" x="${bx.toFixed(1)}" y="${WARMWASSER_BAND.y}"
+        width="${bw.toFixed(1)}" height="${WARMWASSER_BAND.h}" fill="${color}"
         ><title>${title} ${fmtTime(s.von)} – ${fmtTime(s.bis)}</title></rect>`;
     };
-    const wwBlocks = wwWindows("ww_sperren")
-      .map((s) => wwSegment(s, COLOR_WW_BLOCK, "ww-block", "Warmwasser gesperrt"))
+    const warmwasserBlocks = warmwasserWindows("warmwasser_sperren")
+      .map((s) => warmwasserSegment(s, COLOR_WARMWASSER_BLOCK, "ww-block", "Warmwasser gesperrt"))
       .join("");
-    const wwLegio = wwWindows("ww_legionellen")
+    const warmwasserLegio = warmwasserWindows("warmwasser_legionellen")
       .map((s) =>
-        wwSegment(s, COLOR_WW_LEGIO, "ww-legio", "Legionellenschutz")
+        warmwasserSegment(s, COLOR_WARMWASSER_LEGIO, "ww-legio", "Legionellenschutz")
       )
       .join("");
-    const wwBand = `
-      <rect class="ww-ok" x="${PAD.left}" y="${WW_BAND.y}"
-        width="${W - PAD.left - PAD.right}" height="${WW_BAND.h}"
-        fill="${COLOR_WW_OK}"><title>Warmwasser verfügbar</title></rect>
-      ${wwBlocks}
-      ${wwLegio}
-      <text class="ylabel" x="${PAD.left - 4}" y="${WW_BAND.y + WW_BAND.h - 2}">WW</text>`;
+    const warmwasserBand = `
+      <rect class="ww-ok" x="${PAD.left}" y="${WARMWASSER_BAND.y}"
+        width="${W - PAD.left - PAD.right}" height="${WARMWASSER_BAND.h}"
+        fill="${COLOR_WARMWASSER_OK}"><title>Warmwasser verfügbar</title></rect>
+      ${warmwasserBlocks}
+      ${warmwasserLegio}
+      <text class="ylabel" x="${PAD.left - 4}" y="${WARMWASSER_BAND.y + WARMWASSER_BAND.h - 2}">WW</text>`;
 
     // Mitternachts-Trenner + Tageslabels
     const days = [];
@@ -440,11 +440,11 @@ class HemsPlanCard extends HTMLElement {
     // und Heizkreis-Empfehlung, sofern konfiguriert bzw. Daten vorliegen.
     // "aus (Sperrzeit)" zeigt nur den vom Nutzer selbst konfigurierten
     // Zustand ohne neue Information — Chip bleibt dafür weg.
-    const wwChip =
-      a.ww_status && a.ww_status !== "" && a.ww_status !== "aus"
-        ? a.ww_soll_c != null
-          ? `🚿 WW ${Math.round(a.ww_soll_c)} °C · ${WW_STATUS_LABEL[a.ww_status] ?? a.ww_status}`
-          : `🚿 WW ${WW_STATUS_LABEL[a.ww_status] ?? a.ww_status}`
+    const warmwasserChip =
+      a.warmwasser_status && a.warmwasser_status !== "" && a.warmwasser_status !== "aus"
+        ? a.warmwasser_soll_c != null
+          ? `🚿 WW ${Math.round(a.warmwasser_soll_c)} °C · ${WARMWASSER_STATUS_LABEL[a.warmwasser_status] ?? a.warmwasser_status}`
+          : `🚿 WW ${WARMWASSER_STATUS_LABEL[a.warmwasser_status] ?? a.warmwasser_status}`
         : null;
     const regelungChip =
       a.regelung_modus != null
@@ -454,10 +454,10 @@ class HemsPlanCard extends HTMLElement {
               : ""
           }${a.reserve_aktiv ? " · Kaltreserve" : ""}`
         : null;
-    const wpChip =
-      a.wp_modus != null
-        ? `♨️ WP ${WP_MODUS_LABEL[a.wp_modus] ?? a.wp_modus}${
-            a.wp_vlt_c != null ? ` · VLT ${Math.round(a.wp_vlt_c)} °C` : ""
+    const waermepumpeChip =
+      a.waermepumpe_modus != null
+        ? `♨️ WP ${WAERMEPUMPE_MODUS_LABEL[a.waermepumpe_modus] ?? a.waermepumpe_modus}${
+            a.waermepumpe_vlt_c != null ? ` · VLT ${Math.round(a.waermepumpe_vlt_c)} °C` : ""
           }`
         : null;
 
@@ -468,9 +468,9 @@ class HemsPlanCard extends HTMLElement {
       state.state !== "unknown" && state.state !== "unavailable" && state.state !== ""
         ? `⚡ Jetzt ${Math.round(Number(state.state))} W`
         : null,
-      wwChip,
+      warmwasserChip,
       regelungChip,
-      wpChip,
+      waermepumpeChip,
     ]
       .filter(Boolean)
       .map((c) => `<span class="chip">${c}</span>`)
@@ -576,9 +576,9 @@ class HemsPlanCard extends HTMLElement {
                  <span><i class="swatch soc-swatch"></i>SoC-Prognose</span>`
           }
           <span><i class="swatch" style="background:${COLOR_PLAN}"></i>Entladung geplant</span>
-          <span><i class="swatch" style="background:${COLOR_WW_OK}"></i>WW verfügbar</span>
-          <span><i class="swatch" style="background:${COLOR_WW_BLOCK}"></i>WW gesperrt</span>
-          <span><i class="swatch" style="background:${COLOR_WW_LEGIO}"></i>Legionellenschutz</span>
+          <span><i class="swatch" style="background:${COLOR_WARMWASSER_OK}"></i>Warmwasser verfügbar</span>
+          <span><i class="swatch" style="background:${COLOR_WARMWASSER_BLOCK}"></i>Warmwasser gesperrt</span>
+          <span><i class="swatch" style="background:${COLOR_WARMWASSER_LEGIO}"></i>Legionellenschutz</span>
         </div>
         <div class="container">
           <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"
@@ -596,7 +596,7 @@ class HemsPlanCard extends HTMLElement {
             ${ticks}
             ${socTicks}
             ${pastLabel}
-            ${wwBand}
+            ${warmwasserBand}
           </svg>
         </div>
         <div class="footer">${chips}</div>

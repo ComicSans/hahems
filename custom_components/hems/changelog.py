@@ -36,13 +36,13 @@ _GOAL_LABEL = {
     "vollladen": "Laden",
 }
 _AKKU_LABEL = {"laden": "Laden", "entladen": "Entladen", "pausiert": "Pausiert"}
-_WW_LABEL = {
+_WARMWASSER_LABEL = {
     "aus": "aus (Sperrzeit)",
     "legionellenschutz": "Legionellenschutz",
     "pv_boost": "PV-Boost",
     "basis": "Basis",
 }
-_WP_LABEL = {"heizen": "heizen", "kuehlen": "kühlen", "aus": "aus", "unbekannt": "unbekannt"}
+_WAERMEPUMPE_LABEL = {"heizen": "heizen", "kuehlen": "kühlen", "aus": "aus", "unbekannt": "unbekannt"}
 
 # key → (Titel, Kategorie). Reihenfolge bestimmt die Ausgabe je Zyklus.
 _DECISION_FIELDS: dict[str, tuple[str, str]] = {
@@ -51,10 +51,10 @@ _DECISION_FIELDS: dict[str, tuple[str, str]] = {
     "ev_force": ("E-Auto Zwangsladung", "ev"),
     "akku_modus": ("Akku-Regelung", "akku"),
     "akku_reserve": ("Akku-Kaltreserve", "akku"),
-    "ww_status": ("Warmwasser", "ww"),
-    "ww_soll": ("Warmwasser-Sollwert", "ww"),
-    "wp_modus": ("Wärmepumpe", "wp"),
-    "wp_vlt": ("WP-Vorlauf", "wp"),
+    "warmwasser_status": ("Warmwasser", "ww"),
+    "warmwasser_soll": ("Warmwasser-Sollwert", "ww"),
+    "waermepumpe_modus": ("Wärmepumpe", "wp"),
+    "waermepumpe_vlt": ("Wärmepumpen-Vorlauf", "wp"),
 }
 
 
@@ -85,24 +85,24 @@ def decision_snapshot(mode: str, goal: str, ev_force: bool, plan: Any) -> dict:
             "Kaltreserve aktiv" if reg.reserve_aktiv else "Kaltreserve inaktiv",
         )
 
-    if getattr(plan, "ww_status", ""):
-        snap["ww_status"] = (
-            plan.ww_status,
-            _WW_LABEL.get(plan.ww_status, plan.ww_status),
+    if getattr(plan, "warmwasser_status", ""):
+        snap["warmwasser_status"] = (
+            plan.warmwasser_status,
+            _WARMWASSER_LABEL.get(plan.warmwasser_status, plan.warmwasser_status),
         )
-    if getattr(plan, "ww_soll_c", None) is not None:
-        soll = round(plan.ww_soll_c)
-        snap["ww_soll"] = (soll, f"{soll} °C")
+    if getattr(plan, "warmwasser_soll_c", None) is not None:
+        soll = round(plan.warmwasser_soll_c)
+        snap["warmwasser_soll"] = (soll, f"{soll} °C")
 
     heiz = getattr(plan, "heizung", None)
     if heiz is not None:
-        disp = _WP_LABEL.get(heiz.modus, heiz.modus)
+        disp = _WAERMEPUMPE_LABEL.get(heiz.modus, heiz.modus)
         if getattr(heiz, "frostschutz", False):
             disp = f"{disp} (Frostschutz)"
-        snap["wp_modus"] = (heiz.modus, disp)
+        snap["waermepumpe_modus"] = (heiz.modus, disp)
         if heiz.vlt_ziel_c is not None:
             vlt = round(heiz.vlt_ziel_c)
-            snap["wp_vlt"] = (vlt, f"{vlt} °C")
+            snap["waermepumpe_vlt"] = (vlt, f"{vlt} °C")
 
     # Die Wallbox-Sofortladung wird bewusst nicht separat geführt: sie folgt
     # 1:1 dem Nutzer-Schalter „E-Auto Zwangsladung" (ev_force) und würde je

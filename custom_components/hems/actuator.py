@@ -31,7 +31,7 @@ _HVAC = {"heizen": "heat", "kuehlen": "cool", "aus": "off"}
 # Warmwasser: Mindestlaufzeit vor dem Abschalten (gegen Takten), wie in der
 # abgelösten WW-Automation. Der Warmup nach dem Einschalten ergibt sich von
 # selbst — der Sollwert wird erst im Folgezyklus (~60 s später) gesetzt.
-WW_MIN_RUNTIME = timedelta(minutes=15)
+WARMWASSER_MIN_RUNTIME = timedelta(minutes=15)
 
 # Toleranz, ab der ein Zahl-Sollwert als "geändert" gilt (W bzw. A/°C: <1).
 _EPS = 1.0
@@ -129,13 +129,13 @@ class Actuator:
         if st in (None, "unavailable", "unknown"):
             return
         is_on = st != "off"
-        aus = plan.ww_status == "aus" or plan.ww_soll_c is None
+        aus = plan.warmwasser_status == "aus" or plan.warmwasser_soll_c is None
 
         if aus:
             if is_on:
                 s = self.hass.states.get(ent)
                 # Mindestlaufzeit respektieren (last_changed = letzte An/Aus-Kante).
-                if s is None or self._age(s) >= WW_MIN_RUNTIME:
+                if s is None or self._age(s) >= WARMWASSER_MIN_RUNTIME:
                     await self._call("water_heater", "turn_off", ent)
             return
 
@@ -145,7 +145,7 @@ class Actuator:
             await self._call("water_heater", "turn_on", ent)
             return
 
-        soll = int(plan.ww_soll_c)
+        soll = int(plan.warmwasser_soll_c)
         akt = self._num_attr(ent, "temperature")
         if akt is None or int(akt) != soll:
             await self._call("water_heater", "set_temperature", ent, temperature=soll)

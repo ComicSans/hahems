@@ -24,7 +24,7 @@ from .const import (
 )
 from .strategies import coordination
 from .strategies.battery import _lade_deckel_soc, _storage_control
-from .strategies.demand import _profile_covers, _window_load_kwh, _wp_window_kwh
+from .strategies.demand import _profile_covers, _window_load_kwh, _waermepumpe_window_kwh
 from .strategies.forecast import _discharge_plan, _pv_curve, _soc_forecast
 from .strategies.heating import _heating_plan
 from .strategies.loads import _modulated_control
@@ -205,10 +205,10 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         2,
     )
     # WP-Anteil am Nachtdefizit separat ausweisen (Transparenz).
-    result.wp_nacht_kwh = round(
-        _wp_window_kwh(inp, inp.now, inp.next_sunrise)
+    result.waermepumpe_nacht_kwh = round(
+        _waermepumpe_window_kwh(inp, inp.now, inp.next_sunrise)
         if ist_nacht
-        else _wp_window_kwh(inp, inp.sunset, inp.sunrise),
+        else _waermepumpe_window_kwh(inp, inp.sunset, inp.sunrise),
         2,
     )
 
@@ -269,7 +269,7 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         expected_day_kwh = (
             inp.baseline_load_w * result.sonnenfenster_h / 1000
             + (
-                _wp_window_kwh(inp, inp.now, inp.sunset)
+                _waermepumpe_window_kwh(inp, inp.now, inp.sunset)
                 if not ist_nacht
                 else 0.0
             )
@@ -392,15 +392,15 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     # Die WW-Flags (Basis/Komfort-Thermostat, Sperre, Legionellen, PV-Boost) hat
     # water_plan bereits gesetzt; hier werden sie nur noch für die Reihenfolge
     # gelesen.
-    if res.ww_gesperrt:
-        prio.append("WW gesperrt")
-    elif res.ww_legionelle_aktiv:
+    if res.warmwasser_gesperrt:
+        prio.append("Warmwasser gesperrt")
+    elif res.warmwasser_legionelle_aktiv:
         prio.append(
             f"Legionellenschutz ({inp.thermal_legionella_target:.0f} °C, notfalls Netz)"
         )
-    elif res.flags.ww_basis and inp.thermal_temp is not None:
+    elif res.flags.warmwasser_basis and inp.thermal_temp is not None:
         prio.append(
-            f"WW-Basisladung ({inp.thermal_temp:.0f} → {inp.thermal_base:.0f} °C, notfalls Netz)"
+            f"Warmwasser-Basisladung ({inp.thermal_temp:.0f} → {inp.thermal_base:.0f} °C, notfalls Netz)"
         )
 
     # Der Momentansaldo ist die unruhigste Größe im ganzen Planner; ohne
@@ -420,16 +420,16 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
 
     # Komfortladung (PV-Boost) nur, wenn der Speicher fast voll ist und
     # kräftig eingespeist wird — sonst gehört der Überschuss zuerst dem Akku.
-    ww_comfort_pending = (
-        not res.ww_gesperrt
-        and not res.ww_legionelle_aktiv
+    warmwasser_comfort_pending = (
+        not res.warmwasser_gesperrt
+        and not res.warmwasser_legionelle_aktiv
         and inp.thermal_temp is not None
-        and res.flags.ww_komfort
-        and res.flags.ww_boost_soc
-        and res.flags.ww_boost_saldo
+        and res.flags.warmwasser_komfort
+        and res.flags.warmwasser_boost_soc
+        and res.flags.warmwasser_boost_saldo
     )
-    if ww_comfort_pending:
-        prio.append(f"WW-Komfort ({inp.thermal_comfort:.0f} °C, PV-Boost)")
+    if warmwasser_comfort_pending:
+        prio.append(f"Warmwasser-Komfort ({inp.thermal_comfort:.0f} °C, PV-Boost)")
 
     # E-Auto-Bereitschaft: bereits von der Lastregelung (_modulated_control)
     # bestimmt und in res.flags.ev_bereit hinterlegt (in compute_plan gesetzt).

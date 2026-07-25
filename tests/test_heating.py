@@ -75,7 +75,7 @@ def test_frostschutz_hysterese_haelt_im_band():
     # die Ausschaltschwelle (8 °C) überschritten wird.
     r = _hz(
         heating_state=heating(outdoor_temp_c=7.0, heat_locked=True),
-        flags=PlanFlags(wp_frost=True),
+        flags=PlanFlags(waermepumpe_frost=True),
     )
     assert r.modus == "heizen"
     assert r.frostschutz is True

@@ -40,14 +40,14 @@ def _forecast_temp_at(inp: PlanInput, t: datetime) -> float | None:
     return inp.heating.outdoor_temp_c if inp.heating is not None else None
 
 
-def _wp_expected_w(inp: PlanInput, t: datetime) -> float:
+def _waermepumpe_expected_w(inp: PlanInput, t: datetime) -> float:
     """Erwartete WP-Leistung zur Stunde von t aus dem Verbrauchsmodell.
 
     Ohne Modell 0 (die WP steckt dann implizit im Lastprofil). Während der
     Sommersperre und ohne Temperaturwert zählt nur die Basisleistung
     (Warmwasser/Standby), sonst kommt der Heizgradstunden-Term dazu.
     """
-    m = inp.wp_model
+    m = inp.waermepumpe_model
     if m is None:
         return 0.0
     watt = m.base_w
@@ -60,13 +60,13 @@ def _wp_expected_w(inp: PlanInput, t: datetime) -> float:
 
 def _total_load_w(inp: PlanInput, t: datetime) -> float:
     """Gesamtlast der Stunde: Profil (WP-bereinigt) plus WP-Modell."""
-    return _expected_load_w(inp, t) + _wp_expected_w(inp, t)
+    return _expected_load_w(inp, t) + _waermepumpe_expected_w(inp, t)
 
 
-def _wp_window_kwh(inp: PlanInput, start: datetime, end: datetime) -> float:
+def _waermepumpe_window_kwh(inp: PlanInput, start: datetime, end: datetime) -> float:
     """Erwartete WP-Energie im Fenster, stundenweise aus dem Modell."""
     return sum(
-        _wp_expected_w(inp, t) * (nxt - t).total_seconds() / 3600 / 1000
+        _waermepumpe_expected_w(inp, t) * (nxt - t).total_seconds() / 3600 / 1000
         for t, nxt in _hour_slots(start, end)
     )
 
