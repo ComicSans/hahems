@@ -5,7 +5,7 @@ mit Auswahl-Hysterese (ein Akku zur Zeit, gegen Verschleiß).
 """
 from __future__ import annotations
 
-from factories import plan_input, storage, storages, zuteilung
+from factories import plan_input, storage, storages, switchable, zuteilung
 from hems import planner as P
 
 from hems.const import CONTROL_MIN_SETPOINT_W
@@ -101,6 +101,47 @@ def test_kaltreserve_inaktiv_wenn_primaer_voll():
     r = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500))
     assert r.regelung.reserve_aktiv is False
     assert zuteilung(r)["R"] == 0
+
+
+# --- Schaltlast-Feedforward (Wärmepumpe & Co.) ---------------------------------
+def test_schaltlast_zuschaltung_wirkt_sofort_auf_speicherregelung():
+    # WP schaltet mit 500 W zu (Überschuss deckt sie), bevor das real im Saldo
+    # ankommt (Aktuierungs-Totzeit der Last selbst). Die Speicherregelung soll
+    # das schon in diesem Zyklus dämpfend einrechnen — exakt so, als läge der
+    # Saldo bereits um die 500 W höher (Bezug/weniger Einspeisung).
+    r_feedforward = P.compute_plan(
+        plan_input(
+            socs=[60, 60, 60],
+            saldo_w=-899,
+            switchables=[switchable("WP", erwartet_w=500.0, ist_an=False)],
+        )
+    )
+    assert r_feedforward.schaltbare.lasten[0].an is True
+    assert r_feedforward.schaltbare.delta_w == 500
+    r_aequivalent = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=-399))
+    assert r_feedforward.regelung.soll_w == r_aequivalent.regelung.soll_w == -187.0
+    assert zuteilung(r_feedforward) == zuteilung(r_aequivalent)
+
+
+def test_schaltlast_abschaltung_bremst_ladung_aber_echter_saldo_bleibt_geschuetzt():
+    # WP schaltet ab (500 W weniger Last), aber der Netz-Bezug ist real noch
+    # hoch (+300 W) — die Last hat real noch nicht nachgelassen. Der
+    # ECHTE-Saldo-Schutz (battery.py) verhindert, dass die Feedforward-
+    # Korrektur allein daraufhin schon in den Bezug hineinlädt: die Regelung
+    # pausiert, statt zu laden.
+    r = P.compute_plan(
+        plan_input(
+            socs=[60, 60, 60],
+            saldo_w=300,
+            switchables=[
+                switchable("WP", erwartet_w=500.0, ist_an=True, power_w=500.0)
+            ],
+        )
+    )
+    assert r.schaltbare.lasten[0].an is False
+    assert r.schaltbare.delta_w == -500
+    assert r.regelung.modus == "pausiert"
+    assert r.regelung.soll_w == 0.0
 
 
 # --- Totband ------------------------------------------------------------------

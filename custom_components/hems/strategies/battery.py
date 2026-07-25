@@ -71,7 +71,10 @@ def _lade_deckel_soc(inp: PlanInput, voll_noetig: bool, t: datetime) -> float:
 
 
 def _storage_control(
-    inp: PlanInput, res: PlanResult, ev_target_w: float | None = None
+    inp: PlanInput,
+    res: PlanResult,
+    ev_target_w: float | None = None,
+    schaltbar_delta_w: float = 0.0,
 ) -> ControlResult | None:
     """Saldo-Regelung: empfohlene Sollwerte je Speicher berechnen.
 
@@ -84,6 +87,16 @@ def _storage_control(
     Geladen wird proportional zur freien Kapazität — über alle Speicher,
     Reserve eingeschlossen. Speicher ohne SoC-Wert werden aus der Zuteilung
     genommen (kein Phantomanteil).
+
+    `schaltbar_delta_w` ist die Feedforward-Korrektur für schaltbare Lasten
+    (z. B. Wärmepumpe): `switchable_control` kennt deren NEUE Soll-Leistung
+    bereits einen Zyklus, bevor sie real anliegt (Aktuierungs-Totzeit der
+    Last selbst). Ohne diese Vorsteuerung sieht der Speicher-Regler erst im
+    nächsten Zyklus, dass eine Last dazu- oder wegschaltet, und reagiert einen
+    Takt zu spät — sichtbar als kurzer Bezugs-Spike beim Zuschalten. Die
+    Korrektur wird wie beim Wallbox-Delta oben auf den Saldo aufaddiert, der
+    ECHTE-Saldo-Schutz beim Laden (unten) bleibt unverändert wirksam, falls
+    die reale Last noch nicht nachgezogen ist.
     """
     if inp.saldo_w is None or not inp.storages:
         return None
@@ -116,6 +129,7 @@ def _storage_control(
         # bereits gedrosselte Wallbox aufrecht. Am Nullpunkt (Wallbox schon auf
         # Soll) verschwindet das Delta — der Regler sieht wieder den Rohsaldo.
         saldo_w = inp.saldo_w + (ev_target_w - inp.wallbox_w)
+    saldo_w += schaltbar_delta_w
     # Sollwert-Offset: Eigenverbrauch/Vollladen schieben das Regel-Residuum
     # leicht in die Einspeisung (+25 W). Echte Nulleinspeisung hält stattdessen
     # einen kleinen Bezug (−100 W) — deutlich über Totband, damit das Ziel

@@ -319,8 +319,13 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         # min_on-gehaltener Lasten.
         ev_target_w = result.ev_regelung.soll_summe_w
 
-    # Saldo-Regelung: Zuteilungsempfehlung über alle Speicher.
-    result.regelung = _storage_control(inp, result, ev_target_w=ev_target_w)
+    # Saldo-Regelung: Zuteilungsempfehlung über alle Speicher. schaltbar_delta
+    # (oben) ist die Feedforward-Korrektur für gerade zu-/abschaltende Lasten
+    # (z. B. WP) — der Regler reagiert so schon in diesem Zyklus, statt erst,
+    # wenn die neue Last real im Saldo auftaucht.
+    result.regelung = _storage_control(
+        inp, result, ev_target_w=ev_target_w, schaltbar_delta_w=schaltbar_delta
+    )
 
     # Heizkreis: Modus- und Vorlauf-Empfehlung.
     if inp.heating is not None:
