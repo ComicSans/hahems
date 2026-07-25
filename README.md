@@ -90,8 +90,8 @@ Felder ohne Erklärung sind selbsterklärend (z. B. reine Namen/Labels).
 | **Max. Entladeleistung (W)** | Begrenzung der Entladeleistung; mehr kann der Akku nicht ins Haus liefern. |
 | **Kaltreserve** | Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität. |
 | **Richtungs-Select (optional, z. B. Zendure ac_mode)** | Optionaler Select/Input_select, über den HEMS zwischen Lade- und Entladerichtung umschaltet (z. B. Zendures ac_mode). Nur nötig, wenn dein Speicher zusätzlich zum Sollwert einen Modus-Umschalter braucht. |
-| **Richtungs-Option beim Laden** | Der Options-Wert, der den Speicher in den Lademodus versetzt. |
-| **Richtungs-Option beim Entladen** | Der Options-Wert, der den Speicher in den Entlademodus versetzt. |
+| **Richtungs-Option beim Laden** | Der Options-Wert, der den Speicher in den Lademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst. |
+| **Richtungs-Option beim Entladen** | Der Options-Wert, der den Speicher in den Entlademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst. |
 | **Ziel-SoC-Entity (soc_set, geräteseitiger Ladedeckel, optional)** | Optionale Number-Entität, die begrenzt, wie weit der Speicher eigenständig lädt (geräteseitiges Ziel-SoC). Manche Speicher ignorieren ein Lade-Limit von 0 und laden trotzdem bis zu diesem Ziel weiter — setze dies, falls das bei deinem Gerät zutrifft. |
 
 ### Warmwasser
@@ -523,7 +523,10 @@ Alles Weitere steht in den Attributen:
 - `auto_schaltet` — welche Rollen der Auto-Modus tatsächlich stellt (die mit
   konfiguriertem Steuer-Entity); der Rest bleibt reine Beobachtung.
 - `fehler` — der Auto-Modus würde scheitern: Steuer-Entity existiert nicht,
-  falsche Domain, Richtungs-Select ohne Optionswerte.
+  falsche Domain, Richtungs-Select ohne Optionswerte, oder
+  `mode_charge_option`/`mode_discharge_option` passt nicht exakt zu einer
+  echten Option des Richtungs-Selects (Freitext-Falle — Groß-/
+  Kleinschreibung zählt).
 - `warnungen` — funktioniert, aber Vorsicht: nur ein Speicher-Setpoint gesetzt,
   Warmwasser ohne Sperrfenster (24/7 an), …
 - `ueberlappung` — **der Scharfschalt-Killer**: aktive Automationen, die auf

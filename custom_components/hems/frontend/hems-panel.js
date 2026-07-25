@@ -582,7 +582,10 @@ class HemsPanel extends HTMLElement {
       input = `<input id="${id}" type="text" data-key="${f.key}" data-type="text"
                  value="${value != null ? escapeHtml(String(value)) : ""}">`;
     }
-    return `<div class="field">${lbl}<div class="field-input">${input}</div></div>`;
+    const help = f.description
+      ? `<div class="field-help">${escapeHtml(f.description)}</div>`
+      : "";
+    return `<div class="field">${lbl}<div class="field-input">${input}</div>${help}</div>`;
   }
 
   _collectValues() {
@@ -862,6 +865,7 @@ const STYLE = `
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field > label { font-size: 13px; color: var(--secondary-text-color); }
   .field .req { color: var(--error-color, #f44336); }
+  .field-help { font-size: 12px; color: var(--secondary-text-color); line-height: 1.4; }
   .field-input { display: flex; align-items: center; gap: 8px; }
   .field-input input[type=text], .field-input input[type=number],
   .field-input input[list], .field-input input[type=time], .field-input select {

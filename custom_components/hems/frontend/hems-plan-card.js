@@ -374,7 +374,11 @@ class HemsPlanCard extends HTMLElement {
         fill="${COLOR_WARMWASSER_OK}"><title>Warmwasser verfügbar</title></rect>
       ${warmwasserBlocks}
       ${warmwasserLegio}
-      <text class="ylabel" x="${PAD.left - 4}" y="${WARMWASSER_BAND.y + WARMWASSER_BAND.h - 2}">WW</text>`;
+      <text class="ylabel" x="${PAD.left - 4}" y="${WARMWASSER_BAND.y + WARMWASSER_BAND.h - 2}"
+        >WW<title>Warmwasser-Band (siehe Legende unten)</title></text>`;
+    // "WW" bleibt hier absichtlich abgekürzt: der linke Rand (PAD.left = 40px)
+    // ist zu schmal für "Warmwasser" bei 10px Schrift. Farben sind in der
+    // Legende ausgeschrieben, das Tooltip oben deckt Screenreader/Hover ab.
 
     // Mitternachts-Trenner + Tageslabels
     const days = [];
@@ -443,8 +447,8 @@ class HemsPlanCard extends HTMLElement {
     const warmwasserChip =
       a.warmwasser_status && a.warmwasser_status !== "" && a.warmwasser_status !== "aus"
         ? a.warmwasser_soll_c != null
-          ? `🚿 WW ${Math.round(a.warmwasser_soll_c)} °C · ${WARMWASSER_STATUS_LABEL[a.warmwasser_status] ?? a.warmwasser_status}`
-          : `🚿 WW ${WARMWASSER_STATUS_LABEL[a.warmwasser_status] ?? a.warmwasser_status}`
+          ? `🚿 Warmwasser ${Math.round(a.warmwasser_soll_c)} °C · ${WARMWASSER_STATUS_LABEL[a.warmwasser_status] ?? a.warmwasser_status}`
+          : `🚿 Warmwasser ${WARMWASSER_STATUS_LABEL[a.warmwasser_status] ?? a.warmwasser_status}`
         : null;
     const regelungChip =
       a.regelung_modus != null
@@ -456,12 +460,12 @@ class HemsPlanCard extends HTMLElement {
         : null;
     const waermepumpeChip =
       a.waermepumpe_modus != null
-        ? `♨️ WP ${WAERMEPUMPE_MODUS_LABEL[a.waermepumpe_modus] ?? a.waermepumpe_modus}${
+        ? `♨️ Wärmepumpe ${WAERMEPUMPE_MODUS_LABEL[a.waermepumpe_modus] ?? a.waermepumpe_modus}${
             a.waermepumpe_vlt_c != null ? ` · VLT ${Math.round(a.waermepumpe_vlt_c)} °C` : ""
           }`
         : null;
 
-    const chips = [
+    const chipTexts = [
       `☀️ Heute Rest ${fmtKwh(a.pv_rest_heute_kwh)}`,
       `🌤 Morgen ${fmtKwh(a.pv_morgen_kwh)}${a.wetter_morgen ? ` · ${a.wetter_morgen}` : ""}`,
       `🔋 Budget ${fmtKwh(a.budget_kwh)}`,
@@ -471,10 +475,14 @@ class HemsPlanCard extends HTMLElement {
       warmwasserChip,
       regelungChip,
       waermepumpeChip,
-    ]
-      .filter(Boolean)
-      .map((c) => `<span class="chip">${c}</span>`)
-      .join("");
+    ].filter(Boolean);
+    const chips = chipTexts.map((c) => `<span class="chip">${c}</span>`).join("");
+    // Textalternative fürs SVG: dieselben Kurzinfos, die auch als Chips unter
+    // dem Diagramm stehen — ein Screenreader bekommt sonst nur "Entladeplan"
+    // ohne jeden Wert.
+    const svgAriaLabel = `Entladeplan. ${chipTexts
+      .map((c) => c.replace(/^\S+\s*/, ""))
+      .join(". ")}.`;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -582,7 +590,7 @@ class HemsPlanCard extends HTMLElement {
         </div>
         <div class="container">
           <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"
-               role="img" aria-label="Entladeplan">
+               role="img" aria-label="${svgAriaLabel.replace(/"/g, "&quot;")}">
             ${pastZone}
             ${yTicks}
             ${sep}

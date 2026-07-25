@@ -182,6 +182,13 @@ class HemsFlowCard extends HTMLElement {
       })
       .join("");
 
+    // Textalternative für Screenreader: das SVG selbst ist rein dekorativ
+    // (Pfade/Kreise ohne semantische Struktur), also fasst ein Label die
+    // aktuellen Werte in Prosa zusammen statt nur "Lastfluss" zu sagen.
+    const svgAriaLabel = `Lastfluss. PV ${nodeValues.pv}${nodeSub.pv ? ` (${nodeSub.pv})` : ""}. Netz ${nodeValues.grid} (${nodeSub.grid}).${
+      hasBatt ? ` Batterie ${nodeValues.batt} (${nodeSub.batt}).` : ""
+    } Haus ${nodeValues.home}.`;
+
     const nodeSvg = Object.entries(NODES)
       .filter(([key]) => hasBatt || key !== "batt")
       .map(
@@ -205,7 +212,7 @@ class HemsFlowCard extends HTMLElement {
       // jetzt einzeln als Zeilen (Name, Priorität, Empfehlung) unter dem
       // Diagramm — die WP ist eine davon.
       a.waermepumpe_modus != null && a.waermepumpe_vlt_c != null
-        ? `🌡 WP ${a.waermepumpe_modus === "kuehlen" ? "kühlt" : a.waermepumpe_modus} · VLT ${Math.round(a.waermepumpe_vlt_c)} °C`
+        ? `🌡 Wärmepumpe ${a.waermepumpe_modus === "kuehlen" ? "kühlt" : a.waermepumpe_modus} · VLT ${Math.round(a.waermepumpe_vlt_c)} °C`
         : null,
       a.wallbox_w != null ? `🚗 Wallbox ${fmtW(a.wallbox_w)}` : null,
       a.regelung_modus != null
@@ -219,8 +226,8 @@ class HemsFlowCard extends HTMLElement {
       // Zustand ohne neue Information — Chip bleibt dafür weg.
       a.warmwasser_status && a.warmwasser_status !== "aus"
         ? a.warmwasser_soll_c != null
-          ? `🚿 WW ${Math.round(a.warmwasser_soll_c)} °C · ${warmwasserLabel[a.warmwasser_status] ?? a.warmwasser_status}`
-          : `🚿 WW ${warmwasserLabel[a.warmwasser_status] ?? a.warmwasser_status}`
+          ? `🚿 Warmwasser ${Math.round(a.warmwasser_soll_c)} °C · ${warmwasserLabel[a.warmwasser_status] ?? a.warmwasser_status}`
+          : `🚿 Warmwasser ${warmwasserLabel[a.warmwasser_status] ?? a.warmwasser_status}`
         : null,
     ]
       .filter(Boolean)
@@ -317,6 +324,9 @@ class HemsFlowCard extends HTMLElement {
         @keyframes dash {
           from { stroke-dashoffset: 0; }
           to { stroke-dashoffset: -170; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .flow { animation: none; }
         }
         .icon { font-size: 17px; text-anchor: middle; }
         .value {
@@ -431,7 +441,7 @@ class HemsFlowCard extends HTMLElement {
       <ha-card ${this._config.title ? `header="${this._config.title}"` : ""}>
         <div class="container">
           <svg viewBox="0 0 440 390" preserveAspectRatio="xMidYMid meet"
-               role="img" aria-label="Lastfluss">
+               role="img" aria-label="${esc(svgAriaLabel)}">
             ${edgeSvg}
             ${nodeSvg}
           </svg>

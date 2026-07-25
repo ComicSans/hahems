@@ -74,7 +74,9 @@ def _selector_descriptor(sel) -> dict:
     return {"type": "text"}
 
 
-def _schema_to_fields(schema: vol.Schema, labels: dict, selectors: dict) -> list[dict]:
+def _schema_to_fields(
+    schema: vol.Schema, labels: dict, selectors: dict, descriptions: dict | None = None
+) -> list[dict]:
     fields = []
     for marker, sel in schema.schema.items():
         key = marker.schema
@@ -99,6 +101,7 @@ def _schema_to_fields(schema: vol.Schema, labels: dict, selectors: dict) -> list
                 "required": isinstance(marker, vol.Required),
                 "default": default,
                 "label": labels.get(key, key),
+                "description": (descriptions or {}).get(key, ""),
             }
         )
         fields.append(desc)
@@ -132,6 +135,13 @@ def _step_labels(tr: dict, top: str, step: str) -> dict:
     return tr.get(top, {}).get("step", {}).get(step, {}).get("data", {}) or {}
 
 
+def _step_descriptions(tr: dict, top: str, step: str) -> dict:
+    return (
+        tr.get(top, {}).get("step", {}).get(step, {}).get("data_description", {})
+        or {}
+    )
+
+
 def _entry(hass: HomeAssistant, entry_id: str | None) -> ConfigEntry | None:
     entries = hass.config_entries.async_entries(DOMAIN)
     if entry_id:
@@ -159,7 +169,12 @@ async def ws_get(hass, connection, msg):
     general_labels = _step_labels(tr, "options", "general") or _step_labels(
         tr, "config", "user"
     )
-    general_fields = _schema_to_fields(GENERAL_SCHEMA, general_labels, selectors)
+    general_descriptions = _step_descriptions(
+        tr, "options", "general"
+    ) or _step_descriptions(tr, "config", "user")
+    general_fields = _schema_to_fields(
+        GENERAL_SCHEMA, general_labels, selectors, general_descriptions
+    )
     current = {**entry.data, **entry.options}
     general_values = {
         f["key"]: current.get(f["key"], f["default"]) for f in general_fields
@@ -173,7 +188,10 @@ async def ws_get(hass, connection, msg):
             ],
             "schema": {
                 r: _schema_to_fields(
-                    ROLE_SCHEMAS[r], _step_labels(tr, "options", f"add_{r}"), selectors
+                    ROLE_SCHEMAS[r],
+                    _step_labels(tr, "options", f"add_{r}"),
+                    selectors,
+                    _step_descriptions(tr, "options", f"add_{r}"),
                 )
                 for r in ROLE_SCHEMAS
             },

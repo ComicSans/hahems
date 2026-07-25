@@ -99,6 +99,23 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
                 f"{ctx}: mode_charge/discharge_option ohne Richtungs-Select — "
                 f"wirkungslos"
             )
+        # Freitext-Falle: mode_charge_option/mode_discharge_option müssen exakt
+        # (Groß-/Kleinschreibung) einer echten Option des Richtungs-Select
+        # entsprechen — sonst schlägt select_option im Auto-Modus lautlos fehl
+        # (HA loggt einen Service-Fehler, aber der Config-Check bliebe grün).
+        # Nur prüfbar, wenn die Entity existiert und ihre Optionen kennt.
+        me_state = hass.states.get(me) if me else None
+        options = me_state.attributes.get("options") if me_state else None
+        if options is not None:
+            for opt, label in (
+                (s.mode_charge_option, "mode_charge_option"),
+                (s.mode_discharge_option, "mode_discharge_option"),
+            ):
+                if opt and opt not in options:
+                    c.errors.append(
+                        f"{ctx}: {label} '{opt}' ist keine gültige Option von "
+                        f"{me} (verfügbar: {', '.join(options)})"
+                    )
         _need(
             s.soc_set_entity, ("number", "input_number"), ctx, "Ziel-SoC (soc_set)"
         )

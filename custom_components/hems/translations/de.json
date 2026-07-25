@@ -77,8 +77,8 @@
           "soc_entity": "Sensor mit dem aktuellen Ladestand in Prozent.",
           "power_entity": "Sensor mit der aktuellen Lade-/Entladeleistung in Watt. Konvention: positiv = Entladen ins Haus, negativ = Laden. Wird für die Lastfluss-Anzeige und die Regelung im Auto-Modus genutzt.",
           "mode_entity": "Optionaler Select/Input_select, über den HEMS zwischen Lade- und Entladerichtung umschaltet (z. B. Zendures ac_mode). Nur nötig, wenn dein Speicher zusätzlich zum Sollwert einen Modus-Umschalter braucht.",
-          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt.",
-          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt.",
+          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst.",
+          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst.",
           "soc_set_entity": "Optionale Number-Entität, die begrenzt, wie weit der Speicher eigenständig lädt (geräteseitiges Ziel-SoC). Manche Speicher ignorieren ein Lade-Limit von 0 und laden trotzdem bis zu diesem Ziel weiter — setze dies, falls das bei deinem Gerät zutrifft.",
           "capacity_kwh": "Nutzbare Kapazität dieses Speichers; bestimmt die Verteilung der Lade-/Entladeleistung über mehrere Speicher und die SoC-Prognose."
         }
@@ -337,8 +337,8 @@
           "soc_entity": "Sensor mit dem aktuellen Ladestand in Prozent.",
           "power_entity": "Sensor mit der aktuellen Lade-/Entladeleistung in Watt. Konvention: positiv = Entladen ins Haus, negativ = Laden. Wird für die Lastfluss-Anzeige und die Regelung im Auto-Modus genutzt.",
           "mode_entity": "Optionaler Select/Input_select, über den HEMS zwischen Lade- und Entladerichtung umschaltet (z. B. Zendures ac_mode). Nur nötig, wenn dein Speicher zusätzlich zum Sollwert einen Modus-Umschalter braucht.",
-          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt.",
-          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt.",
+          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst.",
+          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst.",
           "soc_set_entity": "Optionale Number-Entität, die begrenzt, wie weit der Speicher eigenständig lädt (geräteseitiges Ziel-SoC). Manche Speicher ignorieren ein Lade-Limit von 0 und laden trotzdem bis zu diesem Ziel weiter — setze dies, falls das bei deinem Gerät zutrifft.",
           "capacity_kwh": "Nutzbare Kapazität dieses Speichers; bestimmt die Verteilung der Lade-/Entladeleistung über mehrere Speicher und die SoC-Prognose."
         }
@@ -489,8 +489,8 @@
           "soc_entity": "Sensor mit dem aktuellen Ladestand in Prozent.",
           "power_entity": "Sensor mit der aktuellen Lade-/Entladeleistung in Watt. Konvention: positiv = Entladen ins Haus, negativ = Laden. Wird für die Lastfluss-Anzeige und die Regelung im Auto-Modus genutzt.",
           "mode_entity": "Optionaler Select/Input_select, über den HEMS zwischen Lade- und Entladerichtung umschaltet (z. B. Zendures ac_mode). Nur nötig, wenn dein Speicher zusätzlich zum Sollwert einen Modus-Umschalter braucht.",
-          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt.",
-          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt.",
+          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst.",
+          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst.",
           "soc_set_entity": "Optionale Number-Entität, die begrenzt, wie weit der Speicher eigenständig lädt (geräteseitiges Ziel-SoC). Manche Speicher ignorieren ein Lade-Limit von 0 und laden trotzdem bis zu diesem Ziel weiter — setze dies, falls das bei deinem Gerät zutrifft.",
           "capacity_kwh": "Nutzbare Kapazität dieses Speichers; bestimmt die Verteilung der Lade-/Entladeleistung über mehrere Speicher und die SoC-Prognose."
         }

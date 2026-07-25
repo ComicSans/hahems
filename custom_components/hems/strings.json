@@ -77,8 +77,8 @@
           "soc_entity": "Sensor with the current state of charge in percent.",
           "power_entity": "Sensor with the current charge/discharge power in watts. Convention: positive = discharging into the house, negative = charging. Used for the load-flow display and the auto-mode control loop.",
           "mode_entity": "Optional select/input_select HEMS toggles between charging and discharging direction (e.g. Zendure's ac_mode). Only needed if your storage requires a mode switch in addition to a setpoint.",
-          "mode_charge_option": "The option value that puts the storage into charging mode.",
-          "mode_discharge_option": "The option value that puts the storage into discharging mode.",
+          "mode_charge_option": "The option value that puts the storage into charging mode. Must match one of the select's available options exactly (case-sensitive) — the config check flags it otherwise.",
+          "mode_discharge_option": "The option value that puts the storage into discharging mode. Must match one of the select's available options exactly (case-sensitive) — the config check flags it otherwise.",
           "soc_set_entity": "Optional number entity that caps how far the storage charges on its own (device-side target SoC). Some storages ignore an input power limit of 0 and keep charging toward this target regardless — set it if that applies to yours.",
           "capacity_kwh": "Usable capacity of this storage; used to distribute charge/discharge power across multiple storages and for the SoC forecast."
         }
@@ -337,8 +337,8 @@
           "soc_entity": "Sensor with the current state of charge in percent.",
           "power_entity": "Sensor with the current charge/discharge power in watts. Convention: positive = discharging into the house, negative = charging. Used for the load-flow display and the auto-mode control loop.",
           "mode_entity": "Optional select/input_select HEMS toggles between charging and discharging direction (e.g. Zendure's ac_mode). Only needed if your storage requires a mode switch in addition to a setpoint.",
-          "mode_charge_option": "The option value that puts the storage into charging mode.",
-          "mode_discharge_option": "The option value that puts the storage into discharging mode.",
+          "mode_charge_option": "The option value that puts the storage into charging mode. Must match one of the select's available options exactly (case-sensitive) — the config check flags it otherwise.",
+          "mode_discharge_option": "The option value that puts the storage into discharging mode. Must match one of the select's available options exactly (case-sensitive) — the config check flags it otherwise.",
           "soc_set_entity": "Optional number entity that caps how far the storage charges on its own (device-side target SoC). Some storages ignore an input power limit of 0 and keep charging toward this target regardless — set it if that applies to yours.",
           "capacity_kwh": "Usable capacity of this storage; used to distribute charge/discharge power across multiple storages and for the SoC forecast."
         }
@@ -489,8 +489,8 @@
           "soc_entity": "Sensor with the current state of charge in percent.",
           "power_entity": "Sensor with the current charge/discharge power in watts. Convention: positive = discharging into the house, negative = charging. Used for the load-flow display and the auto-mode control loop.",
           "mode_entity": "Optional select/input_select HEMS toggles between charging and discharging direction (e.g. Zendure's ac_mode). Only needed if your storage requires a mode switch in addition to a setpoint.",
-          "mode_charge_option": "The option value that puts the storage into charging mode.",
-          "mode_discharge_option": "The option value that puts the storage into discharging mode.",
+          "mode_charge_option": "The option value that puts the storage into charging mode. Must match one of the select's available options exactly (case-sensitive) — the config check flags it otherwise.",
+          "mode_discharge_option": "The option value that puts the storage into discharging mode. Must match one of the select's available options exactly (case-sensitive) — the config check flags it otherwise.",
           "soc_set_entity": "Optional number entity that caps how far the storage charges on its own (device-side target SoC). Some storages ignore an input power limit of 0 and keep charging toward this target regardless — set it if that applies to yours.",
           "capacity_kwh": "Usable capacity of this storage; used to distribute charge/discharge power across multiple storages and for the SoC forecast."
         }
