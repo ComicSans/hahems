@@ -490,6 +490,17 @@ Steuer-Entitäten (sonst reine Beobachtung, auch im Auto-Modus), **nur bei
 Wertänderung** (idempotent, kein Bus-Spam), **nie** auf eine fehlende/unbekannte
 Empfehlung, und **isoliert Fehler je Gerät**. Reihenfolge WW → WP → Akku → E-Auto → Schaltlasten.
 
+### Update-Takt und Sprung-Erkennung
+
+Der Coordinator rechnet regulär alle 60 s neu. Springt der Netzsaldo dabei
+zwischen zwei Messpunkten um mehr als 800 W (Wolkenkante, große Last an/aus),
+löst das sofort eine zusätzliche Neuberechnung aus, statt bis zum nächsten
+Takt zu warten — verkürzt die Reaktionszeit auf den bereits eingetretenen
+Sprung (kein Wolkenradar, keine Vorhersage). Ein Cooldown von 20 s verhindert
+Update-Stürme bei einer Serie kleiner Sprünge. Bleibt trotzdem eine
+Sprungerkennung, keine Prognose: ein sehr kurzer Ausschlag zwischen zwei
+Messpunkten des Zählers selbst bleibt unsichtbar.
+
 Steuer-Entitäten je Rolle (alle optional, im Options-Flow zu setzen):
 
 | Rolle | Empfehlung | Steuer-Entitäten | Service |

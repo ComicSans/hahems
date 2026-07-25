@@ -136,6 +136,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Quellen sind nach einem Neustart evtl. noch nicht bereit: sofort neu
     # rechnen, sobald sie verfügbar werden, statt bis zum nächsten Poll zu warten.
     coordinator.async_setup_source_tracking()
+    # Bei einem sprunghaften Netzsaldo (Wolkenkante, Lastsprung) sofort statt
+    # erst zum nächsten 60-s-Poll neu rechnen (Aktuierungs-Totzeit verkürzen).
+    coordinator.async_setup_saldo_jump_tracking()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

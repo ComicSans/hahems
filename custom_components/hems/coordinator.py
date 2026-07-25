@@ -41,6 +41,8 @@ from .const import (
     MODE_AUTO,
     MODE_OBSERVE,
     PRIORITY_AUTO,
+    SALDO_JUMP_COOLDOWN_S,
+    SALDO_JUMP_W,
     SWITCH_LEARN_FLOOR_HEAT_W,
     SWITCH_LEARN_FLOOR_W,
     WEATHER_CONDITION_FACTORS,
@@ -85,6 +87,26 @@ MIN_PROFILE_BUCKETS = 6  # darunter gilt das Profil als zu dünn, Fallback greif
 # Umrechnung nach W bzw. kWh; Sensoren ohne Einheit werden als W/kWh gelesen.
 POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
+
+
+def _state_power_w(state) -> float | None:
+    """Leistung eines State-Objekts in W lesen (kW/MW umrechnen).
+
+    Nimmt bewusst ein `State`-Objekt statt einer entity_id entgegen — anders
+    als `HemsCoordinator._power_w` (das immer den AKTUELLEN Zustand holt)
+    muss die Sprung-Erkennung auch den alten Zustand aus dem Event auswerten
+    können. Ohne Warn-Logging (das übernimmt der reguläre Update-Zyklus).
+    """
+    if state is None:
+        return None
+    try:
+        val = float(state.state)
+    except (TypeError, ValueError):
+        return None
+    unit = (state.attributes.get("unit_of_measurement") or "").strip().lower()
+    if unit in ENERGY_UNITS:
+        return None
+    return val * POWER_UNITS.get(unit, 1.0)
 
 
 class LoadModelLearner:
@@ -534,6 +556,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         )
         self._weather = WeatherClient(hass, self._opt)
         self._unit_warned: set[str] = set()
+        # Cooldown-Zeitpunkt für die Sprung-Erkennung (async_setup_saldo_jump_tracking).
+        self._last_jump_refresh: datetime | None = None
         # Hysterese-Zustand des Planners, über die Update-Zyklen fortgeschrieben.
         self._plan_flags = PlanFlags()
         # Fairness-Akkumulator für die Lastrotation: geladene Energie je Last
@@ -615,6 +639,46 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             async_track_state_change_event(
                 self.hass, list(entities), _source_became_ready
             )
+        )
+
+    @callback
+    def async_setup_saldo_jump_tracking(self) -> None:
+        """Sofort neu rechnen, wenn der Netzsaldo sprunghaft springt.
+
+        Der reguläre 60-s-Takt lässt den Speicher im schlechtesten Fall fast
+        eine Minute am alten Sollwert hängen, wenn PV oder Last sich abrupt
+        ändern (Wolkenkante, große Last an/aus) — sichtbar als kurzer
+        Bezugs-/Einspeise-Spike (Aktuierungs-Totzeit, siehe const.py). Ein
+        Sprung über `SALDO_JUMP_W` löst hier eine sofortige Neuberechnung
+        aus, statt auf den nächsten Poll zu warten. `SALDO_JUMP_COOLDOWN_S`
+        verhindert Update-Stürme bei einer Serie kleiner Sprünge (z. B.
+        flackernde Wolkenkante) — kein Wolkenradar, nur schnellere Reaktion
+        auf den bereits eingetretenen Sprung.
+        """
+        meter = self._opt(CONF_METER, None)
+        if not meter:
+            return
+
+        @callback
+        def _saldo_jumped(event: Event[EventStateChangedData]) -> None:
+            old_w = _state_power_w(event.data["old_state"])
+            new_w = _state_power_w(event.data["new_state"])
+            if old_w is None or new_w is None:
+                return
+            if abs(new_w - old_w) < SALDO_JUMP_W:
+                return
+            now = dt_util.utcnow()
+            if (
+                self._last_jump_refresh is not None
+                and (now - self._last_jump_refresh).total_seconds()
+                < SALDO_JUMP_COOLDOWN_S
+            ):
+                return
+            self._last_jump_refresh = now
+            self.hass.async_create_task(self.async_request_refresh())
+
+        self.entry.async_on_unload(
+            async_track_state_change_event(self.hass, [meter], _saldo_jumped)
         )
 
     # -- Helfer ------------------------------------------------------------

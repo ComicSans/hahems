@@ -105,6 +105,16 @@ CONTROL_MIN_SETPOINT_W = 60.0  # kleinere Sollwerte werden auf 0 gerundet
 # Regler stehen (kein Zwangsbezug zum Laden).
 CONTROL_ZERO_FEEDIN_OFFSET_W = 100.0
 
+# Sofort-Refresh außerhalb des 60-s-Takts, wenn der Netzsaldo sprunghaft
+# springt (PV-Wolkenkante, Lastsprung). Der reguläre Poll reagiert im
+# schlechtesten Fall erst fast 60 s später auf so einen Sprung — der Speicher
+# hängt bis dahin am alten Sollwert (Aktuierungs-Totzeit). Der Cooldown
+# verhindert Update-Stürme bei einer Serie kleiner Sprünge (z. B. flackernde
+# Wolkenkante); er ist bewusst kürzer als der reguläre Takt, sonst brächte
+# der Sofort-Refresh keinen Zeitgewinn.
+SALDO_JUMP_W = 800.0
+SALDO_JUMP_COOLDOWN_S = 20.0
+
 # Kaltreserve: als Reserve markierte Speicher nehmen am Entladen erst teil,
 # wenn der mittlere SoC der übrigen unter ON fällt, und scheiden erst
 # oberhalb von OFF wieder aus (Hysterese). Geladen werden sie immer mit,
