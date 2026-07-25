@@ -4,9 +4,11 @@ Reine Funktion `compute_plan` ohne Home-Assistant-Abhängigkeiten. Die eigentlic
 Domänenlogik liegt in `strategies/`; hier werden die Teilpläne zusammengeführt,
 die Warmwasser-Empfehlung eingeholt und die Empfehlungsreihenfolge gebildet.
 
-Zeitfenster-Helfer (block_windows/weekly_windows) bleiben hier, weil der
-Coordinator sie zum Bauen der Eingabe nutzt — sie sind Eingabe-Aufbereitung,
-keine Regel-Domäne.
+Zeitfenster-Helfer (block_windows/weekly_windows) sowie die Anzeige-Aufbereitung
+(_parse_weekday/_profile_rows) bleiben hier, weil der Coordinator sie zum Bauen
+der Eingabe bzw. Formatieren der Ausgabe nutzt — sie sind Ein-/Ausgabe-
+Aufbereitung, keine Regel-Domäne, aber HA-frei und damit hier testbar (anders
+als im Coordinator, der Home Assistant importiert).
 """
 from __future__ import annotations
 
@@ -139,6 +141,42 @@ def _parse_time(value: str | None) -> time | None:
         return time.fromisoformat(value)
     except ValueError:
         return None
+
+
+def parse_weekday(value: str | int | None) -> int | None:
+    """Wochentag aus den Optionen (Select liefert Strings) nach 0–6 wandeln."""
+    if value is None or value == "" or value == "none":
+        return None
+    try:
+        day = int(value)
+    except (TypeError, ValueError):
+        return None
+    return day if 0 <= day <= 6 else None
+
+
+def profile_rows(
+    profile: dict[tuple[int, int], float] | None, now: datetime, tz: tzinfo
+) -> list[dict]:
+    """Gelerntes Profil für die Anzeige in lokale Stunden umrechnen.
+
+    `tz` kommt vom Aufrufer (Coordinator: `dt_util.DEFAULT_TIME_ZONE`) statt
+    hier per HA-Util aufgelöst zu werden — das hält die Funktion HA-frei.
+    """
+    if not profile:
+        return []
+    midnight = now.replace(minute=0, second=0, microsecond=0)
+    rows: list[dict] = []
+    for utc_hour in range(24):
+        werktag = profile.get((0, utc_hour))
+        wochenende = profile.get((1, utc_hour))
+        if werktag is None and wochenende is None:
+            continue
+        local_hour = midnight.replace(hour=utc_hour).astimezone(tz).hour
+        rows.append(
+            {"stunde": local_hour, "werktag_w": werktag, "wochenende_w": wochenende}
+        )
+    rows.sort(key=lambda r: r["stunde"])
+    return rows
 
 
 def compute_plan(inp: PlanInput) -> PlanResult:

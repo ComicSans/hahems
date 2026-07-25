@@ -51,7 +51,13 @@ from .actuator import Actuator
 from .changelog import ChangeLog, decision_snapshot, diff_snapshots
 from .config_check import ConfigCheck, check_config
 from .models import DeviceRegistry, parse_devices
-from .planner import block_windows, compute_plan, weekly_windows
+from .planner import (
+    block_windows,
+    compute_plan,
+    parse_weekday,
+    profile_rows,
+    weekly_windows,
+)
 from .power_memory import PowerMemory
 from .strategies.switchable import lern_leistung
 from .strategies.types import (
@@ -81,36 +87,378 @@ POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
 
 
-def _parse_weekday(value: str | int | None) -> int | None:
-    """Wochentag aus den Optionen (Select liefert Strings) nach 0–6 wandeln."""
-    if value is None or value == "" or value == "none":
-        return None
-    try:
-        day = int(value)
-    except (TypeError, ValueError):
-        return None
-    return day if 0 <= day <= 6 else None
+class LoadModelLearner:
+    """Lernt Nacht-Grundlast, 24-h-Lastprofil und WP-Heizgradstunden-Modell aus
+    der Statistik-Historie.
 
+    Aus `HemsCoordinator` herausgelöst (siehe docs/architektur-review.md) —
+    reine Kapselung derselben Logik, keine Verhaltensänderung. Bekommt seine
+    HA-Zugriffe (`hass`, Options-Lookup, Device-Registry, eigene Entity-IDs)
+    als schmale Abhängigkeiten statt des ganzen Coordinators.
+    """
 
-def _profile_rows(
-    profile: dict[tuple[int, int], float] | None, now: datetime
-) -> list[dict]:
-    """Gelerntes Profil für die Anzeige in lokale Stunden umrechnen."""
-    if not profile:
-        return []
-    midnight = now.replace(minute=0, second=0, microsecond=0)
-    rows: list[dict] = []
-    for utc_hour in range(24):
-        werktag = profile.get((0, utc_hour))
-        wochenende = profile.get((1, utc_hour))
-        if werktag is None and wochenende is None:
-            continue
-        local_hour = dt_util.as_local(midnight.replace(hour=utc_hour)).hour
-        rows.append(
-            {"stunde": local_hour, "werktag_w": werktag, "wochenende_w": wochenende}
+    def __init__(self, hass, opt, registry, own_entity_id) -> None:
+        self._hass = hass
+        self._opt = opt
+        self._registry = registry
+        self._own_entity_id = own_entity_id
+        self.night_load_w: float | None = None
+        self._night_load_fetched: datetime | None = None
+        # (Tagtyp, UTC-Stunde) → mittlere Last in W; Tagtyp 0 = Werktag, 1 = Wochenende
+        self.load_profile: dict[tuple[int, int], float] | None = None
+        self.profile_source: str = "konstante"
+        # WP-Verbrauchsmodell (Heizgradstunden), im STATS_CACHE-Takt gelernt.
+        self.wp_model: WpModel | None = None
+        self.wp_model_quelle: str = ""
+
+    async def refresh(self) -> float:
+        """Lastmodell lernen: Nacht-Grundlast (Skalar) und 24-h-Lastprofil.
+
+        Primärquelle für das Profil ist der bereits rekonstruierte Haus-
+        verbrauch (`lastfluss`-Sensor, PV- und akkukompensiert) — damit
+        bekommen auch die Tagesstunden ein echtes Profil, nicht nur die
+        Nacht. Fehlt dessen Historie (frische Installation), greift das
+        Nacht-Profil aus dem rohen Zähler, zuletzt der konfigurierte
+        Konstantwert. Rückgabe ist die Nacht-Grundlast als Fallback-Skalar.
+
+        Liegt eine WP-Leistungsstatistik vor, wird sie stundenweise aus
+        beiden Profilquellen herausgerechnet und stattdessen ein
+        temperaturabhängiges WP-Verbrauchsmodell gelernt — das gemittelte
+        Profil würde den WP-Verbrauch sonst wetterblind fortschreiben und
+        saisonalen Übergängen wochenlang hinterherlaufen.
+        """
+        fallback = float(self._opt(CONF_NIGHT_W, DEFAULT_NIGHT_W))
+        now = dt_util.utcnow()
+        if (
+            self.night_load_w is not None
+            and self._night_load_fetched is not None
+            and now - self._night_load_fetched < STATS_CACHE
+        ):
+            return self.night_load_w
+
+        wp_by_ts = await self._wp_hourly_stats(now)
+        self.wp_model, self.wp_model_quelle = await self._learn_wp_model(
+            now, wp_by_ts
         )
-    rows.sort(key=lambda r: r["stunde"])
-    return rows
+        # Profile nur bereinigen, wenn die WP auch explizit modelliert wird —
+        # sonst bliebe ihr Verbrauch komplett unberücksichtigt.
+        wp_abzug = wp_by_ts if self.wp_model is not None else None
+        night_scalar, night_profile = await self._meter_night_stats(now, wp_abzug)
+        house_profile = await self._house_load_profile(now, wp_abzug)
+
+        if house_profile:
+            self.load_profile = house_profile
+            self.profile_source = "hausverbrauch (24 h)"
+        elif night_profile:
+            self.load_profile = night_profile
+            self.profile_source = "zähler-nacht"
+        else:
+            self.load_profile = None
+            self.profile_source = "konstante"
+        if self.wp_model is not None:
+            self.profile_source += ", wp-bereinigt"
+
+        self.night_load_w = (
+            night_scalar if night_scalar and night_scalar > 0 else fallback
+        )
+        self._night_load_fetched = now
+        return self.night_load_w
+
+    async def _wp_hourly_stats(self, now: datetime) -> dict[float, float] | None:
+        """Stündliche WP-Leistung je Statistik-Zeitstempel — Basis für die
+        Profilbereinigung und das Verbrauchsmodell.
+
+        Nur heizungsgekoppelte Schaltlasten (`heat_coupled`) zählen. Eine
+        überschussgesteuerte Last (Pool, Luftentfeuchter) folgt keiner
+        Außentemperatur; sie würde die Heizgradstunden-Regression verzerren
+        (zu hohe Basisleistung) und zugleich fälschlich aus dem Lastprofil
+        herausgerechnet. Solche Lasten bleiben im Profil und werden über ihr
+        gelerntes `erwartet_w` geregelt.
+        """
+        entities = [
+            s.power_entity
+            for s in self._registry().switchables
+            if s.power_entity and s.heat_coupled
+        ]
+        if not entities:
+            return None
+        by_ts: dict[float, float] = {}
+        for entity in entities:
+            rows = await self._statistics_hourly_mean(
+                entity, now - timedelta(days=WP_MODEL_DAYS)
+            )
+            for row in rows or []:
+                ts, mean = row.get("start"), row.get("mean")
+                if ts is None or mean is None:
+                    continue
+                by_ts[ts] = by_ts.get(ts, 0.0) + max(0.0, float(mean))
+        return by_ts or None
+
+    async def _learn_wp_model(
+        self, now: datetime, wp_by_ts: dict[float, float] | None
+    ) -> tuple[WpModel | None, str]:
+        """Heizgradstunden-Modell der WP lernen: P = Basis + k × (Grenze − T).
+
+        Basis ist die mittlere WP-Leistung oberhalb der Heizgrenze
+        (Warmwasser, Standby), k die Steigung aus der Statistik der Stunden
+        darunter. Ohne Heizkreis oder WP-Statistik gibt es kein Modell (die
+        WP bleibt dann implizit im Lastprofil); reicht die Historie noch
+        nicht, überbrückt der Richtwert aus const.py.
+        """
+        heating_cfg = (
+            self._registry().heatings[0] if self._registry().heatings else None
+        )
+        if heating_cfg is None or not wp_by_ts:
+            return None, ""
+        limit = heating_cfg.heat_off_c
+        temp_rows = await self._statistics_hourly_mean(
+            heating_cfg.outdoor_temp_entity, now - timedelta(days=WP_MODEL_DAYS)
+        )
+
+        warm: list[float] = []
+        heiz: list[tuple[float, float]] = []  # (Heizgradstunden, Watt)
+        for row in temp_rows or []:
+            ts, mean = row.get("start"), row.get("mean")
+            if ts is None or mean is None or ts not in wp_by_ts:
+                continue
+            temp, watt = float(mean), wp_by_ts[ts]
+            if temp >= limit:
+                warm.append(watt)
+            else:
+                heiz.append((limit - temp, watt))
+
+        base = sum(warm) / len(warm) if warm else 0.0
+        if len(heiz) >= WP_MODEL_MIN_HOURS:
+            hgs = sum(grad for grad, _w in heiz)
+            heizenergie = sum(max(0.0, w - base) for _grad, w in heiz)
+            if hgs > 0:
+                return (
+                    WpModel(
+                        base_w=round(base, 1),
+                        k_w_per_k=round(heizenergie / hgs, 1),
+                        limit_c=limit,
+                        max_w=round(max(wp_by_ts.values()), 0),
+                    ),
+                    "gelernt",
+                )
+        return (
+            WpModel(
+                base_w=round(base, 1),
+                k_w_per_k=DEFAULT_WP_W_PER_K,
+                limit_c=limit,
+                max_w=None,
+            ),
+            "richtwert",
+        )
+
+    async def _statistics_hourly_mean(
+        self, stat_id: str, start: datetime
+    ) -> list[dict] | None:
+        """Stündliche Mittelwert-Statistik ab `start` lesen (oder None)."""
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import (
+                statistics_during_period,
+            )
+
+            stats = await get_instance(self._hass).async_add_executor_job(
+                statistics_during_period,
+                self._hass,
+                start,
+                None,
+                {stat_id},
+                "hour",
+                None,
+                {"mean"},
+            )
+        except Exception as err:  # Statistik ist optional, nie fatal
+            _LOGGER.debug("Statistik für %s nicht verfügbar: %s", stat_id, err)
+            return None
+        return stats.get(stat_id, [])
+
+    async def _meter_night_stats(
+        self, now: datetime, wp_by_ts: dict[float, float] | None = None
+    ) -> tuple[float | None, dict[tuple[int, int], float] | None]:
+        """Nachtlast aus dem rohen Zähler (14 Tage) als Fallback lernen.
+
+        Nur Nachtstunden, weil tagsüber PV den Zählerwert verfälscht. Liefert
+        den Skalar-Mittelwert und ein Nacht-Profil, das auf beide Wochentag-
+        typen gespiegelt wird — es dient nur, bis der Hausverbrauch genug
+        Historie für ein volles 24-h-Profil hat. Eine übergebene WP-Statistik
+        wird stundenweise abgezogen (die WP kommt dann aus dem Modell).
+        """
+        meter = self._opt(CONF_METER, None)
+        if not meter:
+            return None, None
+        rows = await self._statistics_hourly_mean(meter, now - timedelta(days=14))
+        if not rows:
+            return None, None
+
+        by_hour: dict[int, list[float]] = {}
+        for row in rows:
+            ts, mean = row.get("start"), row.get("mean")
+            if ts is None or mean is None:
+                continue
+            utc = dt_util.utc_from_timestamp(ts)
+            if dt_util.as_local(utc).hour in NIGHT_HOURS_LOCAL:
+                # Nur Bezug zählt; ein evtl. gedeckelter Zähler liefert eh >= 0
+                watt = float(mean) - (wp_by_ts or {}).get(ts, 0.0)
+                by_hour.setdefault(utc.hour, []).append(max(0.0, watt))
+        if not by_hour:
+            return None, None
+
+        all_vals = [v for vals in by_hour.values() for v in vals]
+        scalar = sum(all_vals) / len(all_vals)
+        profile: dict[tuple[int, int], float] = {}
+        for hour, vals in by_hour.items():
+            watt = round(sum(vals) / len(vals), 1)
+            profile[(0, hour)] = watt  # Werktag
+            profile[(1, hour)] = watt  # Wochenende (mangels Daten identisch)
+        return scalar, profile
+
+    async def _house_load_profile(
+        self, now: datetime, wp_by_ts: dict[float, float] | None = None
+    ) -> dict[tuple[int, int], float] | None:
+        """Volles 24-h-Lastprofil aus dem rekonstruierten Hausverbrauch lernen.
+
+        Quelle ist der integrationseigene `lastfluss`-Sensor (state_class
+        measurement → Langzeitstatistik). Gebündelt nach Wochentagstyp
+        (Werktag/Wochenende) und UTC-Stunde über `PROFILE_DAYS`. Buckets mit
+        zu wenigen Beobachtungen werden verworfen; ist das Profil insgesamt zu
+        dünn, greift der Aufrufer auf das Nacht-Profil zurück. Eine übergebene
+        WP-Statistik wird stundenweise abgezogen (die WP kommt dann aus dem
+        Modell).
+        """
+        stat_id = self._own_entity_id("lastfluss")
+        if not stat_id:
+            return None
+        rows = await self._statistics_hourly_mean(stat_id, now - PROFILE_DAYS)
+        if not rows:
+            return None
+
+        buckets: dict[tuple[int, int], list[float]] = {}
+        for row in rows:
+            ts, mean = row.get("start"), row.get("mean")
+            if ts is None or mean is None:
+                continue
+            utc = dt_util.utc_from_timestamp(ts)
+            daytype = 1 if utc.weekday() >= 5 else 0
+            watt = float(mean) - (wp_by_ts or {}).get(ts, 0.0)
+            buckets.setdefault((daytype, utc.hour), []).append(max(0.0, watt))
+
+        profile = {
+            key: round(sum(vals) / len(vals), 1)
+            for key, vals in buckets.items()
+            if len(vals) >= MIN_PROFILE_SAMPLES
+        }
+        return profile if len(profile) >= MIN_PROFILE_BUCKETS else None
+
+
+class WeatherClient:
+    """Wetterlage/PV-Ertragsfaktor für morgen und stündliche Temperatur-
+    vorhersage, mit eigenem Cache (`WEATHER_CACHE`).
+
+    Aus `HemsCoordinator` herausgelöst (siehe docs/architektur-review.md) —
+    reine Kapselung derselben Logik, keine Verhaltensänderung.
+    """
+
+    def __init__(self, hass, opt) -> None:
+        self._hass = hass
+        self._opt = opt
+        self._weather_cache: tuple[str | None, float | None] = (None, None)
+        self._weather_fetched: datetime | None = None
+        self._temp_forecast: dict[datetime, float] = {}
+        self._temp_forecast_fetched: datetime | None = None
+
+    async def tomorrow(self) -> tuple[str | None, float | None]:
+        """Wetterlage und PV-Ertragsfaktor (0–1) für morgen bestimmen.
+
+        Bevorzugt den Bewölkungsgrad der Tagesvorhersage; fehlt er, wird
+        die Wetterlage (condition) über eine feste Tabelle abgebildet.
+        """
+        entity = self._opt(CONF_WEATHER, None)
+        if not entity:
+            return None, None
+        now = dt_util.utcnow()
+        if (
+            self._weather_fetched is not None
+            and now - self._weather_fetched < WEATHER_CACHE
+        ):
+            return self._weather_cache
+
+        condition: str | None = None
+        factor: float | None = None
+        try:
+            resp = await self._hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": entity, "type": "daily"},
+                blocking=True,
+                return_response=True,
+            )
+            forecast = (resp or {}).get(entity, {}).get("forecast", [])
+            tomorrow = dt_util.now().date() + timedelta(days=1)
+            for item in forecast:
+                when = dt_util.parse_datetime(item.get("datetime") or "")
+                if when is None or dt_util.as_local(when).date() != tomorrow:
+                    continue
+                condition = item.get("condition")
+                cloud = item.get("cloud_coverage")
+                if cloud is not None:
+                    # Voll bedeckt liefert diffus noch ~15 % des klaren Ertrags
+                    factor = round(max(0.0, 1 - 0.85 * float(cloud) / 100), 2)
+                elif condition in WEATHER_CONDITION_FACTORS:
+                    factor = WEATHER_CONDITION_FACTORS[condition]
+                break
+        except Exception as err:  # Wetter ist optional, nie fatal
+            _LOGGER.debug("Wettervorhersage nicht verfügbar: %s", err)
+
+        self._weather_cache = (condition, factor)
+        self._weather_fetched = now
+        return self._weather_cache
+
+    async def hourly_forecast(self) -> dict[datetime, float]:
+        """Stündliche Temperaturvorhersage (UTC-Stundenanfang → °C) holen.
+
+        Speist das WP-Verbrauchsmodell des Planners. Integrationen ohne
+        Stunden-Vorhersage liefern leer; der Planner fällt dann auf die
+        aktuelle Außentemperatur zurück. Auch ein leeres Ergebnis wird
+        gecacht, damit nicht jeder Update-Zyklus einen Service-Call kostet.
+        """
+        entity = self._opt(CONF_WEATHER, None)
+        if not entity:
+            return {}
+        now = dt_util.utcnow()
+        if (
+            self._temp_forecast_fetched is not None
+            and now - self._temp_forecast_fetched < WEATHER_CACHE
+        ):
+            return self._temp_forecast
+
+        forecast: dict[datetime, float] = {}
+        try:
+            resp = await self._hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": entity, "type": "hourly"},
+                blocking=True,
+                return_response=True,
+            )
+            for item in (resp or {}).get(entity, {}).get("forecast", []):
+                when = dt_util.parse_datetime(item.get("datetime") or "")
+                temp = item.get("temperature")
+                if when is None or temp is None:
+                    continue
+                key = dt_util.as_utc(when).replace(
+                    minute=0, second=0, microsecond=0
+                )
+                forecast[key] = float(temp)
+        except Exception as err:  # Wetter ist optional, nie fatal
+            _LOGGER.debug("Stündliche Wettervorhersage nicht verfügbar: %s", err)
+
+        self._temp_forecast = forecast
+        self._temp_forecast_fetched = now
+        return forecast
 
 
 class HemsData:
@@ -178,19 +526,13 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._decisions: dict | None = None
         # Schalt-Ebene (nur im Auto-Modus aktiv).
         self._actuator = Actuator(hass)
-        self._night_load_w: float | None = None
-        self._night_load_fetched: datetime | None = None
-        # (Tagtyp, UTC-Stunde) → mittlere Last in W; Tagtyp 0 = Werktag, 1 = Wochenende
-        self._load_profile: dict[tuple[int, int], float] | None = None
-        self._profile_source: str = "konstante"
-        self._weather_cache: tuple[str | None, float | None] = (None, None)
-        self._weather_fetched: datetime | None = None
-        # WP-Verbrauchsmodell (Heizgradstunden), im STATS_CACHE-Takt gelernt.
-        self._wp_model: WpModel | None = None
-        self._wp_model_quelle: str = ""
-        # Stündliche Temperaturvorhersage, im WEATHER_CACHE-Takt geholt.
-        self._temp_forecast: dict[datetime, float] = {}
-        self._temp_forecast_fetched: datetime | None = None
+        # Lastprofil-/WP-Modell-Lernen und Wetter-Fetch sind eigene
+        # Collaborators (siehe docs/architektur-review.md) statt Methoden
+        # direkt auf dem Coordinator.
+        self._load_model = LoadModelLearner(
+            hass, self._opt, lambda: self.registry, self._own_entity_id
+        )
+        self._weather = WeatherClient(hass, self._opt)
         self._unit_warned: set[str] = set()
         # Hysterese-Zustand des Planners, über die Update-Zyklen fortgeschrieben.
         self._plan_flags = PlanFlags()
@@ -504,338 +846,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             "sensor", DOMAIN, f"{self.entry.entry_id}_{key}"
         )
 
-    async def _refresh_load_model(self) -> float:
-        """Lastmodell lernen: Nacht-Grundlast (Skalar) und 24-h-Lastprofil.
-
-        Primärquelle für das Profil ist der bereits rekonstruierte Haus-
-        verbrauch (`lastfluss`-Sensor, PV- und akkukompensiert) — damit
-        bekommen auch die Tagesstunden ein echtes Profil, nicht nur die
-        Nacht. Fehlt dessen Historie (frische Installation), greift das
-        Nacht-Profil aus dem rohen Zähler, zuletzt der konfigurierte
-        Konstantwert. Rückgabe ist die Nacht-Grundlast als Fallback-Skalar.
-
-        Liegt eine WP-Leistungsstatistik vor, wird sie stundenweise aus
-        beiden Profilquellen herausgerechnet und stattdessen ein
-        temperaturabhängiges WP-Verbrauchsmodell gelernt — das gemittelte
-        Profil würde den WP-Verbrauch sonst wetterblind fortschreiben und
-        saisonalen Übergängen wochenlang hinterherlaufen.
-        """
-        fallback = float(self._opt(CONF_NIGHT_W, DEFAULT_NIGHT_W))
-        now = dt_util.utcnow()
-        if (
-            self._night_load_w is not None
-            and self._night_load_fetched is not None
-            and now - self._night_load_fetched < STATS_CACHE
-        ):
-            return self._night_load_w
-
-        wp_by_ts = await self._wp_hourly_stats(now)
-        self._wp_model, self._wp_model_quelle = await self._learn_wp_model(
-            now, wp_by_ts
-        )
-        # Profile nur bereinigen, wenn die WP auch explizit modelliert wird —
-        # sonst bliebe ihr Verbrauch komplett unberücksichtigt.
-        wp_abzug = wp_by_ts if self._wp_model is not None else None
-        night_scalar, night_profile = await self._meter_night_stats(now, wp_abzug)
-        house_profile = await self._house_load_profile(now, wp_abzug)
-
-        if house_profile:
-            self._load_profile = house_profile
-            self._profile_source = "hausverbrauch (24 h)"
-        elif night_profile:
-            self._load_profile = night_profile
-            self._profile_source = "zähler-nacht"
-        else:
-            self._load_profile = None
-            self._profile_source = "konstante"
-        if self._wp_model is not None:
-            self._profile_source += ", wp-bereinigt"
-
-        self._night_load_w = (
-            night_scalar if night_scalar and night_scalar > 0 else fallback
-        )
-        self._night_load_fetched = now
-        return self._night_load_w
-
-    async def _wp_hourly_stats(self, now: datetime) -> dict[float, float] | None:
-        """Stündliche WP-Leistung je Statistik-Zeitstempel — Basis für die
-        Profilbereinigung und das Verbrauchsmodell.
-
-        Nur heizungsgekoppelte Schaltlasten (`heat_coupled`) zählen. Eine
-        überschussgesteuerte Last (Pool, Luftentfeuchter) folgt keiner
-        Außentemperatur; sie würde die Heizgradstunden-Regression verzerren
-        (zu hohe Basisleistung) und zugleich fälschlich aus dem Lastprofil
-        herausgerechnet. Solche Lasten bleiben im Profil und werden über ihr
-        gelerntes `erwartet_w` geregelt.
-        """
-        entities = [
-            s.power_entity
-            for s in self.registry.switchables
-            if s.power_entity and s.heat_coupled
-        ]
-        if not entities:
-            return None
-        by_ts: dict[float, float] = {}
-        for entity in entities:
-            rows = await self._statistics_hourly_mean(
-                entity, now - timedelta(days=WP_MODEL_DAYS)
-            )
-            for row in rows or []:
-                ts, mean = row.get("start"), row.get("mean")
-                if ts is None or mean is None:
-                    continue
-                by_ts[ts] = by_ts.get(ts, 0.0) + max(0.0, float(mean))
-        return by_ts or None
-
-    async def _learn_wp_model(
-        self, now: datetime, wp_by_ts: dict[float, float] | None
-    ) -> tuple[WpModel | None, str]:
-        """Heizgradstunden-Modell der WP lernen: P = Basis + k × (Grenze − T).
-
-        Basis ist die mittlere WP-Leistung oberhalb der Heizgrenze
-        (Warmwasser, Standby), k die Steigung aus der Statistik der Stunden
-        darunter. Ohne Heizkreis oder WP-Statistik gibt es kein Modell (die
-        WP bleibt dann implizit im Lastprofil); reicht die Historie noch
-        nicht, überbrückt der Richtwert aus const.py.
-        """
-        heating_cfg = (
-            self.registry.heatings[0] if self.registry.heatings else None
-        )
-        if heating_cfg is None or not wp_by_ts:
-            return None, ""
-        limit = heating_cfg.heat_off_c
-        temp_rows = await self._statistics_hourly_mean(
-            heating_cfg.outdoor_temp_entity, now - timedelta(days=WP_MODEL_DAYS)
-        )
-
-        warm: list[float] = []
-        heiz: list[tuple[float, float]] = []  # (Heizgradstunden, Watt)
-        for row in temp_rows or []:
-            ts, mean = row.get("start"), row.get("mean")
-            if ts is None or mean is None or ts not in wp_by_ts:
-                continue
-            temp, watt = float(mean), wp_by_ts[ts]
-            if temp >= limit:
-                warm.append(watt)
-            else:
-                heiz.append((limit - temp, watt))
-
-        base = sum(warm) / len(warm) if warm else 0.0
-        if len(heiz) >= WP_MODEL_MIN_HOURS:
-            hgs = sum(grad for grad, _w in heiz)
-            heizenergie = sum(max(0.0, w - base) for _grad, w in heiz)
-            if hgs > 0:
-                return (
-                    WpModel(
-                        base_w=round(base, 1),
-                        k_w_per_k=round(heizenergie / hgs, 1),
-                        limit_c=limit,
-                        max_w=round(max(wp_by_ts.values()), 0),
-                    ),
-                    "gelernt",
-                )
-        return (
-            WpModel(
-                base_w=round(base, 1),
-                k_w_per_k=DEFAULT_WP_W_PER_K,
-                limit_c=limit,
-                max_w=None,
-            ),
-            "richtwert",
-        )
-
-    async def _statistics_hourly_mean(
-        self, stat_id: str, start: datetime
-    ) -> list[dict] | None:
-        """Stündliche Mittelwert-Statistik ab `start` lesen (oder None)."""
-        try:
-            from homeassistant.components.recorder import get_instance
-            from homeassistant.components.recorder.statistics import (
-                statistics_during_period,
-            )
-
-            stats = await get_instance(self.hass).async_add_executor_job(
-                statistics_during_period,
-                self.hass,
-                start,
-                None,
-                {stat_id},
-                "hour",
-                None,
-                {"mean"},
-            )
-        except Exception as err:  # Statistik ist optional, nie fatal
-            _LOGGER.debug("Statistik für %s nicht verfügbar: %s", stat_id, err)
-            return None
-        return stats.get(stat_id, [])
-
-    async def _meter_night_stats(
-        self, now: datetime, wp_by_ts: dict[float, float] | None = None
-    ) -> tuple[float | None, dict[tuple[int, int], float] | None]:
-        """Nachtlast aus dem rohen Zähler (14 Tage) als Fallback lernen.
-
-        Nur Nachtstunden, weil tagsüber PV den Zählerwert verfälscht. Liefert
-        den Skalar-Mittelwert und ein Nacht-Profil, das auf beide Wochentag-
-        typen gespiegelt wird — es dient nur, bis der Hausverbrauch genug
-        Historie für ein volles 24-h-Profil hat. Eine übergebene WP-Statistik
-        wird stundenweise abgezogen (die WP kommt dann aus dem Modell).
-        """
-        meter = self._opt(CONF_METER, None)
-        if not meter:
-            return None, None
-        rows = await self._statistics_hourly_mean(meter, now - timedelta(days=14))
-        if not rows:
-            return None, None
-
-        by_hour: dict[int, list[float]] = {}
-        for row in rows:
-            ts, mean = row.get("start"), row.get("mean")
-            if ts is None or mean is None:
-                continue
-            utc = dt_util.utc_from_timestamp(ts)
-            if dt_util.as_local(utc).hour in NIGHT_HOURS_LOCAL:
-                # Nur Bezug zählt; ein evtl. gedeckelter Zähler liefert eh >= 0
-                watt = float(mean) - (wp_by_ts or {}).get(ts, 0.0)
-                by_hour.setdefault(utc.hour, []).append(max(0.0, watt))
-        if not by_hour:
-            return None, None
-
-        all_vals = [v for vals in by_hour.values() for v in vals]
-        scalar = sum(all_vals) / len(all_vals)
-        profile: dict[tuple[int, int], float] = {}
-        for hour, vals in by_hour.items():
-            watt = round(sum(vals) / len(vals), 1)
-            profile[(0, hour)] = watt  # Werktag
-            profile[(1, hour)] = watt  # Wochenende (mangels Daten identisch)
-        return scalar, profile
-
-    async def _house_load_profile(
-        self, now: datetime, wp_by_ts: dict[float, float] | None = None
-    ) -> dict[tuple[int, int], float] | None:
-        """Volles 24-h-Lastprofil aus dem rekonstruierten Hausverbrauch lernen.
-
-        Quelle ist der integrationseigene `lastfluss`-Sensor (state_class
-        measurement → Langzeitstatistik). Gebündelt nach Wochentagstyp
-        (Werktag/Wochenende) und UTC-Stunde über `PROFILE_DAYS`. Buckets mit
-        zu wenigen Beobachtungen werden verworfen; ist das Profil insgesamt zu
-        dünn, greift der Aufrufer auf das Nacht-Profil zurück. Eine übergebene
-        WP-Statistik wird stundenweise abgezogen (die WP kommt dann aus dem
-        Modell).
-        """
-        stat_id = self._own_entity_id("lastfluss")
-        if not stat_id:
-            return None
-        rows = await self._statistics_hourly_mean(stat_id, now - PROFILE_DAYS)
-        if not rows:
-            return None
-
-        buckets: dict[tuple[int, int], list[float]] = {}
-        for row in rows:
-            ts, mean = row.get("start"), row.get("mean")
-            if ts is None or mean is None:
-                continue
-            utc = dt_util.utc_from_timestamp(ts)
-            daytype = 1 if utc.weekday() >= 5 else 0
-            watt = float(mean) - (wp_by_ts or {}).get(ts, 0.0)
-            buckets.setdefault((daytype, utc.hour), []).append(max(0.0, watt))
-
-        profile = {
-            key: round(sum(vals) / len(vals), 1)
-            for key, vals in buckets.items()
-            if len(vals) >= MIN_PROFILE_SAMPLES
-        }
-        return profile if len(profile) >= MIN_PROFILE_BUCKETS else None
-
-    async def _weather_tomorrow(self) -> tuple[str | None, float | None]:
-        """Wetterlage und PV-Ertragsfaktor (0–1) für morgen bestimmen.
-
-        Bevorzugt den Bewölkungsgrad der Tagesvorhersage; fehlt er, wird
-        die Wetterlage (condition) über eine feste Tabelle abgebildet.
-        """
-        entity = self._opt(CONF_WEATHER, None)
-        if not entity:
-            return None, None
-        now = dt_util.utcnow()
-        if (
-            self._weather_fetched is not None
-            and now - self._weather_fetched < WEATHER_CACHE
-        ):
-            return self._weather_cache
-
-        condition: str | None = None
-        factor: float | None = None
-        try:
-            resp = await self.hass.services.async_call(
-                "weather",
-                "get_forecasts",
-                {"entity_id": entity, "type": "daily"},
-                blocking=True,
-                return_response=True,
-            )
-            forecast = (resp or {}).get(entity, {}).get("forecast", [])
-            tomorrow = dt_util.now().date() + timedelta(days=1)
-            for item in forecast:
-                when = dt_util.parse_datetime(item.get("datetime") or "")
-                if when is None or dt_util.as_local(when).date() != tomorrow:
-                    continue
-                condition = item.get("condition")
-                cloud = item.get("cloud_coverage")
-                if cloud is not None:
-                    # Voll bedeckt liefert diffus noch ~15 % des klaren Ertrags
-                    factor = round(max(0.0, 1 - 0.85 * float(cloud) / 100), 2)
-                elif condition in WEATHER_CONDITION_FACTORS:
-                    factor = WEATHER_CONDITION_FACTORS[condition]
-                break
-        except Exception as err:  # Wetter ist optional, nie fatal
-            _LOGGER.debug("Wettervorhersage nicht verfügbar: %s", err)
-
-        self._weather_cache = (condition, factor)
-        self._weather_fetched = now
-        return self._weather_cache
-
-    async def _temp_forecast_hourly(self) -> dict[datetime, float]:
-        """Stündliche Temperaturvorhersage (UTC-Stundenanfang → °C) holen.
-
-        Speist das WP-Verbrauchsmodell des Planners. Integrationen ohne
-        Stunden-Vorhersage liefern leer; der Planner fällt dann auf die
-        aktuelle Außentemperatur zurück. Auch ein leeres Ergebnis wird
-        gecacht, damit nicht jeder Update-Zyklus einen Service-Call kostet.
-        """
-        entity = self._opt(CONF_WEATHER, None)
-        if not entity:
-            return {}
-        now = dt_util.utcnow()
-        if (
-            self._temp_forecast_fetched is not None
-            and now - self._temp_forecast_fetched < WEATHER_CACHE
-        ):
-            return self._temp_forecast
-
-        forecast: dict[datetime, float] = {}
-        try:
-            resp = await self.hass.services.async_call(
-                "weather",
-                "get_forecasts",
-                {"entity_id": entity, "type": "hourly"},
-                blocking=True,
-                return_response=True,
-            )
-            for item in (resp or {}).get(entity, {}).get("forecast", []):
-                when = dt_util.parse_datetime(item.get("datetime") or "")
-                temp = item.get("temperature")
-                if when is None or temp is None:
-                    continue
-                key = dt_util.as_utc(when).replace(
-                    minute=0, second=0, microsecond=0
-                )
-                forecast[key] = float(temp)
-        except Exception as err:  # Wetter ist optional, nie fatal
-            _LOGGER.debug("Stündliche Wettervorhersage nicht verfügbar: %s", err)
-
-        self._temp_forecast = forecast
-        self._temp_forecast_fetched = now
-        return forecast
-
     # -- Update ------------------------------------------------------------
 
     async def _async_update_data(self) -> HemsData:
@@ -932,7 +942,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 0,
             )
 
-        data.wetter_morgen, data.wetter_faktor_morgen = await self._weather_tomorrow()
+        data.wetter_morgen, data.wetter_faktor_morgen = await self._weather.tomorrow()
 
         if sunset is None or sunrise is None:
             return data  # Polarnacht/-tag: ohne Sonnenzeiten keine Planung
@@ -980,7 +990,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             dt_util.DEFAULT_TIME_ZONE,
         )
         ww_legionellen = weekly_windows(
-            _parse_weekday(thermal.legionella_weekday) if thermal else None,
+            parse_weekday(thermal.legionella_weekday) if thermal else None,
             thermal.legionella_start if thermal else None,
             thermal.legionella_end if thermal else None,
             horizon_start,
@@ -1018,15 +1028,15 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
 
         # Lastmodell zuerst: der Aufruf lernt auch das WP-Modell, das unten
         # in den PlanInput einfließt.
-        night_load_w = await self._refresh_load_model()
-        temp_forecast = await self._temp_forecast_hourly()
-        if self._wp_model is not None:
+        night_load_w = await self._load_model.refresh()
+        temp_forecast = await self._weather.hourly_forecast()
+        if self._load_model.wp_model is not None:
             data.wp_modell = {
-                "quelle": self._wp_model_quelle,
-                "basis_w": self._wp_model.base_w,
-                "k_w_pro_k": self._wp_model.k_w_per_k,
-                "heizgrenze_c": self._wp_model.limit_c,
-                "max_w": self._wp_model.max_w,
+                "quelle": self._load_model.wp_model_quelle,
+                "basis_w": self._load_model.wp_model.base_w,
+                "k_w_pro_k": self._load_model.wp_model.k_w_per_k,
+                "heizgrenze_c": self._load_model.wp_model.limit_c,
+                "max_w": self._load_model.wp_model.max_w,
             }
 
         data.plan = compute_plan(
@@ -1057,7 +1067,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 free_kwh=float(self._opt(CONF_FREE_KWH, DEFAULT_FREE_KWH)),
                 free_h=float(self._opt(CONF_FREE_H, DEFAULT_FREE_H)),
                 next_sunrise=next_sunrise,
-                load_profile_w=self._load_profile,
+                load_profile_w=self._load_model.load_profile,
                 horizon_start=horizon_start,
                 horizon_end=horizon_end,
                 today_sunrise=get_astral_event_date(self.hass, "sunrise", today_local),
@@ -1084,7 +1094,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 heating=heating,
                 modulateds=modulateds,
                 switchables=switchables,
-                wp_model=self._wp_model,
+                wp_model=self._load_model.wp_model,
                 temp_forecast_c=temp_forecast or None,
                 flags=self._plan_flags,
             )
@@ -1130,8 +1140,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             for msg in data.config_check.warnings:
                 _LOGGER.info("HEMS-Config-Warnung: %s", msg)
 
-        data.lastprofil_quelle = self._profile_source
-        data.lastprofil = _profile_rows(self._load_profile, now)
+        data.lastprofil_quelle = self._load_model.profile_source
+        data.lastprofil = profile_rows(
+            self._load_model.load_profile, now, dt_util.DEFAULT_TIME_ZONE
+        )
         data.verlauf_pv_entity = self._own_entity_id("pv_leistung_jetzt")
         data.verlauf_soc_entity = self._own_entity_id("speicher_soc")
 

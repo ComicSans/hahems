@@ -33,38 +33,45 @@ schnittlich gepflegter Code, kein Sanierungsfall.
   entfernt.
 - 3× `tests/*.py`: unbenutzte Test-Imports entfernt (`storages`, `zuteilung`
   je einmal ungenutzt importiert).
+- `_parse_weekday`/`_profile_rows` aus `coordinator.py` nach `planner.py`
+  verschoben (als `parse_weekday`/`profile_rows`, öffentlich). `profile_rows`
+  bekommt die Zeitzone jetzt als Parameter statt `dt_util.as_local` intern zu
+  rufen — macht die Funktion vollständig HA-frei. 5 neue Tests in
+  `tests/test_planner_helpers.py`.
 
-Vollständige Suite nach der Bereinigung weiter grün (33 Tests).
+Vollständige Suite nach der Bereinigung weiter grün (38 Tests).
 
-## Befunde — nur vorgeschlagen, nicht umgesetzt
+## Umgesetzt, aber nicht test-abgesichert (HA-Schicht, live Hardware)
 
-Diese Punkte betreffen die HA-Schicht: ungetestet, treibt echte Hardware
-(Speicher, Wallbox, Schaltlasten). Vor jeder Änderung dort ist eine bewusste
-Freigabe nötig — ein stiller Fehler würde erst am Live-System auffallen.
+**Wichtig: diese Änderung konnte in dieser Umgebung nicht gegen ein echtes
+Home Assistant laufen** — hier ist kein HA installiert, und `coordinator.py`
+ist strukturell von der Testsuite ausgeschlossen (siehe oben). Verifiziert
+wurden nur: Syntax (`py_compile`), Lint (`ruff` F/B — sauber), ein AST-Scan
+auf verwaiste Referenzen der alten privaten Namen (keine gefunden) und ein
+manueller Line-by-Line-Vergleich der verschobenen Methodenkörper gegen das
+Original. **Vor dem nächsten Neustart der Integration bitte einen Blick auf
+die Logs werfen**, insbesondere auf Fehler beim Laden des Lastprofils/
+WP-Modells oder der Wettervorhersage.
 
-### 1. `coordinator.py` ist ein God Object (1.168 Zeilen, 29 Methoden)
+### 1. `coordinator.py` war ein God Object (1.168 Zeilen, 29 Methoden)
 
-Bündelt fünf eigentlich getrennte Zuständigkeiten in einer Klasse:
+Bündelte fünf eigentlich getrennte Zuständigkeiten in einer Klasse:
 Entity-I/O (Einheiten-Normalisierung), Lastprofil-Lernen, WP-Heizgradstunden-
 Modell, Wetter-Fetch (mit eigenem Cache), Orchestrierung des Update-Zyklus.
-Jede einzelne Methode ist für sich verständlich und gut kommentiert — das
-Problem ist die Ansammlung, nicht die einzelne Methode. Vorschlag: die drei
-Lern-/Fetch-Cluster (`_refresh_load_model`/`_wp_hourly_stats`/
-`_learn_wp_model`/`_meter_night_stats`/`_house_load_profile`,
-`_weather_tomorrow`/`_temp_forecast_hourly`) in eigene Collaborator-Klassen
-ziehen, die der Coordinator nur noch aufruft. Reduziert die Klasse auf
-Orchestrierung + Entity-I/O. Risiko der Umsetzung: mittel — reine
-Verschiebung ohne Verhaltensänderung, aber ungetestet und live.
+**Umgesetzt:** die zwei Lern-/Fetch-Cluster in eigene Collaborator-Klassen
+gezogen — `LoadModelLearner` (Nachtlast, 24-h-Profil, WP-Modell) und
+`WeatherClient` (Wetterlage morgen, stündliche Temperaturvorhersage, je
+eigener Cache). Beide bekommen ihre HA-Zugriffe (`hass`, Options-Lookup,
+Device-Registry, eigene Entity-IDs) als schmale Konstruktor-Parameter statt
+des ganzen Coordinators — reduziert Kopplung zusätzlich zur reinen
+Verschiebung. `HemsCoordinator` schrumpft dadurch von 29 auf 17 Methoden
+(681 von 1.180 Zeilen); `LoadModelLearner` 265 Zeilen/7 Methoden,
+`WeatherClient` 105 Zeilen/3 Methoden. Reine Verschiebung, keine
+Verhaltensänderung.
 
-### 2. Zwei echte Pure-Functions stecken in einem HA-importierenden Modul
+### 2. Zwei echte Pure-Functions steckten in einem HA-importierenden Modul
 
-`_parse_weekday()` (Zeile 84) und `_profile_rows()` (Zeile 95) in
-`coordinator.py` sind zustandslos und HA-frei bis auf ein `dt_util`-Import in
-`_profile_rows`. Weil sie aber in einem Modul stecken, das top-level
-`homeassistant.*` importiert, sind sie über die bestehende Test-Infrastruktur
-nicht erreichbar (`conftest.py` blockiert HA-Importe strukturell). Verschieben
-nach `strategies/` (oder ein neues `hems/util.py` ohne HA-Import) würde sie
-kostenlos testbar machen — kleine, klar abgegrenzte Änderung.
+`_parse_weekday()` und `_profile_rows()` — siehe oben, umgesetzt.
 
 ### 3. Fehlende Testabdeckung der HA-Schicht ist der größte Blast-Radius-Faktor
 
@@ -74,8 +81,9 @@ haben keinerlei automatisierten Test. Für die Regel-Logik federt die reine
 Architektur das ab (dort *ist* Testen billig); für die Aktuierungs-Schicht
 nicht. Das ist kein Refactoring-Punkt, sondern eine Empfehlung: bevor an
 `actuator.py`/`coordinator.py` mehr als Verschiebungen passieren, lohnt sich
-ein dünner Layer von Unit-Tests für die reinen Teile (Einheiten-Umrechnung,
-`_parse_weekday`, `_profile_rows`, sobald verschoben).
+ein dünner Layer von Unit-Tests für die verbleibenden reinen Teile
+(Einheiten-Umrechnung `_power_w`/`_energy_kwh` — bräuchte dafür ebenfalls
+eine Trennung von der State-Lookup, die HA voraussetzt).
 
 ## Nicht verändert (bewusst)
 
