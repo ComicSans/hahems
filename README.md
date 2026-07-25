@@ -19,6 +19,16 @@ im Modus `auto` schaltet sie zusätzlich auf konfigurierte Steuer-Entitäten
 > nach dem Update manuell anpassen; die alte Entität bleibt sonst als
 > „nicht verfügbar" in der Entity-Registry zurück und sollte gelöscht werden.
 
+> **Breaking Change (1.0.5):** Sensor-Attribute mit den Präfixen `wp_`/`ww_`
+> heißen jetzt ausgeschrieben `waermepumpe_`/`warmwasser_` (z. B. `wp_modus` →
+> `waermepumpe_modus`, `ww_soll_c` → `warmwasser_soll_c`). Wer diese Attribute
+> direkt in Lovelace-Karten oder Templates referenziert (`state_attr(...)`),
+> muss die Namen manuell anpassen — Attribute sind anders als `entity_id`
+> nicht in der Entity-Registry verankert und ändern sich sofort mit dem
+> Update. Die `entity_id`s selbst sind unberührt: Sie waren schon vorher
+> ausgeschrieben (`sensor.hems_warmwasser_soll`) und hängen nicht an diesen
+> Attribut-Präfixen.
+
 ## Installation
 
 Variante HACS: dieses Repo als Custom Repository (Typ "Integration") hinzufügen.
@@ -33,6 +43,129 @@ Variante manuell: den Ordner `custom_components/hems/` in das
 3. Danach über "Konfigurieren" die Geräte anlegen:
    PV-Prognoseflächen, Speicher, Warmwasser, Heizkreis,
    schaltbare/modulierbare Lasten
+
+## Konfigurationsparameter
+
+Alle Felder sind auch direkt im Config-Flow als Hilfetext hinterlegt
+(unter jedem Formularfeld); diese Tabelle dient als Nachschlagewerk.
+Felder ohne Erklärung sind selbsterklärend (z. B. reine Namen/Labels).
+
+### Grundeinstellungen
+
+| Feld | Beschreibung |
+|---|---|
+| **Zähler (Leistung am Netzanschluss)** | Sensor mit der momentanen Leistung am Netzanschlusspunkt in Watt. Erwartet wird: positiv = Netzbezug, negativ = Einspeisung. |
+| **Vorzeichen invertieren** | Aktivieren, falls dein Zähler Einspeisung als positiven Wert meldet. |
+| **PV-Leistung jetzt (W, optional)** | Sensor mit der aktuellen PV-Gesamtleistung über alle Flächen. Wird für den Lastfluss und die Empfehlung genutzt. |
+| **PV-Vorzeichen invertieren** | Aktivieren, falls dein Wechselrichter die PV-Leistung mit umgekehrtem Vorzeichen meldet (negativ = Erzeugung). |
+| **PV-Sensor enthält Akkuleistung** | Aktivieren, wenn PV und Akku am selben Punkt gemessen werden (Hybrid-Wechselrichter) und der PV-Wert die Akkuleistung enthält. HEMS rechnet die Akkuleistung dann aus der gemessenen PV heraus (Entladen senkt sie, Laden hebt sie). |
+| **Wettervorhersage (optional)** | Wetter-Entität, deren Tagesvorhersage in die Planung einfließt: Bei trübem Folgetag lädt HEMS den Speicher voll statt nur den Nachtbedarf zu sichern. |
+| **Grundlast tagsüber (W)** | Typischer Dauerverbrauch des Hauses tagsüber ohne große Verbraucher (Kühlschrank, Netzwerk, Standby). |
+| **Grundlast nachts (W)** | Startwert für den Verbrauch in der Nacht. HEMS lernt den echten Wert nach einigen Tagen automatisch aus der Zählerstatistik. |
+| **Prioritäten bei Überschuss** | Wohin soll der Überschuss zuerst fließen? „Automatisch" sichert bei knappem Ertrag zuerst den Akku für die Nacht ab, bei reichlich Ertrag darf das E-Auto zuerst laden. Die Warmwasser-Basisladung hat immer Vorrang. |
+| **Kapazität frei: Bedarf (kWh)** | Der Binärsensor „Kapazität frei" schaltet ein, wenn diese Energiemenge über die angegebene Dauer verfügbar ist, ohne Reserve und Nachtdeckung anzutasten. |
+| **Kapazität frei: Dauer (h)** | Dauer, über die der Bedarf gedeckt sein muss. PV-Überschuss, der in dieses Zeitfenster fällt, zählt zur freien Kapazität. |
+
+### PV-Prognosefläche
+
+| Feld | Beschreibung |
+|---|---|
+| **Name** | Eine kurze Bezeichnung für diese Prognosefläche, z. B. die Dachausrichtung (nur zur Anzeige). |
+| **Energie heute (kWh)** | Sensor mit der prognostizierten PV-Gesamtenergie für heute (kWh), aus deiner Prognose-Integration (z. B. Forecast.Solar, Solcast). |
+| **Energie heute verbleibend (kWh)** | Sensor mit der prognostizierten PV-Restenergie für den restlichen heutigen Tag (kWh). Fließt in die Live-Überschuss- und Empfehlungsberechnung ein. |
+| **Energie morgen (kWh)** | Sensor mit der prognostizierten PV-Gesamtenergie für morgen (kWh). Entscheidet, ob der Speicher heute schon voll als Puffer gegen einen schlechten Folgetag geladen wird. |
+
+### Speicher
+
+| Feld | Beschreibung |
+|---|---|
+| **Name** | Eine kurze Bezeichnung für diesen Speicher, z. B. Einbauort oder Gerätename. |
+| **SoC-Entität (%)** | Sensor mit dem aktuellen Ladestand in Prozent. |
+| **Leistungs-Entität (W, optional)** | Sensor mit der aktuellen Lade-/Entladeleistung in Watt. Konvention: positiv = Entladen ins Haus, negativ = Laden. Wird für die Lastfluss-Anzeige und die Regelung im Auto-Modus genutzt. |
+| **Lade-Sollwert-Entität (W, optional)** | Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann. |
+| **Entlade-Sollwert-Entität (W, optional)** | Number-Entität, über die HEMS die aktuelle Entladeleistung setzen kann (z. B. „jetzt mit 500 W entladen"). |
+| **Kapazität (kWh)** | Nutzbare Kapazität dieses Speichers; bestimmt die Verteilung der Lade-/Entladeleistung über mehrere Speicher und die SoC-Prognose. |
+| **Reserve-SoC (%)** | Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve). |
+| **Max. Ladeleistung (W)** | Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird. |
+| **Max. Entladeleistung (W)** | Begrenzung der Entladeleistung; mehr kann der Akku nicht ins Haus liefern. |
+| **Kaltreserve** | Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität. |
+| **Richtungs-Select (optional, z. B. Zendure ac_mode)** | Optionaler Select/Input_select, über den HEMS zwischen Lade- und Entladerichtung umschaltet (z. B. Zendures ac_mode). Nur nötig, wenn dein Speicher zusätzlich zum Sollwert einen Modus-Umschalter braucht. |
+| **Richtungs-Option beim Laden** | Der Options-Wert, der den Speicher in den Lademodus versetzt. |
+| **Richtungs-Option beim Entladen** | Der Options-Wert, der den Speicher in den Entlademodus versetzt. |
+| **Ziel-SoC-Entity (soc_set, geräteseitiger Ladedeckel, optional)** | Optionale Number-Entität, die begrenzt, wie weit der Speicher eigenständig lädt (geräteseitiges Ziel-SoC). Manche Speicher ignorieren ein Lade-Limit von 0 und laden trotzdem bis zu diesem Ziel weiter — setze dies, falls das bei deinem Gerät zutrifft. |
+
+### Warmwasser
+
+| Feld | Beschreibung |
+|---|---|
+| **Name** | Eine kurze Bezeichnung für dieses Warmwassersystem (nur zur Anzeige). |
+| **Temperatur-Entität (optional)** | Sensor mit der aktuellen Warmwassertemperatur. Ohne ihn empfiehlt HEMS weiterhin einen Sollwert, kann die tatsächliche Temperatur aber weder anzeigen noch prüfen. |
+| **Basis-Soll (°C)** | Diese Temperatur wird immer gehalten, notfalls mit Netzstrom. |
+| **Komfort-Soll (°C)** | Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt. |
+| **Sperrzeit ab** | Beginn der täglichen Sperrzeit, in der kein Warmwasser bereitet wird. Beide Felder leer lassen heißt keine Sperre. |
+| **Sperrzeit bis** | Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00). |
+| **Legionellenschutz: Wochentag** | Wöchentliches Hygiene-Fenster: An diesem Tag wird der Sollwert unabhängig vom Überschuss auf das Legionellenschutz-Soll angehoben — notfalls aus dem Netz. „Deaktiviert" schaltet die Funktion ab. |
+| **Legionellenschutz: ab** | Lokale Startzeit des wöchentlichen Legionellen-Fensters. |
+| **Legionellenschutz: bis** | Ende des Fensters. Ein Ende vor dem Anfang läuft über Mitternacht. |
+| **Legionellenschutz-Soll (°C)** | Solltemperatur während des Legionellen-Fensters. |
+| **PV-Boost: Speicher-SoC ab (%)** | Die Komfortladung wird erst empfohlen, wenn der Gesamt-Speicher-SoC dieses Niveau erreicht. |
+| **PV-Boost: Speicher-SoC Ende (%)** | Die Boost-Empfehlung endet, wenn der SoC unter dieses Niveau fällt (Hysterese). |
+| **PV-Boost: Netzsaldo ab (W)** | Netzsaldo, der zum Start des Boosts erreicht sein muss; negativ = Einspeisung (z. B. -2800 = 2,8 kW Einspeisung). |
+| **PV-Boost: Netzsaldo Ende (W)** | Netzsaldo, bei dem der Boost endet (positiv = Bezug). |
+| **Steuer-Entity (water_heater) für Auto-Modus** | water_heater-Entität, auf der HEMS im Auto-Modus den Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt. |
+
+### Heizkreis
+
+| Feld | Beschreibung |
+|---|---|
+| **Name** | Eine kurze Bezeichnung für diesen Heizkreis (nur zur Anzeige). |
+| **Außentemperatur-Entität** | Temperatursensor, der Modus-Entscheidung und Heizkurve speist. |
+| **Wärmeanforderungs-Entität (%, optional)** | Sensor mit der Wärmeanforderung der Räume in Prozent (z. B. PID-Thermostat-Ausgang, mehrere Räume per Template-Sensor kombiniert). Hebt das Vorlauf-Soll um bis zu 5 K an; unter 1 % Anforderung fällt der Vorlauf auf das Minimum (Absenkbetrieb). |
+| **Heizen ein unter (°C)** | Heizen wird empfohlen, sobald die Außentemperatur auf diesen Wert fällt. |
+| **Heizen aus über (°C)** | Heizen endet, sobald die Außentemperatur auf diesen Wert steigt (Hysterese). |
+| **Kühlen ein über (°C)** | Kühlen wird empfohlen, sobald die Außentemperatur auf diesen Wert steigt. |
+| **Kühlen aus unter (°C)** | Kühlen endet, sobald die Außentemperatur auf diesen Wert fällt (Hysterese). |
+| **Frostschutz ein unter (°C)** | Frostschutz erzwingt Heizen, sobald die Außentemperatur auf diesen Wert fällt — auch während der Sommersperre. |
+| **Frostschutz aus über (°C)** | Frostschutz endet, sobald die Außentemperatur auf diesen Wert steigt (Hysterese gegen Takten). |
+| **Heizsperre ab Monat** | In den Sperrmonaten (einschließlich) wird Heizen nur noch vom Frostschutz erzwungen, sonst nie empfohlen (Sommersperre). |
+| **Heizsperre bis Monat** | Letzter Monat (einschließlich) der Sommersperre. Ein Start nach dem Ende läuft über den Jahreswechsel. |
+| **Kurve: Vorlauf-Soll bei 0 °C (°C)** | Vorlauf-Soll bei 0 °C Außentemperatur. |
+| **Kurve: Steigung (K je K)** | Absenkung des Vorlauf-Solls je Grad Außentemperatur. |
+| **Minimaler Vorlauf (°C)** | Das Vorlauf-Soll fällt beim Heizen nie unter diesen Wert. |
+| **Minimaler Vorlauf bei Kälte (°C)** | Minimales Vorlauf-Soll, wenn es draußen kälter als 5 °C ist. |
+| **Maximaler Vorlauf (°C)** | Das Vorlauf-Soll übersteigt diesen Wert nie. |
+| **Kühl-Vorlauf (°C)** | Fester Vorlauf beim Kühlen. |
+| **Steuer-Entity (climate) für Auto-Modus** | climate-Entität, auf der HEMS im Auto-Modus den Vorlauf-Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt. |
+| **Schalter Flüsterbetrieb (optional)** | Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen. |
+| **Saison-Richtung input_select (optional)** | Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht. |
+
+### Schaltbare Last
+
+| Feld | Beschreibung |
+|---|---|
+| **Name** | Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. in Empfehlung und Lastfluss-Karte). |
+| **Schalter/Climate-Entität** | Schalter- (oder Climate-)Entität, die HEMS abhängig vom Überschuss ein- und ausschaltet. |
+| **Leistungs-Entität (W, optional)** | Sensor mit der aktuellen Leistungsaufnahme in Watt. HEMS lernt daraus die erwartete Leistung, während die Last läuft, und nutzt sie, um zu entscheiden, ob der Überschuss sie deckt. |
+| **Mindestlaufzeit (min)** | Ist das Gerät einmal an, bleibt es mindestens so lange eingeschaltet. |
+| **Mindestpause (min)** | Nach dem Ausschalten bleibt das Gerät mindestens so lange aus. |
+| **Max. Sperrdauer pro Tag (min)** | Länger als diese Dauer pro Tag wird das Gerät nie blockiert. |
+| **Priorität** | 1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt. |
+| **Heizungsgekoppelt (Wärmepumpe, Heizstab)** | Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet. |
+
+### Modulierbare Last
+
+| Feld | Beschreibung |
+|---|---|
+| **Name** | Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. der Wallbox-Name). |
+| **Strom-Sollwert-Entität (A)** | Number-Entität, über die der Strom-Sollwert gesetzt wird. |
+| **Schalter-Entität (optional)** | Optionaler Schalter, über den HEMS das Gerät zusätzlich komplett ein- und ausschalten kann (z. B. Ladefreigabe der Wallbox). |
+| **Leistungs-Entität (W, optional)** | Sensor mit der aktuellen Leistungsaufnahme in Watt. Wird für die Lastfluss-Anzeige genutzt und um den tatsächlichen Bedarf der Last zu lernen. |
+| **Minimalstrom (A)** | Unterhalb dieses Stroms kann das Gerät nicht arbeiten (Wallbox-Minimum meist 6 A). |
+| **Maximalstrom (A)** | Das Gerät wird nie über diesen Strom hinaus angesteuert. |
+| **Phasen** | Anzahl der angeschlossenen Phasen; wird zur Umrechnung zwischen Strom (A) und Leistung (W) genutzt. |
+| **Mindestlaufzeit (min)** | Einmal gestartet, läuft das Gerät mindestens so lange, bevor HEMS es stoppt (z. B. E-Auto mindestens 10 Minuten laden). |
+| **Mindestpause (min)** | Nachdem HEMS das Gerät gestoppt hat, bleibt es mindestens so lange aus, bevor es wieder starten kann. |
+| **Priorität** | 1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt. |
 
 ## Entitäten (Phase 1)
 

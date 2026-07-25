@@ -39,6 +39,12 @@
           "energy_today": "Energy today (kWh)",
           "energy_remaining": "Energy remaining today (kWh)",
           "energy_tomorrow": "Energy tomorrow (kWh)"
+        },
+        "data_description": {
+          "name": "A short label for this forecast plane, e.g. the roof orientation (used only for display).",
+          "energy_today": "Sensor with the forecast total PV energy for today (kWh), from your forecast integration (e.g. Forecast.Solar, Solcast).",
+          "energy_remaining": "Sensor with the forecast remaining PV energy for the rest of today (kWh). Feeds the live surplus and recommendation calculations.",
+          "energy_tomorrow": "Sensor with the forecast total PV energy for tomorrow (kWh). Used to decide whether the battery should be charged fully today as a buffer against a poor day ahead."
         }
       },
       "add_storage": {
@@ -66,7 +72,15 @@
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
           "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
           "max_discharge_w": "Limit of the discharge power; the battery cannot deliver more than this to the house.",
-          "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity."
+          "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity.",
+          "name": "A short label for this storage, e.g. its physical location or unit name.",
+          "soc_entity": "Sensor with the current state of charge in percent.",
+          "power_entity": "Sensor with the current charge/discharge power in watts. Convention: positive = discharging into the house, negative = charging. Used for the load-flow display and the auto-mode control loop.",
+          "mode_entity": "Optional select/input_select HEMS toggles between charging and discharging direction (e.g. Zendure's ac_mode). Only needed if your storage requires a mode switch in addition to a setpoint.",
+          "mode_charge_option": "The option value that puts the storage into charging mode.",
+          "mode_discharge_option": "The option value that puts the storage into discharging mode.",
+          "soc_set_entity": "Optional number entity that caps how far the storage charges on its own (device-side target SoC). Some storages ignore an input power limit of 0 and keep charging toward this target regardless — set it if that applies to yours.",
+          "capacity_kwh": "Usable capacity of this storage; used to distribute charge/discharge power across multiple storages and for the SoC forecast."
         }
       },
       "add_thermal": {
@@ -101,7 +115,10 @@
           "boost_soc_on": "Heating to the comfort target is only recommended once the total storage SoC reaches this level.",
           "boost_soc_off": "The boost recommendation ends when the SoC falls below this level (hysteresis).",
           "boost_saldo_on_w": "Grid balance that must be reached to start the boost; negative = export (e.g. -2800 = exporting 2.8 kW).",
-          "boost_saldo_off_w": "Grid balance at which the boost ends (positive = import)."
+          "boost_saldo_off_w": "Grid balance at which the boost ends (positive = import).",
+          "name": "A short label for this hot-water system (used only for display).",
+          "temp_entity": "Sensor with the current hot-water temperature. Without it, HEMS still recommends a target but cannot show or verify the actual temperature.",
+          "control_entity": "water_heater entity HEMS sets the target temperature on in auto mode. Without it, the target is only recommended, not applied."
         }
       },
       "add_switchable": {
@@ -122,7 +139,10 @@
           "min_off_min": "After switching off, the device stays off for at least this long.",
           "max_block_min": "The device is never blocked for longer than this per day.",
           "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
-          "heat_coupled": "Only for loads whose consumption follows the outdoor temperature (heat pump, heating rod). Only those feed the heating-degree-hour model used for demand forecasting. Surplus-driven loads such as a pool pump or dehumidifier stay off."
+          "heat_coupled": "Only for loads whose consumption follows the outdoor temperature (heat pump, heating rod). Only those feed the heating-degree-hour model used for demand forecasting. Surplus-driven loads such as a pool pump or dehumidifier stay off.",
+          "name": "A short label for this load (used only for display, e.g. in the recommendation and load-flow card).",
+          "switch_entity": "Switch (or climate) entity HEMS turns on and off based on surplus.",
+          "power_entity": "Sensor with the current power draw in watts. HEMS learns the expected power from it while the load is running, used to decide whether surplus covers it."
         }
       },
       "add_modulated": {
@@ -145,7 +165,12 @@
           "switch_entity": "Optional switch HEMS can use to turn the device on and off entirely (e.g. wallbox charging enable).",
           "min_on_min": "Once started, the device runs for at least this long before HEMS stops it (e.g. charge the EV for at least 10 minutes).",
           "min_a": "The device cannot operate below this current (wallbox minimum is usually 6 A).",
-          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
+          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
+          "name": "A short label for this load (used only for display, e.g. the wallbox name).",
+          "power_entity": "Sensor with the current power draw in watts. Used for the load-flow display and to learn the load's actual demand.",
+          "max_a": "The device is never commanded above this current.",
+          "phases": "Number of connected phases; used to convert between current (A) and power (W).",
+          "min_off_min": "After HEMS stops the device, it stays off for at least this long before it can restart."
         }
       },
       "forecast_menu": {
@@ -237,7 +262,11 @@
           "vlt_min_c": "The flow target never falls below this value while heating.",
           "vlt_min_cold_c": "Minimum flow target when it is colder than 5 °C outside.",
           "vlt_max_c": "The flow target never exceeds this value.",
-          "cool_vlt_c": "Fixed flow temperature while cooling."
+          "cool_vlt_c": "Fixed flow temperature while cooling.",
+          "name": "A short label for this heating circuit (used only for display).",
+          "control_entity": "climate entity HEMS sets the flow temperature target on in auto mode. Without it, the target is only recommended, not applied.",
+          "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
+          "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch."
         }
       }
     },
@@ -270,6 +299,12 @@
           "energy_today": "Energy today (kWh)",
           "energy_remaining": "Energy remaining today (kWh)",
           "energy_tomorrow": "Energy tomorrow (kWh)"
+        },
+        "data_description": {
+          "name": "A short label for this forecast plane, e.g. the roof orientation (used only for display).",
+          "energy_today": "Sensor with the forecast total PV energy for today (kWh), from your forecast integration (e.g. Forecast.Solar, Solcast).",
+          "energy_remaining": "Sensor with the forecast remaining PV energy for the rest of today (kWh). Feeds the live surplus and recommendation calculations.",
+          "energy_tomorrow": "Sensor with the forecast total PV energy for tomorrow (kWh). Used to decide whether the battery should be charged fully today as a buffer against a poor day ahead."
         }
       },
       "add_storage": {
@@ -297,7 +332,15 @@
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
           "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
           "max_discharge_w": "Limit of the discharge power; the battery cannot deliver more than this to the house.",
-          "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity."
+          "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity.",
+          "name": "A short label for this storage, e.g. its physical location or unit name.",
+          "soc_entity": "Sensor with the current state of charge in percent.",
+          "power_entity": "Sensor with the current charge/discharge power in watts. Convention: positive = discharging into the house, negative = charging. Used for the load-flow display and the auto-mode control loop.",
+          "mode_entity": "Optional select/input_select HEMS toggles between charging and discharging direction (e.g. Zendure's ac_mode). Only needed if your storage requires a mode switch in addition to a setpoint.",
+          "mode_charge_option": "The option value that puts the storage into charging mode.",
+          "mode_discharge_option": "The option value that puts the storage into discharging mode.",
+          "soc_set_entity": "Optional number entity that caps how far the storage charges on its own (device-side target SoC). Some storages ignore an input power limit of 0 and keep charging toward this target regardless — set it if that applies to yours.",
+          "capacity_kwh": "Usable capacity of this storage; used to distribute charge/discharge power across multiple storages and for the SoC forecast."
         }
       },
       "add_thermal": {
@@ -332,7 +375,10 @@
           "boost_soc_on": "Heating to the comfort target is only recommended once the total storage SoC reaches this level.",
           "boost_soc_off": "The boost recommendation ends when the SoC falls below this level (hysteresis).",
           "boost_saldo_on_w": "Grid balance that must be reached to start the boost; negative = export (e.g. -2800 = exporting 2.8 kW).",
-          "boost_saldo_off_w": "Grid balance at which the boost ends (positive = import)."
+          "boost_saldo_off_w": "Grid balance at which the boost ends (positive = import).",
+          "name": "A short label for this hot-water system (used only for display).",
+          "temp_entity": "Sensor with the current hot-water temperature. Without it, HEMS still recommends a target but cannot show or verify the actual temperature.",
+          "control_entity": "water_heater entity HEMS sets the target temperature on in auto mode. Without it, the target is only recommended, not applied."
         }
       },
       "add_switchable": {
@@ -353,7 +399,10 @@
           "min_off_min": "After switching off, the device stays off for at least this long.",
           "max_block_min": "The device is never blocked for longer than this per day.",
           "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
-          "heat_coupled": "Only for loads whose consumption follows the outdoor temperature (heat pump, heating rod). Only those feed the heating-degree-hour model used for demand forecasting. Surplus-driven loads such as a pool pump or dehumidifier stay off."
+          "heat_coupled": "Only for loads whose consumption follows the outdoor temperature (heat pump, heating rod). Only those feed the heating-degree-hour model used for demand forecasting. Surplus-driven loads such as a pool pump or dehumidifier stay off.",
+          "name": "A short label for this load (used only for display, e.g. in the recommendation and load-flow card).",
+          "switch_entity": "Switch (or climate) entity HEMS turns on and off based on surplus.",
+          "power_entity": "Sensor with the current power draw in watts. HEMS learns the expected power from it while the load is running, used to decide whether surplus covers it."
         }
       },
       "add_modulated": {
@@ -376,7 +425,12 @@
           "switch_entity": "Optional switch HEMS can use to turn the device on and off entirely (e.g. wallbox charging enable).",
           "min_on_min": "Once started, the device runs for at least this long before HEMS stops it (e.g. charge the EV for at least 10 minutes).",
           "min_a": "The device cannot operate below this current (wallbox minimum is usually 6 A).",
-          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
+          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
+          "name": "A short label for this load (used only for display, e.g. the wallbox name).",
+          "power_entity": "Sensor with the current power draw in watts. Used for the load-flow display and to learn the load's actual demand.",
+          "max_a": "The device is never commanded above this current.",
+          "phases": "Number of connected phases; used to convert between current (A) and power (W).",
+          "min_off_min": "After HEMS stops the device, it stays off for at least this long before it can restart."
         }
       },
       "edit_device": {
@@ -384,6 +438,9 @@
         "description": "Select the entry you want to change. All values can be adjusted afterwards.",
         "data": {
           "device": "Device"
+        },
+        "data_description": {
+          "device": "Pick the device to edit."
         }
       },
       "edit_forecast": {
@@ -394,6 +451,12 @@
           "energy_today": "Energy today (kWh)",
           "energy_remaining": "Energy remaining today (kWh)",
           "energy_tomorrow": "Energy tomorrow (kWh)"
+        },
+        "data_description": {
+          "name": "A short label for this forecast plane, e.g. the roof orientation (used only for display).",
+          "energy_today": "Sensor with the forecast total PV energy for today (kWh), from your forecast integration (e.g. Forecast.Solar, Solcast).",
+          "energy_remaining": "Sensor with the forecast remaining PV energy for the rest of today (kWh). Feeds the live surplus and recommendation calculations.",
+          "energy_tomorrow": "Sensor with the forecast total PV energy for tomorrow (kWh). Used to decide whether the battery should be charged fully today as a buffer against a poor day ahead."
         }
       },
       "edit_storage": {
@@ -421,7 +484,15 @@
           "reserve_soc": "The battery should not be discharged below this level (emergency reserve).",
           "max_charge_w": "Charging power limit; determines how quickly the battery fills within the solar window.",
           "max_discharge_w": "Limit of the discharge power; the battery cannot deliver more than this to the house.",
-          "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity."
+          "cold_reserve": "This storage joins discharging only when the average SoC of the other storages drops below the reserve threshold (with hysteresis). It always participates in charging, proportionally to its free capacity.",
+          "name": "A short label for this storage, e.g. its physical location or unit name.",
+          "soc_entity": "Sensor with the current state of charge in percent.",
+          "power_entity": "Sensor with the current charge/discharge power in watts. Convention: positive = discharging into the house, negative = charging. Used for the load-flow display and the auto-mode control loop.",
+          "mode_entity": "Optional select/input_select HEMS toggles between charging and discharging direction (e.g. Zendure's ac_mode). Only needed if your storage requires a mode switch in addition to a setpoint.",
+          "mode_charge_option": "The option value that puts the storage into charging mode.",
+          "mode_discharge_option": "The option value that puts the storage into discharging mode.",
+          "soc_set_entity": "Optional number entity that caps how far the storage charges on its own (device-side target SoC). Some storages ignore an input power limit of 0 and keep charging toward this target regardless — set it if that applies to yours.",
+          "capacity_kwh": "Usable capacity of this storage; used to distribute charge/discharge power across multiple storages and for the SoC forecast."
         }
       },
       "edit_thermal": {
@@ -456,7 +527,10 @@
           "boost_soc_on": "Heating to the comfort target is only recommended once the total storage SoC reaches this level.",
           "boost_soc_off": "The boost recommendation ends when the SoC falls below this level (hysteresis).",
           "boost_saldo_on_w": "Grid balance that must be reached to start the boost; negative = export (e.g. -2800 = exporting 2.8 kW).",
-          "boost_saldo_off_w": "Grid balance at which the boost ends (positive = import)."
+          "boost_saldo_off_w": "Grid balance at which the boost ends (positive = import).",
+          "name": "A short label for this hot-water system (used only for display).",
+          "temp_entity": "Sensor with the current hot-water temperature. Without it, HEMS still recommends a target but cannot show or verify the actual temperature.",
+          "control_entity": "water_heater entity HEMS sets the target temperature on in auto mode. Without it, the target is only recommended, not applied."
         }
       },
       "edit_switchable": {
@@ -477,7 +551,10 @@
           "min_off_min": "After switching off, the device stays off for at least this long.",
           "max_block_min": "The device is never blocked for longer than this per day.",
           "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
-          "heat_coupled": "Only for loads whose consumption follows the outdoor temperature (heat pump, heating rod). Only those feed the heating-degree-hour model used for demand forecasting. Surplus-driven loads such as a pool pump or dehumidifier stay off."
+          "heat_coupled": "Only for loads whose consumption follows the outdoor temperature (heat pump, heating rod). Only those feed the heating-degree-hour model used for demand forecasting. Surplus-driven loads such as a pool pump or dehumidifier stay off.",
+          "name": "A short label for this load (used only for display, e.g. in the recommendation and load-flow card).",
+          "switch_entity": "Switch (or climate) entity HEMS turns on and off based on surplus.",
+          "power_entity": "Sensor with the current power draw in watts. HEMS learns the expected power from it while the load is running, used to decide whether surplus covers it."
         }
       },
       "edit_modulated": {
@@ -500,7 +577,12 @@
           "switch_entity": "Optional switch HEMS can use to turn the device on and off entirely (e.g. wallbox charging enable).",
           "min_on_min": "Once started, the device runs for at least this long before HEMS stops it (e.g. charge the EV for at least 10 minutes).",
           "min_a": "The device cannot operate below this current (wallbox minimum is usually 6 A).",
-          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first."
+          "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
+          "name": "A short label for this load (used only for display, e.g. the wallbox name).",
+          "power_entity": "Sensor with the current power draw in watts. Used for the load-flow display and to learn the load's actual demand.",
+          "max_a": "The device is never commanded above this current.",
+          "phases": "Number of connected phases; used to convert between current (A) and power (W).",
+          "min_off_min": "After HEMS stops the device, it stays off for at least this long before it can restart."
         }
       },
       "remove_device": {
@@ -508,6 +590,9 @@
         "description": "The selected entry is removed from the configuration. The real device is not affected.",
         "data": {
           "device": "Device"
+        },
+        "data_description": {
+          "device": "Pick the device to remove. This does not delete the underlying entities, only HEMS's configuration for it."
         }
       },
       "general": {
@@ -581,7 +666,11 @@
           "vlt_min_c": "The flow target never falls below this value while heating.",
           "vlt_min_cold_c": "Minimum flow target when it is colder than 5 °C outside.",
           "vlt_max_c": "The flow target never exceeds this value.",
-          "cool_vlt_c": "Fixed flow temperature while cooling."
+          "cool_vlt_c": "Fixed flow temperature while cooling.",
+          "name": "A short label for this heating circuit (used only for display).",
+          "control_entity": "climate entity HEMS sets the flow temperature target on in auto mode. Without it, the target is only recommended, not applied.",
+          "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
+          "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch."
         }
       },
       "edit_heating": {
@@ -625,7 +714,11 @@
           "vlt_min_c": "The flow target never falls below this value while heating.",
           "vlt_min_cold_c": "Minimum flow target when it is colder than 5 °C outside.",
           "vlt_max_c": "The flow target never exceeds this value.",
-          "cool_vlt_c": "Fixed flow temperature while cooling."
+          "cool_vlt_c": "Fixed flow temperature while cooling.",
+          "name": "A short label for this heating circuit (used only for display).",
+          "control_entity": "climate entity HEMS sets the flow temperature target on in auto mode. Without it, the target is only recommended, not applied.",
+          "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
+          "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch."
         }
       }
     },

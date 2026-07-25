@@ -39,6 +39,12 @@
           "energy_today": "Energie heute (kWh)",
           "energy_remaining": "Energie heute verbleibend (kWh)",
           "energy_tomorrow": "Energie morgen (kWh)"
+        },
+        "data_description": {
+          "name": "Eine kurze Bezeichnung für diese Prognosefläche, z. B. die Dachausrichtung (nur zur Anzeige).",
+          "energy_today": "Sensor mit der prognostizierten PV-Gesamtenergie für heute (kWh), aus deiner Prognose-Integration (z. B. Forecast.Solar, Solcast).",
+          "energy_remaining": "Sensor mit der prognostizierten PV-Restenergie für den restlichen heutigen Tag (kWh). Fließt in die Live-Überschuss- und Empfehlungsberechnung ein.",
+          "energy_tomorrow": "Sensor mit der prognostizierten PV-Gesamtenergie für morgen (kWh). Entscheidet, ob der Speicher heute schon voll als Puffer gegen einen schlechten Folgetag geladen wird."
         }
       },
       "add_storage": {
@@ -66,7 +72,15 @@
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
           "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
           "max_discharge_w": "Begrenzung der Entladeleistung; mehr kann der Akku nicht ins Haus liefern.",
-          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität."
+          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität.",
+          "name": "Eine kurze Bezeichnung für diesen Speicher, z. B. Einbauort oder Gerätename.",
+          "soc_entity": "Sensor mit dem aktuellen Ladestand in Prozent.",
+          "power_entity": "Sensor mit der aktuellen Lade-/Entladeleistung in Watt. Konvention: positiv = Entladen ins Haus, negativ = Laden. Wird für die Lastfluss-Anzeige und die Regelung im Auto-Modus genutzt.",
+          "mode_entity": "Optionaler Select/Input_select, über den HEMS zwischen Lade- und Entladerichtung umschaltet (z. B. Zendures ac_mode). Nur nötig, wenn dein Speicher zusätzlich zum Sollwert einen Modus-Umschalter braucht.",
+          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt.",
+          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt.",
+          "soc_set_entity": "Optionale Number-Entität, die begrenzt, wie weit der Speicher eigenständig lädt (geräteseitiges Ziel-SoC). Manche Speicher ignorieren ein Lade-Limit von 0 und laden trotzdem bis zu diesem Ziel weiter — setze dies, falls das bei deinem Gerät zutrifft.",
+          "capacity_kwh": "Nutzbare Kapazität dieses Speichers; bestimmt die Verteilung der Lade-/Entladeleistung über mehrere Speicher und die SoC-Prognose."
         }
       },
       "add_thermal": {
@@ -101,7 +115,10 @@
           "boost_soc_on": "Die Komfortladung wird erst empfohlen, wenn der Gesamt-Speicher-SoC dieses Niveau erreicht.",
           "boost_soc_off": "Die Boost-Empfehlung endet, wenn der SoC unter dieses Niveau fällt (Hysterese).",
           "boost_saldo_on_w": "Netzsaldo, der zum Start des Boosts erreicht sein muss; negativ = Einspeisung (z. B. -2800 = 2,8 kW Einspeisung).",
-          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug)."
+          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug).",
+          "name": "Eine kurze Bezeichnung für dieses Warmwassersystem (nur zur Anzeige).",
+          "temp_entity": "Sensor mit der aktuellen Warmwassertemperatur. Ohne ihn empfiehlt HEMS weiterhin einen Sollwert, kann die tatsächliche Temperatur aber weder anzeigen noch prüfen.",
+          "control_entity": "water_heater-Entität, auf der HEMS im Auto-Modus den Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt."
         }
       },
       "add_switchable": {
@@ -122,7 +139,10 @@
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
           "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
-          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet."
+          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet.",
+          "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. in Empfehlung und Lastfluss-Karte).",
+          "switch_entity": "Schalter- (oder Climate-)Entität, die HEMS abhängig vom Überschuss ein- und ausschaltet.",
+          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. HEMS lernt daraus die erwartete Leistung, während die Last läuft, und nutzt sie, um zu entscheiden, ob der Überschuss sie deckt."
         }
       },
       "add_modulated": {
@@ -145,7 +165,12 @@
           "switch_entity": "Optionaler Schalter, über den HEMS das Gerät zusätzlich komplett ein- und ausschalten kann (z. B. Ladefreigabe der Wallbox).",
           "min_on_min": "Einmal gestartet, läuft das Gerät mindestens so lange, bevor HEMS es stoppt (z. B. E-Auto mindestens 10 Minuten laden).",
           "min_a": "Unterhalb dieses Stroms kann das Gerät nicht arbeiten (Wallbox-Minimum meist 6 A).",
-          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
+          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
+          "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. der Wallbox-Name).",
+          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. Wird für die Lastfluss-Anzeige genutzt und um den tatsächlichen Bedarf der Last zu lernen.",
+          "max_a": "Das Gerät wird nie über diesen Strom hinaus angesteuert.",
+          "phases": "Anzahl der angeschlossenen Phasen; wird zur Umrechnung zwischen Strom (A) und Leistung (W) genutzt.",
+          "min_off_min": "Nachdem HEMS das Gerät gestoppt hat, bleibt es mindestens so lange aus, bevor es wieder starten kann."
         }
       },
       "forecast_menu": {
@@ -237,7 +262,11 @@
           "vlt_min_c": "Das Vorlauf-Soll fällt beim Heizen nie unter diesen Wert.",
           "vlt_min_cold_c": "Minimales Vorlauf-Soll, wenn es draußen kälter als 5 °C ist.",
           "vlt_max_c": "Das Vorlauf-Soll übersteigt diesen Wert nie.",
-          "cool_vlt_c": "Fester Vorlauf beim Kühlen."
+          "cool_vlt_c": "Fester Vorlauf beim Kühlen.",
+          "name": "Eine kurze Bezeichnung für diesen Heizkreis (nur zur Anzeige).",
+          "control_entity": "climate-Entität, auf der HEMS im Auto-Modus den Vorlauf-Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt.",
+          "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
+          "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht."
         }
       }
     },
@@ -270,6 +299,12 @@
           "energy_today": "Energie heute (kWh)",
           "energy_remaining": "Energie heute verbleibend (kWh)",
           "energy_tomorrow": "Energie morgen (kWh)"
+        },
+        "data_description": {
+          "name": "Eine kurze Bezeichnung für diese Prognosefläche, z. B. die Dachausrichtung (nur zur Anzeige).",
+          "energy_today": "Sensor mit der prognostizierten PV-Gesamtenergie für heute (kWh), aus deiner Prognose-Integration (z. B. Forecast.Solar, Solcast).",
+          "energy_remaining": "Sensor mit der prognostizierten PV-Restenergie für den restlichen heutigen Tag (kWh). Fließt in die Live-Überschuss- und Empfehlungsberechnung ein.",
+          "energy_tomorrow": "Sensor mit der prognostizierten PV-Gesamtenergie für morgen (kWh). Entscheidet, ob der Speicher heute schon voll als Puffer gegen einen schlechten Folgetag geladen wird."
         }
       },
       "add_storage": {
@@ -297,7 +332,15 @@
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
           "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
           "max_discharge_w": "Begrenzung der Entladeleistung; mehr kann der Akku nicht ins Haus liefern.",
-          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität."
+          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität.",
+          "name": "Eine kurze Bezeichnung für diesen Speicher, z. B. Einbauort oder Gerätename.",
+          "soc_entity": "Sensor mit dem aktuellen Ladestand in Prozent.",
+          "power_entity": "Sensor mit der aktuellen Lade-/Entladeleistung in Watt. Konvention: positiv = Entladen ins Haus, negativ = Laden. Wird für die Lastfluss-Anzeige und die Regelung im Auto-Modus genutzt.",
+          "mode_entity": "Optionaler Select/Input_select, über den HEMS zwischen Lade- und Entladerichtung umschaltet (z. B. Zendures ac_mode). Nur nötig, wenn dein Speicher zusätzlich zum Sollwert einen Modus-Umschalter braucht.",
+          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt.",
+          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt.",
+          "soc_set_entity": "Optionale Number-Entität, die begrenzt, wie weit der Speicher eigenständig lädt (geräteseitiges Ziel-SoC). Manche Speicher ignorieren ein Lade-Limit von 0 und laden trotzdem bis zu diesem Ziel weiter — setze dies, falls das bei deinem Gerät zutrifft.",
+          "capacity_kwh": "Nutzbare Kapazität dieses Speichers; bestimmt die Verteilung der Lade-/Entladeleistung über mehrere Speicher und die SoC-Prognose."
         }
       },
       "add_thermal": {
@@ -332,7 +375,10 @@
           "boost_soc_on": "Die Komfortladung wird erst empfohlen, wenn der Gesamt-Speicher-SoC dieses Niveau erreicht.",
           "boost_soc_off": "Die Boost-Empfehlung endet, wenn der SoC unter dieses Niveau fällt (Hysterese).",
           "boost_saldo_on_w": "Netzsaldo, der zum Start des Boosts erreicht sein muss; negativ = Einspeisung (z. B. -2800 = 2,8 kW Einspeisung).",
-          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug)."
+          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug).",
+          "name": "Eine kurze Bezeichnung für dieses Warmwassersystem (nur zur Anzeige).",
+          "temp_entity": "Sensor mit der aktuellen Warmwassertemperatur. Ohne ihn empfiehlt HEMS weiterhin einen Sollwert, kann die tatsächliche Temperatur aber weder anzeigen noch prüfen.",
+          "control_entity": "water_heater-Entität, auf der HEMS im Auto-Modus den Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt."
         }
       },
       "add_switchable": {
@@ -353,7 +399,10 @@
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
           "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
-          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet."
+          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet.",
+          "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. in Empfehlung und Lastfluss-Karte).",
+          "switch_entity": "Schalter- (oder Climate-)Entität, die HEMS abhängig vom Überschuss ein- und ausschaltet.",
+          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. HEMS lernt daraus die erwartete Leistung, während die Last läuft, und nutzt sie, um zu entscheiden, ob der Überschuss sie deckt."
         }
       },
       "add_modulated": {
@@ -376,7 +425,12 @@
           "switch_entity": "Optionaler Schalter, über den HEMS das Gerät zusätzlich komplett ein- und ausschalten kann (z. B. Ladefreigabe der Wallbox).",
           "min_on_min": "Einmal gestartet, läuft das Gerät mindestens so lange, bevor HEMS es stoppt (z. B. E-Auto mindestens 10 Minuten laden).",
           "min_a": "Unterhalb dieses Stroms kann das Gerät nicht arbeiten (Wallbox-Minimum meist 6 A).",
-          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
+          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
+          "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. der Wallbox-Name).",
+          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. Wird für die Lastfluss-Anzeige genutzt und um den tatsächlichen Bedarf der Last zu lernen.",
+          "max_a": "Das Gerät wird nie über diesen Strom hinaus angesteuert.",
+          "phases": "Anzahl der angeschlossenen Phasen; wird zur Umrechnung zwischen Strom (A) und Leistung (W) genutzt.",
+          "min_off_min": "Nachdem HEMS das Gerät gestoppt hat, bleibt es mindestens so lange aus, bevor es wieder starten kann."
         }
       },
       "edit_device": {
@@ -384,6 +438,9 @@
         "description": "Wähle den Eintrag, den du ändern möchtest. Anschließend lassen sich alle Werte anpassen.",
         "data": {
           "device": "Gerät"
+        },
+        "data_description": {
+          "device": "Wähle das zu bearbeitende Gerät aus."
         }
       },
       "edit_forecast": {
@@ -394,6 +451,12 @@
           "energy_today": "Energie heute (kWh)",
           "energy_remaining": "Energie heute verbleibend (kWh)",
           "energy_tomorrow": "Energie morgen (kWh)"
+        },
+        "data_description": {
+          "name": "Eine kurze Bezeichnung für diese Prognosefläche, z. B. die Dachausrichtung (nur zur Anzeige).",
+          "energy_today": "Sensor mit der prognostizierten PV-Gesamtenergie für heute (kWh), aus deiner Prognose-Integration (z. B. Forecast.Solar, Solcast).",
+          "energy_remaining": "Sensor mit der prognostizierten PV-Restenergie für den restlichen heutigen Tag (kWh). Fließt in die Live-Überschuss- und Empfehlungsberechnung ein.",
+          "energy_tomorrow": "Sensor mit der prognostizierten PV-Gesamtenergie für morgen (kWh). Entscheidet, ob der Speicher heute schon voll als Puffer gegen einen schlechten Folgetag geladen wird."
         }
       },
       "edit_storage": {
@@ -421,7 +484,15 @@
           "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
           "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
           "max_discharge_w": "Begrenzung der Entladeleistung; mehr kann der Akku nicht ins Haus liefern.",
-          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität."
+          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität.",
+          "name": "Eine kurze Bezeichnung für diesen Speicher, z. B. Einbauort oder Gerätename.",
+          "soc_entity": "Sensor mit dem aktuellen Ladestand in Prozent.",
+          "power_entity": "Sensor mit der aktuellen Lade-/Entladeleistung in Watt. Konvention: positiv = Entladen ins Haus, negativ = Laden. Wird für die Lastfluss-Anzeige und die Regelung im Auto-Modus genutzt.",
+          "mode_entity": "Optionaler Select/Input_select, über den HEMS zwischen Lade- und Entladerichtung umschaltet (z. B. Zendures ac_mode). Nur nötig, wenn dein Speicher zusätzlich zum Sollwert einen Modus-Umschalter braucht.",
+          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt.",
+          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt.",
+          "soc_set_entity": "Optionale Number-Entität, die begrenzt, wie weit der Speicher eigenständig lädt (geräteseitiges Ziel-SoC). Manche Speicher ignorieren ein Lade-Limit von 0 und laden trotzdem bis zu diesem Ziel weiter — setze dies, falls das bei deinem Gerät zutrifft.",
+          "capacity_kwh": "Nutzbare Kapazität dieses Speichers; bestimmt die Verteilung der Lade-/Entladeleistung über mehrere Speicher und die SoC-Prognose."
         }
       },
       "edit_thermal": {
@@ -456,7 +527,10 @@
           "boost_soc_on": "Die Komfortladung wird erst empfohlen, wenn der Gesamt-Speicher-SoC dieses Niveau erreicht.",
           "boost_soc_off": "Die Boost-Empfehlung endet, wenn der SoC unter dieses Niveau fällt (Hysterese).",
           "boost_saldo_on_w": "Netzsaldo, der zum Start des Boosts erreicht sein muss; negativ = Einspeisung (z. B. -2800 = 2,8 kW Einspeisung).",
-          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug)."
+          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug).",
+          "name": "Eine kurze Bezeichnung für dieses Warmwassersystem (nur zur Anzeige).",
+          "temp_entity": "Sensor mit der aktuellen Warmwassertemperatur. Ohne ihn empfiehlt HEMS weiterhin einen Sollwert, kann die tatsächliche Temperatur aber weder anzeigen noch prüfen.",
+          "control_entity": "water_heater-Entität, auf der HEMS im Auto-Modus den Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt."
         }
       },
       "edit_switchable": {
@@ -477,7 +551,10 @@
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
           "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
-          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet."
+          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet.",
+          "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. in Empfehlung und Lastfluss-Karte).",
+          "switch_entity": "Schalter- (oder Climate-)Entität, die HEMS abhängig vom Überschuss ein- und ausschaltet.",
+          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. HEMS lernt daraus die erwartete Leistung, während die Last läuft, und nutzt sie, um zu entscheiden, ob der Überschuss sie deckt."
         }
       },
       "edit_modulated": {
@@ -500,7 +577,12 @@
           "switch_entity": "Optionaler Schalter, über den HEMS das Gerät zusätzlich komplett ein- und ausschalten kann (z. B. Ladefreigabe der Wallbox).",
           "min_on_min": "Einmal gestartet, läuft das Gerät mindestens so lange, bevor HEMS es stoppt (z. B. E-Auto mindestens 10 Minuten laden).",
           "min_a": "Unterhalb dieses Stroms kann das Gerät nicht arbeiten (Wallbox-Minimum meist 6 A).",
-          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt."
+          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
+          "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. der Wallbox-Name).",
+          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. Wird für die Lastfluss-Anzeige genutzt und um den tatsächlichen Bedarf der Last zu lernen.",
+          "max_a": "Das Gerät wird nie über diesen Strom hinaus angesteuert.",
+          "phases": "Anzahl der angeschlossenen Phasen; wird zur Umrechnung zwischen Strom (A) und Leistung (W) genutzt.",
+          "min_off_min": "Nachdem HEMS das Gerät gestoppt hat, bleibt es mindestens so lange aus, bevor es wieder starten kann."
         }
       },
       "remove_device": {
@@ -508,6 +590,9 @@
         "description": "Der gewählte Eintrag wird aus der Konfiguration entfernt. Das reale Gerät bleibt unberührt.",
         "data": {
           "device": "Gerät"
+        },
+        "data_description": {
+          "device": "Wähle das zu entfernende Gerät aus. Das löscht keine zugrunde liegenden Entitäten, nur die HEMS-Konfiguration dafür."
         }
       },
       "general": {
@@ -581,7 +666,11 @@
           "vlt_min_c": "Das Vorlauf-Soll fällt beim Heizen nie unter diesen Wert.",
           "vlt_min_cold_c": "Minimales Vorlauf-Soll, wenn es draußen kälter als 5 °C ist.",
           "vlt_max_c": "Das Vorlauf-Soll übersteigt diesen Wert nie.",
-          "cool_vlt_c": "Fester Vorlauf beim Kühlen."
+          "cool_vlt_c": "Fester Vorlauf beim Kühlen.",
+          "name": "Eine kurze Bezeichnung für diesen Heizkreis (nur zur Anzeige).",
+          "control_entity": "climate-Entität, auf der HEMS im Auto-Modus den Vorlauf-Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt.",
+          "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
+          "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht."
         }
       },
       "edit_heating": {
@@ -625,7 +714,11 @@
           "vlt_min_c": "Das Vorlauf-Soll fällt beim Heizen nie unter diesen Wert.",
           "vlt_min_cold_c": "Minimales Vorlauf-Soll, wenn es draußen kälter als 5 °C ist.",
           "vlt_max_c": "Das Vorlauf-Soll übersteigt diesen Wert nie.",
-          "cool_vlt_c": "Fester Vorlauf beim Kühlen."
+          "cool_vlt_c": "Fester Vorlauf beim Kühlen.",
+          "name": "Eine kurze Bezeichnung für diesen Heizkreis (nur zur Anzeige).",
+          "control_entity": "climate-Entität, auf der HEMS im Auto-Modus den Vorlauf-Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt.",
+          "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
+          "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht."
         }
       }
     },

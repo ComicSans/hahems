@@ -224,7 +224,15 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         },
     ),
     HemsSensorDescription(
-        key="warmwasser_soll",
+        # Bewusst NICHT auf "warmwasser_soll" umbenannt: `key` bildet über
+        # f"{entry_id}_{key}" die unique_id, die für BESTEHENDE Installationen
+        # in der Entity-Registry verankert ist. Eine Änderung hier würde die
+        # alte Entität verwaisen lassen und beim nächsten Neustart eine neue,
+        # umbenannte (sensor.hems_warmwasser_soll_2) erzeugen — anders als
+        # reine Attribut-Namen ist `key` nicht sichtbar, das Risiko lohnt sich
+        # nicht. entity_id/friendly_name sind über `name=` unten bereits
+        # ausgeschrieben und davon unberührt.
+        key="ww_soll",
         name="Warmwasser-Soll",
         native_unit_of_measurement="°C",
         device_class=SensorDeviceClass.TEMPERATURE,
