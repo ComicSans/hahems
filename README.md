@@ -464,9 +464,13 @@ begrenzt nur das Laden — liegt der SoC schon darüber, wird nicht zwangsentlad
 Der Deckel wird sofort auf 100 % aufgehoben, sobald Nachtdeckung vor Schonung
 geht: Ziel verlangt Vollladung (`nulleinspeisung`/`vollladen`), morgen wird es
 knapp (`morgen_knapp`), oder der erwartete Restertrag heute reicht nicht mehr,
-um später von 78 % auf 100 % nachzuladen (dann wird sofort voll geladen, statt
-zu leer in die Nacht zu gehen). Der aktuelle Deckel steht als
-`lade_deckel_soc` im Plan und begrenzt auch die SoC-Prognose der Plankarte.
+um den **tatsächlich fehlenden Rest bis 100 %** nachzuladen (dann wird sofort
+voll geladen, statt zu leer in die Nacht zu gehen). Der fehlende Rest bemisst
+sich am wirklichen Speicherstand, nicht an einer festen 22-%-Annahme ab
+HOLD — steht der Speicher schon über HOLD (z. B. weil die Nacht kaum entladen
+wurde), ist weniger Restertrag nötig als angenommen; steht er ungewöhnlich
+tief darunter, mehr. Der aktuelle Deckel steht als `lade_deckel_soc` im Plan
+und begrenzt auch die SoC-Prognose der Plankarte.
 
 ## Auto-Modus (Aktuierung)
 

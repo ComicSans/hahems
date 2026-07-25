@@ -58,6 +58,18 @@ def test_heute_knapp_hebt_deckel_auf():
     assert deckel == 100.0
 
 
+def test_heute_knapp_bemisst_sich_am_tatsaechlichen_stand():
+    # SoC ungewöhnlich tief unter HOLD (20 % statt üblicher 60–85 %): der reale
+    # Nachlade-Bedarf bis 100 % (4,8 kWh) ist größer als die feste 22-%-Annahme
+    # (1,32 kWh) unterstellt hätte. Der verfügbare Resttag-Überschuss (3,0 kWh)
+    # reicht für die feste Annahme locker, für den echten Bedarf nicht — der
+    # Deckel muss trotzdem sofort aufheben, sonst droht die Nacht ungedeckt.
+    deckel = _deckel(
+        socs=[20, 20, 20], saldo_w=-1500, pv_remaining_kwh=6.2, baseline_load_w=400.0
+    )
+    assert deckel == 100.0
+
+
 def test_nacht_deckel_ist_100():
     day = NOON.replace(hour=1)  # 01:00, vor Sonnenaufgang
     inp = plan_input(

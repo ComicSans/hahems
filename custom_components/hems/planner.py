@@ -20,7 +20,6 @@ from .const import (
     GOAL_ZERO_FEEDIN,
     PRIORITY_BATTERY_FIRST,
     PRIORITY_EV_FIRST,
-    STORAGE_DAY_HOLD_SOC,
 )
 from .strategies import coordination
 from .strategies.battery import _lade_deckel_soc, _storage_control
@@ -281,10 +280,17 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     # Ladedeckel jetzt (Akku-Schonung): tagsüber HOLD, zum Abend per Rampe auf
     # 100 %. Aufgehoben, sobald Nachtdeckung vor Schonung geht — Ziel/morgen
     # knapp (ziel_voll), es ist Nacht (kein Überschuss zu erwarten), oder der
-    # Restertrag heute reicht nicht mehr, um später von HOLD auf 100 %
-    # nachzuladen (dann sofort voll laden, statt zu leer in die Nacht zu gehen).
+    # Restertrag heute reicht nicht mehr, um später nachzuladen (dann sofort
+    # voll laden, statt zu leer in die Nacht zu gehen). Der noch fehlende
+    # Rest bemisst sich am TATSÄCHLICHEN Speicherstand (`available`), nicht am
+    # HOLD-Niveau: steht der Speicher schon über HOLD (z. B. weil er die Nacht
+    # kaum entladen hat), ist der reale Nachlade-Bedarf kleiner als angenommen
+    # — der Deckel darf dann länger warten. Steht er dagegen ungewöhnlich tief
+    # unter HOLD, ist der reale Bedarf größer als die feste 22-%-Annahme; ohne
+    # diese Korrektur hätte der Check das übersehen und riskiert, die Nacht
+    # nicht mehr voll abzudecken.
     if known and cap > 0:
-        topup_kwh = (100.0 - STORAGE_DAY_HOLD_SOC) / 100.0 * cap
+        topup_kwh = max(0.0, cap - available)
         heute_knapp = result.ueberschuss_rest_kwh < topup_kwh
         voll_noetig = ziel_voll or heute_knapp or ist_nacht
         result.lade_deckel_soc = round(
