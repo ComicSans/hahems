@@ -5,7 +5,7 @@ mit Auswahl-Hysterese (ein Akku zur Zeit, gegen Verschleiß).
 """
 from __future__ import annotations
 
-from factories import plan_input, storage, storages, switchable, zuteilung
+from factories import plan_input, storage, switchable, zuteilung
 from hems import planner as P
 
 from hems.const import CONTROL_MIN_SETPOINT_W
