@@ -19,6 +19,7 @@ import logging
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .models import DeviceRegistry
 from .strategies.types import PlanResult
@@ -36,12 +37,20 @@ WARMWASSER_MIN_RUNTIME = timedelta(minutes=15)
 # Toleranz, ab der ein Zahl-Sollwert als "geändert" gilt (W bzw. A/°C: <1).
 _EPS = 1.0
 
+# Throttle für identische, wiederholte Service-Aufrufe. Alle Aufrufer prüfen
+# den Ist-Zustand vor jedem Aufruf (siehe Klassendoc) — _call wird also nur
+# dann Zyklus für Zyklus mit denselben Parametern erneut erreicht, wenn das
+# Zielgerät den Befehl dauerhaft ablehnt (z. B. tote Cloud-Anbindung). Ohne
+# Drossel spammt das jede Minute dieselbe Fehlermeldung ins HA-Log.
+_CALL_THROTTLE = timedelta(minutes=5)
+
 
 class Actuator:
     """Schaltet die Empfehlung im Auto-Modus auf die konfigurierten Geräte."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
+        self._last_call: dict[tuple, object] = {}
 
     async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Reihenfolge WW → WP → Akku → modulierbare Lasten. Jedes Gerät
@@ -92,6 +101,12 @@ class Actuator:
             return None
 
     async def _call(self, domain: str, service: str, entity: str, **data) -> None:
+        key = (domain, service, entity, tuple(sorted(data.items())))
+        now = dt_util.utcnow()
+        last = self._last_call.get(key)
+        if last is not None and now - last < _CALL_THROTTLE:
+            return
+        self._last_call[key] = now
         await self.hass.services.async_call(
             domain, service, {"entity_id": entity, **data}, blocking=False
         )
@@ -151,8 +166,6 @@ class Actuator:
             await self._call("water_heater", "set_temperature", ent, temperature=soll)
 
     def _age(self, state) -> timedelta:
-        from homeassistant.util import dt as dt_util
-
         return dt_util.utcnow() - state.last_changed
 
     # --- Wärmepumpe ---------------------------------------------------------
