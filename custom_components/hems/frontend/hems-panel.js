@@ -73,19 +73,6 @@ const EFFIZIENZ_GRUPPEN = [
   },
 ];
 
-/** Text für die Einbettung in innerHTML entschärfen.
- *
- * Die Namen kommen aus Entitäten, also aus Nutzereingaben und aus fremden
- * Integrationen — sie werden nie ungeprüft als Markup eingesetzt.
- */
-function escapeHtml(wert) {
-  return String(wert ?? "").replace(
-    /[&<>"']/g,
-    (z) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[z],
-  );
-}
-
 const EFFIZIENZ_HINWEISE = [
   "hinweis_temperaturen_identisch",
   "hinweis_spreizung_niedrig",
@@ -945,7 +932,9 @@ function entityOptions(hass, domains, deviceClass) {
 }
 
 function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) =>
+  // Über String() statt direkt .replace: die Werte kommen aus Entitäten und
+  // fremden Integrationen, und ein null oder eine Zahl darf hier nicht werfen.
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
 }
