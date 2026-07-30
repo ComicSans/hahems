@@ -93,3 +93,46 @@ def test_aus_stellt_keinen_sollwert():
 def test_aus_passt_leerer_plan():
     hp = _hp(modus="aus", current_mode="aus", vlt_ziel_c=40.0)
     assert hp == HeatingPlan(None, None)
+
+
+# --- Warmwasserbereitung: Gate der optionalen Rolle ---------------------------
+#
+# Die Anlage hebt den Vorlauf-Soll waehrend der Speicherladung selbst an. Wuerde
+# HEMS nachfuehren, schreiben beide jeden Zyklus gegeneinander. Ohne die
+# optionale Rolle ist ww_bereitung False und alles bleibt wie vorher - das
+# belegen saemtliche Tests oberhalb, die den Parameter nicht setzen.
+
+
+def test_ww_bereitung_stellt_weder_modus_noch_sollwert():
+    hp = _hp(
+        modus="kuehlen",
+        current_mode="heizen",
+        vlt_ziel_c=21.0,
+        current_setpoint=55.0,
+        ww_bereitung=True,
+    )
+    assert hp == HeatingPlan(None, None)
+
+
+def test_ohne_ww_bereitung_wird_dieselbe_lage_gestellt():
+    # Gegenprobe zum Test darueber: identische Eingaben, nur ohne Ladung.
+    hp = _hp(
+        modus="kuehlen",
+        current_mode="heizen",
+        vlt_ziel_c=21.0,
+        current_setpoint=55.0,
+        ww_bereitung=False,
+    )
+    assert hp == HeatingPlan("kuehlen", 21.0)
+
+
+def test_ww_bereitung_default_ist_aus():
+    # Ohne konfigurierte Rolle wird der Parameter gar nicht uebergeben.
+    hp = plan_heating_control(
+        modus="heizen", vlt_ziel_c=40.0, current_mode="aus", current_setpoint=30.0
+    )
+    assert hp == HeatingPlan("heizen", 40.0)
+
+
+def test_ww_bereitung_bei_unbekanntem_modus_bleibt_leer():
+    assert _hp(modus="unbekannt", ww_bereitung=True) == HeatingPlan(None, None)

@@ -238,6 +238,7 @@ class Actuator:
             vlt_ziel_c=plan.heizung.vlt_ziel_c,
             current_mode=current_mode,
             current_setpoint=current_setpoint,
+            ww_bereitung=plan.heizung.ww_bereitung,
         )
 
         if hp.set_mode is not None:
@@ -259,6 +260,12 @@ class Actuator:
             else:
                 await self._set_number(h.setpoint_entity, hp.set_setpoint)
 
+        # Flüsterbetrieb und Saison-Select laufen auch während einer
+        # Warmwasserladung weiter: Das Gate oben schützt Modus und Vorlauf-Soll,
+        # um die es beim Schreib-Pingpong geht. Der Flüsterschalter ist eine
+        # Geräusch-Einstellung und der Saison-Select nur Statistik, und beide
+        # bewegt die Anlage während der Ladung nicht, also gibt es hier nichts,
+        # wogegen HEMS anschreiben könnte.
         # Flüsterbetrieb (optional): folgt der Empfehlung mit eigener Hysterese.
         if h.silent_switch_entity and plan.heizung.leise_empfohlen is not None:
             await self._turn(h.silent_switch_entity, plan.heizung.leise_empfohlen)

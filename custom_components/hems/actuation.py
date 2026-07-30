@@ -121,6 +121,7 @@ def plan_heating_control(
     vlt_ziel_c: float | None,
     current_mode: str | None,
     current_setpoint: float | None,
+    ww_bereitung: bool = False,
 ) -> HeatingPlan:
     """Modus + Vorlauf-Soll für den Heizkreis, idempotent.
 
@@ -133,8 +134,19 @@ def plan_heating_control(
       unbekannte Ist-Zustände → ``None`` ⇒ Modus wird gestellt).
     - ``current_setpoint``: aktueller Vorlauf-Soll (climate-Attribut oder
       Number-Zustand). Vergleich auf ganze °C.
+    - ``ww_bereitung``: die Anlage bereitet gerade Warmwasser (optionale Rolle).
+      Dann wird nichts gestellt, siehe unten. Ohne konfigurierte Rolle ist der
+      Wert ``False`` und alles bleibt wie bisher.
     """
     if modus not in HEATING_MODES:
+        return HeatingPlan()
+
+    # Warmwasser-Fenster: nichts anfassen. Der Speicher hat seinen eigenen
+    # Sollwert, die Anlage hebt den Vorlauf-Soll für die Ladung selbst an und
+    # schreibt jeden HEMS-Wert wieder zurück; beide schreiben dann in jedem
+    # Zyklus gegeneinander. Der Heizkreis ist in diesem Fenster ohnehin nicht
+    # regelbar, also ist Zusehen die richtige Antwort und nicht Nachführen.
+    if ww_bereitung:
         return HeatingPlan()
 
     set_mode = modus if current_mode != modus else None

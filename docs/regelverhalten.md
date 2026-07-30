@@ -157,6 +157,21 @@ In den Sperrmonaten (Standard Mai–September) wird Heizen nie empfohlen, außer
 der Frostschutz greift. Bei niedrigem Vorlauf-Soll meldet das Attribut
 `leise_empfohlen`, dass der Flüsterbetrieb der Anlage reicht.
 
+### Während der Warmwasserbereitung stellt HEMS nichts
+
+Ist die optionale Rückmeldung „Warmwasserbereitung“ konfiguriert und an, lässt
+HEMS den Heizkreis in Ruhe: weder Modus noch Vorlauf-Soll werden geschrieben.
+Grund ist nicht Vorsicht, sondern Zwecklosigkeit: Der Warmwasserspeicher hat
+seinen eigenen Sollwert, und die Anlage hebt den Vorlauf-Soll für die Ladung
+selbst an. Führt HEMS nach, schreiben beide in jedem Zyklus gegeneinander.
+
+Die Empfehlung bleibt in diesem Fenster sichtbar stehen, das Attribut
+`warmwasserbereitung_aktiv` von `sensor.hems_heizkreis` ist dann `true`.
+Empfehlung und Ist dürfen also auseinanderlaufen; das ist kein Fehlzustand.
+Flüsterschalter und Saison-Select laufen weiter, sie kollidieren mit der Ladung
+nicht. Ohne konfigurierte Rückmeldung ändert sich nichts am bisherigen
+Verhalten.
+
 ### Wärmepumpe in der Bedarfsprognose
 
 Ist ein Heizkreis konfiguriert und hat die Wärmepumpe als schaltbare Last eine
