@@ -154,7 +154,10 @@ THERMAL_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
         vol.Optional("temp_entity"): _entity(device_class="temperature"),
-        vol.Optional("control_entity"): _entity(["water_heater", "climate"]),
+        vol.Optional("control_entity"): _entity(
+            ["water_heater", "switch", "input_boolean"]
+        ),
+        vol.Optional("setpoint_entity"): _entity(["number", "input_number"]),
         vol.Required("base_target", default=DEFAULT_BASE_TARGET): _number(
             30, 70, "°C"
         ),
@@ -189,7 +192,11 @@ HEATING_SCHEMA = vol.Schema(
         vol.Required("name"): selector.TextSelector(),
         vol.Required("outdoor_temp_entity"): _entity(device_class="temperature"),
         vol.Optional("demand_entity"): _entity(),
-        vol.Optional("control_entity"): _entity(["climate"]),
+        vol.Optional("control_entity"): _entity(["climate", "select", "input_select"]),
+        vol.Optional("setpoint_entity"): _entity(["number", "input_number"]),
+        vol.Optional("mode_heat_option"): selector.TextSelector(),
+        vol.Optional("mode_cool_option"): selector.TextSelector(),
+        vol.Optional("mode_off_option"): selector.TextSelector(),
         vol.Optional("silent_switch_entity"): _entity(["switch", "input_boolean"]),
         vol.Optional("season_select_entity"): _entity(["input_select", "select"]),
         vol.Required("heat_on_c", default=DEFAULT_HEAT_ON_C): _number(

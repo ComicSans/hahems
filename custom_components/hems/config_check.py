@@ -125,7 +125,35 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
         ctx = f"Warmwasser '{t.name}'"
         if t.control_entity:
             _mark("Warmwasser")
-            _need(t.control_entity, ("water_heater", "climate"), ctx, "Steuer-Entity")
+            _need(
+                t.control_entity,
+                ("water_heater", "switch", "input_boolean"),
+                ctx,
+                "Steuer-Entity",
+            )
+            # Schalter-Variante (kein water_heater): der Sollwert läuft über eine
+            # separate Number. Fehlt sie, wird nur geschaltet, nie die Temperatur
+            # gestellt — das gehört sichtbar gemacht, nicht still hingenommen.
+            if _domain(t.control_entity) in ("switch", "input_boolean"):
+                _need(
+                    t.setpoint_entity,
+                    ("number", "input_number"),
+                    ctx,
+                    "Sollwert-Number",
+                )
+                if not t.setpoint_entity:
+                    c.warnings.append(
+                        f"{ctx}: Schalter ohne Sollwert-Number — WW wird im "
+                        f"Auto-Modus nur ein-/ausgeschaltet, die Temperatur "
+                        f"nicht gestellt"
+                    )
+            elif t.setpoint_entity:
+                # water_heater trägt den Sollwert selbst; eine zusätzliche
+                # Number wäre wirkungslos.
+                c.warnings.append(
+                    f"{ctx}: Sollwert-Number gesetzt, aber Steuer-Entity ist ein "
+                    f"water_heater — die Number bleibt ungenutzt"
+                )
             if not (t.block_start and t.block_end and t.block_start != t.block_end):
                 c.warnings.append(
                     f"{ctx}: kein Sperrfenster gesetzt — WW wird im Auto-Modus "
@@ -139,7 +167,55 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
         ctx = f"Heizkreis '{h.name}'"
         if h.control_entity:
             _mark("Wärmepumpe")
-            _need(h.control_entity, ("climate",), ctx, "Steuer-Entity")
+            _need(
+                h.control_entity,
+                ("climate", "select", "input_select"),
+                ctx,
+                "Steuer-Entity",
+            )
+            if _domain(h.control_entity) in ("select", "input_select"):
+                # Select-Steuerung: der Vorlauf-Soll läuft über eine Number, und
+                # HEMS muss wissen, welche Select-Optionen heizen/aus bedeuten.
+                _need(
+                    h.setpoint_entity,
+                    ("number", "input_number"),
+                    ctx,
+                    "Vorlauf-Sollwert-Number",
+                )
+                if not (h.mode_heat_option and h.mode_off_option):
+                    c.errors.append(
+                        f"{ctx}: Modus-Select ohne mode_heat_option/"
+                        f"mode_off_option — HEMS kann heizen/aus nicht stellen"
+                    )
+                # Freitext-Falle: die Optionen müssen exakt echten Optionen des
+                # Select entsprechen, sonst schlägt select_option lautlos fehl
+                # (wie beim Speicher-Richtungs-Select).
+                ce_state = hass.states.get(h.control_entity)
+                options = ce_state.attributes.get("options") if ce_state else None
+                if options is not None:
+                    for opt, label in (
+                        (h.mode_heat_option, "mode_heat_option"),
+                        (h.mode_cool_option, "mode_cool_option"),
+                        (h.mode_off_option, "mode_off_option"),
+                    ):
+                        if opt and opt not in options:
+                            c.errors.append(
+                                f"{ctx}: {label} '{opt}' ist keine gültige Option "
+                                f"von {h.control_entity} "
+                                f"(verfügbar: {', '.join(options)})"
+                            )
+            elif (
+                h.setpoint_entity
+                or h.mode_heat_option
+                or h.mode_cool_option
+                or h.mode_off_option
+            ):
+                # climate trägt Modus und Sollwert selbst.
+                c.warnings.append(
+                    f"{ctx}: Vorlauf-Number/Modus-Optionen gesetzt, aber "
+                    f"Steuer-Entity ist ein climate — diese Felder bleiben "
+                    f"ungenutzt"
+                )
             _need(
                 h.silent_switch_entity,
                 ("switch", "input_boolean"),

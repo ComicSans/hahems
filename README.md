@@ -112,7 +112,8 @@ Felder ohne Erklärung sind selbsterklärend (z. B. reine Namen/Labels).
 | **PV-Boost: Speicher-SoC Ende (%)** | Die Boost-Empfehlung endet, wenn der SoC unter dieses Niveau fällt (Hysterese). |
 | **PV-Boost: Netzsaldo ab (W)** | Netzsaldo, der zum Start des Boosts erreicht sein muss; negativ = Einspeisung (z. B. -2800 = 2,8 kW Einspeisung). |
 | **PV-Boost: Netzsaldo Ende (W)** | Netzsaldo, bei dem der Boost endet (positiv = Bezug). |
-| **Steuer-Entity (water_heater) für Auto-Modus** | water_heater-Entität, auf der HEMS im Auto-Modus den Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt. |
+| **Steuer-Entity für Auto-Modus** | Entität, die HEMS im Auto-Modus ein-/ausschaltet. Ein `water_heater` trägt zusätzlich den Sollwert selbst; ein `switch`/`input_boolean` schaltet nur ein/aus — den Sollwert dann über die Sollwert-Number stellen. Ohne Steuer-Entity wird die Empfehlung nur angezeigt, nicht gestellt. |
+| **Sollwert-Number (nur bei Schalter)** | Number-Entität, auf die HEMS die Soll-Temperatur schreibt, wenn das Steuer-Entity ein Schalter ist (z. B. eine Modbus-Wärmepumpe mit getrenntem Freigabe-Schalter und Soll-Temperatur-Number). Bei einem `water_heater` leer lassen. |
 
 ### Heizkreis
 
@@ -135,7 +136,9 @@ Felder ohne Erklärung sind selbsterklärend (z. B. reine Namen/Labels).
 | **Minimaler Vorlauf bei Kälte (°C)** | Minimales Vorlauf-Soll, wenn es draußen kälter als 5 °C ist. |
 | **Maximaler Vorlauf (°C)** | Das Vorlauf-Soll übersteigt diesen Wert nie. |
 | **Kühl-Vorlauf (°C)** | Fester Vorlauf beim Kühlen. |
-| **Steuer-Entity (climate) für Auto-Modus** | climate-Entität, auf der HEMS im Auto-Modus den Vorlauf-Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt. |
+| **Steuer-Entity für Auto-Modus** | Entität, auf der HEMS im Auto-Modus den Modus setzt. Ein `climate` trägt Modus **und** Vorlauf-Soll selbst; ein `select`/`input_select` (z. B. ein Modbus-Betriebsmodus-Register) trägt nur den Modus — den Vorlauf-Soll dann über die Vorlauf-Number stellen. Ohne Steuer-Entity nur Anzeige. |
+| **Vorlauf-Sollwert-Number (nur bei Select)** | Number-Entität, auf die HEMS den Vorlauf-Soll schreibt, wenn das Steuer-Entity ein Modus-Select ist (z. B. Modbus-Wärmepumpe mit getrenntem Modus-Select und Vorlauf-Number). Bei einem `climate` leer lassen. |
+| **Modus-Optionen (nur bei Select): Heizen / Kühlen / Aus** | Klartext-Optionen des Modus-Select, die HEMS für heizen/kühlen/aus schreibt (z. B. „Heizen“, „Kühlen“, „Aus/nur Warmwasser“). Müssen exakt echten Optionen des Select entsprechen. Kühlen darf bei reinen Heizgeräten leer bleiben. |
 | **Schalter Flüsterbetrieb (optional)** | Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen. |
 | **Saison-Richtung input_select (optional)** | Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht. |
 
@@ -505,8 +508,8 @@ Steuer-Entitäten je Rolle (alle optional, im Options-Flow zu setzen):
 
 | Rolle | Empfehlung | Steuer-Entitäten | Service |
 |---|---|---|---|
-| Warmwasser | `ww_soll_c` + Status | `control_entity` (water_heater) | on/off + `set_temperature` |
-| Wärmepumpe | `heizung.modus`/`vlt`/`leise` | `control_entity` (climate), `silent_switch_entity`, `season_select_entity` | `set_hvac_mode` + `set_temperature` + Silent + Saison |
+| Warmwasser | `ww_soll_c` + Status | `control_entity` (`water_heater` **oder** `switch`/`input_boolean`), bei Schalter zusätzlich `setpoint_entity` (Number) | on/off + `set_temperature` (water_heater) bzw. `number.set_value` (Schalter) |
+| Wärmepumpe | `heizung.modus`/`vlt`/`leise` | `control_entity` (`climate` **oder** `select`/`input_select` + `setpoint_entity` + `mode_heat/cool/off_option`), `silent_switch_entity`, `season_select_entity` | `set_hvac_mode` + `set_temperature` (climate) bzw. `select_option` + `number.set_value` (Select) + Silent + Saison |
 | Speicher | `regelung` (Zuteilung je Einheit) | `charge_setpoint_entity`, `discharge_setpoint_entity`, optional `mode_entity` + `mode_charge/discharge_option` | `number.set_value` (+ `select_option`) |
 | E-Auto / mod. Last | `ev_regelung` (Sollstrom je Last) | `current_entity`, `switch_entity` (Rolle „Modulierbare Last") | `number.set_value` + on/off |
 | Schaltbare Last | `schaltbare` (an/aus) | `switch_entity` (Rolle „Schaltbare Last") | on/off |

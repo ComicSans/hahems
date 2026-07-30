@@ -101,7 +101,8 @@
           "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
           "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
           "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)",
-          "control_entity": "Steuer-Entity (water_heater) für Auto-Modus"
+          "control_entity": "Steuer-Entity für Auto-Modus (water_heater oder ein Schalter)",
+          "setpoint_entity": "Sollwert-Number (nur bei einem Schalter)"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
@@ -118,7 +119,8 @@
           "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug).",
           "name": "Eine kurze Bezeichnung für dieses Warmwassersystem (nur zur Anzeige).",
           "temp_entity": "Sensor mit der aktuellen Warmwassertemperatur. Ohne ihn empfiehlt HEMS weiterhin einen Sollwert, kann die tatsächliche Temperatur aber weder anzeigen noch prüfen.",
-          "control_entity": "water_heater-Entität, auf der HEMS im Auto-Modus den Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt."
+          "control_entity": "Entität, die HEMS im Auto-Modus ein-/ausschaltet. Ein water_heater trägt zusätzlich den Sollwert selbst; ein Schalter schaltet nur ein/aus — den Sollwert dann über die Number unten stellen.",
+          "setpoint_entity": "Number, auf die HEMS den Soll-Temperaturwert schreibt, wenn das Steuer-Entity ein Schalter ist (z. B. eine Modbus-Wärmepumpe mit getrenntem Freigabe-Schalter und Soll-Temperatur-Number). Bei einem water_heater leer lassen."
         }
       },
       "add_switchable": {
@@ -242,7 +244,11 @@
           "vlt_min_cold_c": "Minimaler Vorlauf bei Kälte (°C)",
           "vlt_max_c": "Maximaler Vorlauf (°C)",
           "cool_vlt_c": "Kühl-Vorlauf (°C)",
-          "control_entity": "Steuer-Entity (climate) für Auto-Modus",
+          "control_entity": "Steuer-Entity für Auto-Modus (climate oder ein Modus-Select)",
+          "setpoint_entity": "Vorlauf-Sollwert-Number (nur bei einem Modus-Select)",
+          "mode_heat_option": "Select-Option für Heizen (nur bei einem Modus-Select)",
+          "mode_cool_option": "Select-Option für Kühlen (optional)",
+          "mode_off_option": "Select-Option für Aus (nur bei einem Modus-Select)",
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
           "season_select_entity": "Saison-Richtung input_select (optional)"
         },
@@ -264,7 +270,11 @@
           "vlt_max_c": "Das Vorlauf-Soll übersteigt diesen Wert nie.",
           "cool_vlt_c": "Fester Vorlauf beim Kühlen.",
           "name": "Eine kurze Bezeichnung für diesen Heizkreis (nur zur Anzeige).",
-          "control_entity": "climate-Entität, auf der HEMS im Auto-Modus den Vorlauf-Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt.",
+          "control_entity": "Entität, auf der HEMS im Auto-Modus den Modus setzt. Ein climate trägt Modus und Vorlauf-Soll selbst; ein Select (z. B. ein Modbus-Betriebsmodus-Register) braucht zusätzlich die Vorlauf-Number und die Modus-Optionen unten. Ohne Steuer-Entity wird die Empfehlung nur angezeigt, nicht gestellt.",
+          "setpoint_entity": "Number, auf die HEMS den Vorlauf-Sollwert schreibt, wenn das Steuer-Entity ein Modus-Select ist (z. B. eine Modbus-Wärmepumpe mit getrenntem Betriebsmodus-Select und Vorlauf-Soll-Number). Bei einem climate leer lassen.",
+          "mode_heat_option": "Die Select-Option, die Heizen bedeutet (z. B. „Heizen“), wird geschrieben, wenn HEMS Heizen empfiehlt. Nur bei einer Select-Steuerung.",
+          "mode_cool_option": "Die Select-Option, die Kühlen bedeutet (z. B. „Kühlen“). Bei reinen Heizgeräten leer lassen.",
+          "mode_off_option": "Die Select-Option, die Aus / nur Warmwasser bedeutet (z. B. „Aus/nur Warmwasser“), wird geschrieben, wenn HEMS Aus empfiehlt. Nur bei einer Select-Steuerung.",
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
           "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht."
         }
@@ -361,7 +371,8 @@
           "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
           "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
           "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)",
-          "control_entity": "Steuer-Entity (water_heater) für Auto-Modus"
+          "control_entity": "Steuer-Entity für Auto-Modus (water_heater oder ein Schalter)",
+          "setpoint_entity": "Sollwert-Number (nur bei einem Schalter)"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
@@ -378,7 +389,8 @@
           "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug).",
           "name": "Eine kurze Bezeichnung für dieses Warmwassersystem (nur zur Anzeige).",
           "temp_entity": "Sensor mit der aktuellen Warmwassertemperatur. Ohne ihn empfiehlt HEMS weiterhin einen Sollwert, kann die tatsächliche Temperatur aber weder anzeigen noch prüfen.",
-          "control_entity": "water_heater-Entität, auf der HEMS im Auto-Modus den Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt."
+          "control_entity": "Entität, die HEMS im Auto-Modus ein-/ausschaltet. Ein water_heater trägt zusätzlich den Sollwert selbst; ein Schalter schaltet nur ein/aus — den Sollwert dann über die Number unten stellen.",
+          "setpoint_entity": "Number, auf die HEMS den Soll-Temperaturwert schreibt, wenn das Steuer-Entity ein Schalter ist (z. B. eine Modbus-Wärmepumpe mit getrenntem Freigabe-Schalter und Soll-Temperatur-Number). Bei einem water_heater leer lassen."
         }
       },
       "add_switchable": {
@@ -513,7 +525,8 @@
           "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
           "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
           "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)",
-          "control_entity": "Steuer-Entity (water_heater) für Auto-Modus"
+          "control_entity": "Steuer-Entity für Auto-Modus (water_heater oder ein Schalter)",
+          "setpoint_entity": "Sollwert-Number (nur bei einem Schalter)"
         },
         "data_description": {
           "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
@@ -530,7 +543,8 @@
           "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug).",
           "name": "Eine kurze Bezeichnung für dieses Warmwassersystem (nur zur Anzeige).",
           "temp_entity": "Sensor mit der aktuellen Warmwassertemperatur. Ohne ihn empfiehlt HEMS weiterhin einen Sollwert, kann die tatsächliche Temperatur aber weder anzeigen noch prüfen.",
-          "control_entity": "water_heater-Entität, auf der HEMS im Auto-Modus den Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt."
+          "control_entity": "Entität, die HEMS im Auto-Modus ein-/ausschaltet. Ein water_heater trägt zusätzlich den Sollwert selbst; ein Schalter schaltet nur ein/aus — den Sollwert dann über die Number unten stellen.",
+          "setpoint_entity": "Number, auf die HEMS den Soll-Temperaturwert schreibt, wenn das Steuer-Entity ein Schalter ist (z. B. eine Modbus-Wärmepumpe mit getrenntem Freigabe-Schalter und Soll-Temperatur-Number). Bei einem water_heater leer lassen."
         }
       },
       "edit_switchable": {
@@ -646,7 +660,11 @@
           "vlt_min_cold_c": "Minimaler Vorlauf bei Kälte (°C)",
           "vlt_max_c": "Maximaler Vorlauf (°C)",
           "cool_vlt_c": "Kühl-Vorlauf (°C)",
-          "control_entity": "Steuer-Entity (climate) für Auto-Modus",
+          "control_entity": "Steuer-Entity für Auto-Modus (climate oder ein Modus-Select)",
+          "setpoint_entity": "Vorlauf-Sollwert-Number (nur bei einem Modus-Select)",
+          "mode_heat_option": "Select-Option für Heizen (nur bei einem Modus-Select)",
+          "mode_cool_option": "Select-Option für Kühlen (optional)",
+          "mode_off_option": "Select-Option für Aus (nur bei einem Modus-Select)",
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
           "season_select_entity": "Saison-Richtung input_select (optional)"
         },
@@ -668,7 +686,11 @@
           "vlt_max_c": "Das Vorlauf-Soll übersteigt diesen Wert nie.",
           "cool_vlt_c": "Fester Vorlauf beim Kühlen.",
           "name": "Eine kurze Bezeichnung für diesen Heizkreis (nur zur Anzeige).",
-          "control_entity": "climate-Entität, auf der HEMS im Auto-Modus den Vorlauf-Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt.",
+          "control_entity": "Entität, auf der HEMS im Auto-Modus den Modus setzt. Ein climate trägt Modus und Vorlauf-Soll selbst; ein Select (z. B. ein Modbus-Betriebsmodus-Register) braucht zusätzlich die Vorlauf-Number und die Modus-Optionen unten. Ohne Steuer-Entity wird die Empfehlung nur angezeigt, nicht gestellt.",
+          "setpoint_entity": "Number, auf die HEMS den Vorlauf-Sollwert schreibt, wenn das Steuer-Entity ein Modus-Select ist (z. B. eine Modbus-Wärmepumpe mit getrenntem Betriebsmodus-Select und Vorlauf-Soll-Number). Bei einem climate leer lassen.",
+          "mode_heat_option": "Die Select-Option, die Heizen bedeutet (z. B. „Heizen“), wird geschrieben, wenn HEMS Heizen empfiehlt. Nur bei einer Select-Steuerung.",
+          "mode_cool_option": "Die Select-Option, die Kühlen bedeutet (z. B. „Kühlen“). Bei reinen Heizgeräten leer lassen.",
+          "mode_off_option": "Die Select-Option, die Aus / nur Warmwasser bedeutet (z. B. „Aus/nur Warmwasser“), wird geschrieben, wenn HEMS Aus empfiehlt. Nur bei einer Select-Steuerung.",
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
           "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht."
         }
@@ -694,7 +716,11 @@
           "vlt_min_cold_c": "Minimaler Vorlauf bei Kälte (°C)",
           "vlt_max_c": "Maximaler Vorlauf (°C)",
           "cool_vlt_c": "Kühl-Vorlauf (°C)",
-          "control_entity": "Steuer-Entity (climate) für Auto-Modus",
+          "control_entity": "Steuer-Entity für Auto-Modus (climate oder ein Modus-Select)",
+          "setpoint_entity": "Vorlauf-Sollwert-Number (nur bei einem Modus-Select)",
+          "mode_heat_option": "Select-Option für Heizen (nur bei einem Modus-Select)",
+          "mode_cool_option": "Select-Option für Kühlen (optional)",
+          "mode_off_option": "Select-Option für Aus (nur bei einem Modus-Select)",
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
           "season_select_entity": "Saison-Richtung input_select (optional)"
         },
@@ -716,7 +742,11 @@
           "vlt_max_c": "Das Vorlauf-Soll übersteigt diesen Wert nie.",
           "cool_vlt_c": "Fester Vorlauf beim Kühlen.",
           "name": "Eine kurze Bezeichnung für diesen Heizkreis (nur zur Anzeige).",
-          "control_entity": "climate-Entität, auf der HEMS im Auto-Modus den Vorlauf-Sollwert setzt. Ohne sie wird der Sollwert nur empfohlen, nicht gestellt.",
+          "control_entity": "Entität, auf der HEMS im Auto-Modus den Modus setzt. Ein climate trägt Modus und Vorlauf-Soll selbst; ein Select (z. B. ein Modbus-Betriebsmodus-Register) braucht zusätzlich die Vorlauf-Number und die Modus-Optionen unten. Ohne Steuer-Entity wird die Empfehlung nur angezeigt, nicht gestellt.",
+          "setpoint_entity": "Number, auf die HEMS den Vorlauf-Sollwert schreibt, wenn das Steuer-Entity ein Modus-Select ist (z. B. eine Modbus-Wärmepumpe mit getrenntem Betriebsmodus-Select und Vorlauf-Soll-Number). Bei einem climate leer lassen.",
+          "mode_heat_option": "Die Select-Option, die Heizen bedeutet (z. B. „Heizen“), wird geschrieben, wenn HEMS Heizen empfiehlt. Nur bei einer Select-Steuerung.",
+          "mode_cool_option": "Die Select-Option, die Kühlen bedeutet (z. B. „Kühlen“). Bei reinen Heizgeräten leer lassen.",
+          "mode_off_option": "Die Select-Option, die Aus / nur Warmwasser bedeutet (z. B. „Aus/nur Warmwasser“), wird geschrieben, wenn HEMS Aus empfiehlt. Nur bei einer Select-Steuerung.",
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
           "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht."
         }

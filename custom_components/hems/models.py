@@ -86,9 +86,16 @@ class ThermalStore:
     id: str
     name: str
     temp_entity: str | None = None
-    # Steuer-Entity (water_heater) für den Auto-Modus: On/Off + Sollwert.
+    # Steuer-Entity für On/Off im Auto-Modus. Zwei Geräteformen:
+    #  • water_heater: trägt On/Off UND den Sollwert selbst (set_temperature).
+    #  • switch/input_boolean: schaltet nur ein/aus; der Sollwert läuft dann
+    #    über setpoint_entity (z. B. Modbus-Wärmepumpe, die Freigabe-Schalter +
+    #    Soll-Temperatur-Number getrennt anbietet).
     # Ohne dieses Entity wird die WW-Empfehlung nur angezeigt, nicht gestellt.
     control_entity: str | None = None
+    # Separate Sollwert-Number (nur nötig, wenn control_entity ein Schalter ist).
+    # Bei einem water_heater bleibt es leer — der trägt den Sollwert selbst.
+    setpoint_entity: str | None = None
     base_target: float = DEFAULT_BASE_TARGET
     comfort_target: float = DEFAULT_COMFORT_TARGET
     # Sperrzeit als lokale Uhrzeiten "HH:MM:SS". In diesem Fenster wird weder
@@ -125,10 +132,23 @@ class HeatingCircuit:
     # oder einem Template-Sensor; hebt die Vorlaufkurve an. Ohne Anforderung
     # (< 1 %) fällt der Vorlauf auf das Minimum (Absenkbetrieb).
     demand_entity: str | None = None
-    # Steuer-Entities für den Auto-Modus (alle optional): climate für Modus +
-    # Vorlauf-Soll, Schalter für den Flüsterbetrieb, input_select für die
-    # Saison-Statistik-Richtung. Ohne control_entity nur Anzeige.
+    # Steuer-Entities für den Auto-Modus (alle optional): Ohne control_entity
+    # nur Anzeige. Zwei Geräteformen für control_entity:
+    #  • climate: trägt Modus (set_hvac_mode) UND Vorlauf-Soll (set_temperature).
+    #  • select/input_select: trägt nur den Modus; der Vorlauf-Soll läuft dann
+    #    über setpoint_entity (z. B. Modbus-Wärmepumpe mit Betriebsmodus-Register
+    #    und getrennter Vorlauf-Soll-Number).
     control_entity: str | None = None
+    # Vorlauf-Sollwert-Number (nur bei Select-Steuerung; ein climate trägt den
+    # Sollwert selbst).
+    setpoint_entity: str | None = None
+    # Klartext-Optionen des Modus-Select, die HEMS für heizen/kühlen/aus schreibt
+    # (analog zu Storage.mode_charge_option). Nur nötig, wenn control_entity ein
+    # Select ist; bei einem climate ungenutzt. mode_cool_option darf bei
+    # reinen Heizgeräten leer bleiben.
+    mode_heat_option: str | None = None
+    mode_cool_option: str | None = None
+    mode_off_option: str | None = None
     silent_switch_entity: str | None = None
     season_select_entity: str | None = None
     heat_on_c: float = DEFAULT_HEAT_ON_C

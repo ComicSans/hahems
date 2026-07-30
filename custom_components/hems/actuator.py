@@ -21,13 +21,15 @@ from datetime import timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .actuation import plan_heating_control, plan_ww_action
 from .models import DeviceRegistry
 from .strategies.types import PlanResult
 
 _LOGGER = logging.getLogger(__name__)
 
-# HEMS-Modus (deutsch) → Home-Assistant climate hvac_mode.
+# HEMS-Modus (deutsch) → Home-Assistant climate hvac_mode und zurück.
 _HVAC = {"heizen": "heat", "kuehlen": "cool", "aus": "off"}
+_HVAC_REVERSE = {v: k for k, v in _HVAC.items()}
 
 # Warmwasser: Mindestlaufzeit vor dem Abschalten (gegen Takten), wie in der
 # abgelösten WW-Automation. Der Warmup nach dem Einschalten ergibt sich von
@@ -119,6 +121,14 @@ class Actuator:
             return
         await self._call(entity.split(".")[0], f"turn_{want}", entity)
 
+    def _num_state(self, entity: str | None) -> float | None:
+        """Zustand einer Number-Entität als float (deren Wert IST der Zustand)."""
+        s = self._state(entity)
+        try:
+            return float(s) if s is not None else None
+        except ValueError:
+            return None
+
     async def _set_number(self, entity: str | None, value: float) -> None:
         """number.set_value, dedupliziert gegen den Ist-Wert."""
         if not entity:
@@ -134,66 +144,120 @@ class Actuator:
     # --- Warmwasser ---------------------------------------------------------
 
     async def _apply_ww(self, reg: DeviceRegistry, plan: PlanResult) -> None:
+        """Ist-Zustand lesen, Entscheidung an die HA-freie ``plan_ww_action``
+        delegieren, das Ergebnis domain-abhängig schalten. water_heater trägt
+        On/Off + Sollwert selbst; ein Schalter schaltet nur, der Sollwert läuft
+        dann über die separate Number-Entität (setpoint_entity)."""
         if not reg.thermals:
             return
         t = reg.thermals[0]
         ent = t.control_entity
         if not ent:
             return
-        st = self._state(ent)
-        if st in (None, "unavailable", "unknown"):
+        domain = ent.split(".")[0]
+        state = self._state(ent)
+        # Ist-Sollwert je nach Gerätetyp: water_heater trägt ihn als Attribut,
+        # die Schalter-Variante als Zustand der Number-Entität.
+        if domain == "water_heater":
+            current_setpoint = self._num_attr(ent, "temperature")
+        else:
+            current_setpoint = self._num_state(t.setpoint_entity)
+        s = self.hass.states.get(ent)
+        min_runtime_elapsed = (
+            s is None or self._age(s) >= WARMWASSER_MIN_RUNTIME
+        )
+        action = plan_ww_action(
+            status=plan.warmwasser_status,
+            soll_c=plan.warmwasser_soll_c,
+            domain=domain,
+            state=state,
+            min_runtime_elapsed=min_runtime_elapsed,
+            current_setpoint=current_setpoint,
+            has_setpoint_entity=bool(t.setpoint_entity),
+        )
+        if action is None:
             return
-        is_on = st != "off"
-        aus = plan.warmwasser_status == "aus" or plan.warmwasser_soll_c is None
-
-        if aus:
-            if is_on:
-                s = self.hass.states.get(ent)
-                # Mindestlaufzeit respektieren (last_changed = letzte An/Aus-Kante).
-                if s is None or self._age(s) >= WARMWASSER_MIN_RUNTIME:
-                    await self._call("water_heater", "turn_off", ent)
-            return
-
-        if not is_on:
-            # Einschalten; Sollwert erst im Folgezyklus (Gerät nimmt Befehle
-            # erst nach dem Warmup an) — wie die abgelöste Automation.
-            await self._call("water_heater", "turn_on", ent)
-            return
-
-        soll = int(plan.warmwasser_soll_c)
-        akt = self._num_attr(ent, "temperature")
-        if akt is None or int(akt) != soll:
-            await self._call("water_heater", "set_temperature", ent, temperature=soll)
+        if action.kind == "turn_off":
+            await self._call(domain, "turn_off", ent)
+        elif action.kind == "turn_on":
+            await self._call(domain, "turn_on", ent)
+        elif action.kind == "set_temperature":
+            await self._call(
+                "water_heater", "set_temperature", ent, temperature=int(action.value)
+            )
+        elif action.kind == "set_number":
+            await self._set_number(t.setpoint_entity, action.value)
 
     def _age(self, state) -> timedelta:
         return dt_util.utcnow() - state.last_changed
 
     # --- Wärmepumpe ---------------------------------------------------------
 
+    def _heating_mode_options(self, h) -> dict[str, str]:
+        """Kanonischer Modus → konfigurierte Select-Option (nur die gesetzten)."""
+        return {
+            mode: opt
+            for mode, opt in (
+                ("heizen", h.mode_heat_option),
+                ("kuehlen", h.mode_cool_option),
+                ("aus", h.mode_off_option),
+            )
+            if opt
+        }
+
     async def _apply_wp(self, reg: DeviceRegistry, plan: PlanResult) -> None:
+        """Ist-Modus/-Sollwert lesen, Entscheidung an die HA-freie
+        ``plan_heating_control`` delegieren, domain-abhängig stellen. climate
+        trägt Modus + Vorlauf-Soll selbst; ein Modus-Select trägt nur den Modus,
+        der Vorlauf-Soll läuft dann über setpoint_entity (Number)."""
         if not reg.heatings or plan.heizung is None:
             return
         h = reg.heatings[0]
         ent = h.control_entity
         if not ent:
             return
+        domain = ent.split(".")[0]
         st = self._state(ent)
         if st in (None, "unavailable", "unknown"):
             return
-
-        hvac = _HVAC.get(plan.heizung.modus)
-        if hvac is None:  # "unbekannt" → nichts anfassen
+        if plan.heizung.modus not in ("heizen", "kuehlen", "aus"):
+            # "unbekannt" → nichts anfassen (auch nicht Silent/Saison).
             return
-        if st != hvac:
-            await self._call("climate", "set_hvac_mode", ent, hvac_mode=hvac)
 
-        vlt = plan.heizung.vlt_ziel_c
-        if hvac in ("heat", "cool") and vlt is not None:
-            akt = self._num_attr(ent, "temperature")
-            if akt is None or int(akt) != int(vlt):
+        if domain == "climate":
+            current_mode = _HVAC_REVERSE.get(st)
+            current_setpoint = self._num_attr(ent, "temperature")
+            mode_options: dict[str, str] = {}
+        else:
+            mode_options = self._heating_mode_options(h)
+            current_mode = {opt: mode for mode, opt in mode_options.items()}.get(st)
+            current_setpoint = self._num_state(h.setpoint_entity)
+
+        hp = plan_heating_control(
+            modus=plan.heizung.modus,
+            vlt_ziel_c=plan.heizung.vlt_ziel_c,
+            current_mode=current_mode,
+            current_setpoint=current_setpoint,
+        )
+
+        if hp.set_mode is not None:
+            if domain == "climate":
                 await self._call(
-                    "climate", "set_temperature", ent, temperature=int(vlt)
+                    "climate", "set_hvac_mode", ent, hvac_mode=_HVAC[hp.set_mode]
                 )
+            else:
+                # Ohne konfigurierte Option lässt sich der Modus nicht stellen.
+                option = mode_options.get(hp.set_mode)
+                if option:
+                    await self._call(domain, "select_option", ent, option=option)
+
+        if hp.set_setpoint is not None:
+            if domain == "climate":
+                await self._call(
+                    "climate", "set_temperature", ent, temperature=int(hp.set_setpoint)
+                )
+            else:
+                await self._set_number(h.setpoint_entity, hp.set_setpoint)
 
         # Flüsterbetrieb (optional): folgt der Empfehlung mit eigener Hysterese.
         if h.silent_switch_entity and plan.heizung.leise_empfohlen is not None:
