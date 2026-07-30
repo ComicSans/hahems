@@ -13,5 +13,7 @@
   "spreizung_min_gueltig_k": 2.0,
   "waermetraeger_faktor": 1.163,
   "gueltig_ab_c": -20.0,
-  "gueltig_bis_c": 20.0
+  "gueltig_bis_c": 20.0,
+  "durchfluss_nominal_lh": 911,
+  "standby_w": 220.0
 }

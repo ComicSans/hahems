@@ -22,13 +22,34 @@ from .types import (
     Preset,
 )
 
-# Unterhalb dieser elektrischen Leistung laeuft kein Verdichter, sondern nur
-# Regelung und Umwaelzpumpe. Ein COP daraus waere Unsinn.
-STANDBY_W = 150.0
-
 # Obergrenze fuer einen plausiblen Momentan-COP. Alles darueber deutet auf
 # einen Mess- oder Einheitenfehler hin, nicht auf eine gute Waermepumpe.
 COP_MAX_PLAUSIBEL = 12.0
+
+# Sicherheitsabstand auf den Standby-Sockel: erst deutlich darueber laeuft
+# wirklich ein Verdichter. Der Sockel selbst steht im Preset, weil er von der
+# Umwaelzpumpe der Anlage abhaengt und nicht vom Geraetemodell allein.
+STANDBY_FAKTOR = 1.3
+
+
+def durchfluss_effektiv(
+    m: Messwert, preset: Preset
+) -> tuple[float | None, bool]:
+    """Volumenstrom in l/h und ob er geschaetzt ist.
+
+    Ist kein Zaehler verdrahtet, tritt der Nennvolumenstrom aus dem Preset an
+    seine Stelle. Das ist vertretbar, weil die Umwaelzpumpe in einem festen
+    hydraulischen Kreis naeherungsweise konstant foerdert — und es ist genau
+    der Grund, warum das Geraet selbst auf die Spreizung regeln kann.
+
+    Vertretbar heisst nicht gleichwertig: der zweite Rueckgabewert sagt, dass
+    geschaetzt wurde, und die Datenbasis wird daraufhin gedeckelt.
+    """
+    if m.durchfluss_lh is not None and m.durchfluss_lh > 0:
+        return m.durchfluss_lh, False
+    if preset.durchfluss_nominal_lh:
+        return preset.durchfluss_nominal_lh, True
+    return None, False
 
 
 def spreizung_k(vorlauf_c: float | None, ruecklauf_c: float | None) -> float | None:
@@ -76,9 +97,11 @@ def bewerte(m: Messwert, preset: Preset) -> Guete:
         return Guete(False, GRUND_WARMWASSER)
     if m.betrieb == BETRIEB_AUS:
         return Guete(False, GRUND_KEINE_LEISTUNG)
-    if m.p_el_w is None or m.p_el_w < STANDBY_W:
+    if m.p_el_w is None or m.p_el_w < preset.standby_w * STANDBY_FAKTOR:
         return Guete(False, GRUND_KEINE_LEISTUNG)
-    if m.durchfluss_lh is None or m.durchfluss_lh <= 0:
+
+    fluss, _geschaetzt = durchfluss_effektiv(m, preset)
+    if fluss is None:
         return Guete(False, GRUND_KEIN_DURCHFLUSS)
 
     spreiz = spreizung_k(m.vorlauf_c, m.ruecklauf_c)
@@ -87,7 +110,7 @@ def bewerte(m: Messwert, preset: Preset) -> Guete:
     if spreiz < preset.spreizung_min_gueltig_k:
         return Guete(False, GRUND_SPREIZUNG_ZU_KLEIN)
 
-    p_th = waermeleistung_w(m.durchfluss_lh, spreiz, preset.waermetraeger_faktor)
+    p_th = waermeleistung_w(fluss, spreiz, preset.waermetraeger_faktor)
     wert = cop(p_th, m.p_el_w)
     if wert is None or wert <= 0 or wert > COP_MAX_PLAUSIBEL:
         return Guete(False, GRUND_UNPLAUSIBEL)

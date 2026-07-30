@@ -73,6 +73,13 @@ class Preset:
     modellfehler_prozent: float
     generisch: bool = False
     spreizung_min_gueltig_k: float = 2.0
+    # Nennvolumenstrom bei 5 K Auslegungsspreizung, abgeleitet aus der
+    # Nennwaermeleistung. Ersatz, wenn kein Volumenstromzaehler verdrahtet
+    # ist — dann ist der COP geschaetzt und nie belastbar.
+    durchfluss_nominal_lh: float | None = None
+    # Leistungsaufnahme bei stehendem Verdichter (Regelung, Umwaelzpumpe).
+    # Anlagenspezifisch; der Wert im Preset ist ein Startwert.
+    standby_w: float = 150.0
     # Waermetraeger: reines Wasser 1,163 Wh/(l*K); Glykolgemische liegen
     # einige Prozent darunter.
     waermetraeger_faktor: float = 1.163
@@ -132,6 +139,11 @@ class HinweisZustand:
     taktung_hoch: bool = False
     vorlauf_zu_hoch: bool = False
     effizienz_unter_erwartung: bool = False
+    # Kein Anlagenproblem, sondern ein Messproblem: Vor- und Ruecklauf melden
+    # dauerhaft denselben Wert, obwohl der Verdichter laeuft. Dann stimmt die
+    # Registerzuordnung oder die Verdrahtung nicht — und die Spreizung, an der
+    # fast alles haengt, ist strukturell null.
+    temperaturen_identisch: bool = False
 
 
 @dataclass(frozen=True)
@@ -156,6 +168,9 @@ class Analyse:
     waermeleistung_w: float | None = None
     spreizung_k: float | None = None
     verwerfungsgrund: str = GRUND_OK
+    # Wahr, wenn der Volumenstrom aus dem Preset stammt und nicht gemessen
+    # wurde. Die Datenbasis ist dann gedeckelt.
+    durchfluss_geschaetzt: bool = False
     waermeverlust_w_pro_k: float | None = None
     kurve: Kurvenempfehlung = field(default_factory=Kurvenempfehlung)
     hinweise: HinweisZustand = field(default_factory=HinweisZustand)

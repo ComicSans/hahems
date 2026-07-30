@@ -78,6 +78,12 @@ def aus_dict(roh: dict) -> Preset:
         modellfehler_prozent=float(roh.get("cop_modellfehler_prozent", 0.0)),
         generisch=bool(roh.get("generisch", False)),
         spreizung_min_gueltig_k=float(roh.get("spreizung_min_gueltig_k", 2.0)),
+        durchfluss_nominal_lh=(
+            float(roh["durchfluss_nominal_lh"])
+            if roh.get("durchfluss_nominal_lh")
+            else None
+        ),
+        standby_w=float(roh.get("standby_w", 150.0)),
         waermetraeger_faktor=float(roh.get("waermetraeger_faktor", 1.163)),
         gueltig_ab_c=float(roh.get("gueltig_ab_c", -20.0)),
         gueltig_bis_c=float(roh.get("gueltig_bis_c", 20.0)),

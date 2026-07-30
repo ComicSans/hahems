@@ -1,0 +1,106 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up heat pump optimisation",
+        "description": "An advisory system: it measures and recommends, but never switches anything. Flow temperature, return temperature, electrical power and outdoor temperature are required. Without a flow meter the preset's nominal rate is used — the COP is then an estimate and never reported as reliable.",
+        "data": {
+          "preset": "Device model",
+          "vorlauf_temp": "Flow temperature",
+          "ruecklauf_temp": "Return temperature",
+          "leistung_elektrisch": "Electrical power of the heat pump",
+          "aussentemperatur": "Outdoor temperature",
+          "durchfluss": "Volumetric flow (optional)",
+          "verdichter_frequenz": "Compressor frequency (optional)",
+          "betriebsart": "Operating mode (optional)",
+          "steuerung_aktiv": "Energy management overrides (optional)",
+          "steuerung_grund": "Reason for the override (optional)",
+          "standby_w": "Override standby base load (0 = use preset)"
+        },
+        "data_description": {
+          "betriebsart": "Separates heating, hot water and defrost. Without it the figures are mixed and the data basis is downgraded.",
+          "standby_w": "Power drawn while the compressor is idle, i.e. controls and circulation pump. Set too low, that base load counts as compressor operation and produces an invented COP."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Adjust heat pump optimisation",
+        "description": "Wire up roles later or switch the device model.",
+        "data": {
+          "preset": "Device model",
+          "vorlauf_temp": "Flow temperature",
+          "ruecklauf_temp": "Return temperature",
+          "leistung_elektrisch": "Electrical power of the heat pump",
+          "aussentemperatur": "Outdoor temperature",
+          "durchfluss": "Volumetric flow (optional)",
+          "verdichter_frequenz": "Compressor frequency (optional)",
+          "betriebsart": "Operating mode (optional)",
+          "steuerung_aktiv": "Energy management overrides (optional)",
+          "steuerung_grund": "Reason for the override (optional)",
+          "standby_w": "Override standby base load (0 = use preset)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cop_momentan": { "name": "COP now" },
+      "cop_soll": { "name": "COP expected" },
+      "cop_soll_unsicherheit": { "name": "Uncertainty of expectation" },
+      "cop_abweichung": { "name": "Deviation from datasheet" },
+      "waermeleistung": { "name": "Thermal power" },
+      "waermemenge": { "name": "Thermal energy" },
+      "spreizung": { "name": "Temperature spread" },
+      "waermeverlust_koeffizient": { "name": "Heat loss coefficient" },
+      "takte": { "name": "Compressor starts" },
+      "laufzeit_summe": { "name": "Compressor runtime" },
+      "laufzeit_mittel": { "name": "Mean runtime per cycle" },
+      "empfehlung_fusspunkt": { "name": "Recommended base point" },
+      "empfehlung_steilheit": { "name": "Recommended slope" },
+      "empfehlung_vorlauf_min": { "name": "Recommended minimum flow temperature" },
+      "kontrakt_version": { "name": "Contract version" },
+      "datenbasis": {
+        "name": "Data basis of measurement",
+        "state": {
+          "keine_daten": "no data",
+          "unzureichend": "insufficient",
+          "vorlaeufig": "preliminary",
+          "belastbar": "reliable"
+        }
+      },
+      "datenbasis_empfehlung": {
+        "name": "Data basis of recommendation",
+        "state": {
+          "keine_daten": "no data",
+          "unzureichend": "insufficient",
+          "vorlaeufig": "preliminary",
+          "belastbar": "reliable"
+        }
+      },
+      "verwerfungsgrund": {
+        "name": "Sample rejected because",
+        "state": {
+          "ok": "valid",
+          "spreizung_zu_klein": "spread too small",
+          "keine_leistung": "compressor idle",
+          "kein_durchfluss": "no volumetric flow",
+          "abtauen": "defrost",
+          "warmwasser": "hot water",
+          "unplausibel": "implausible"
+        }
+      }
+    },
+    "binary_sensor": {
+      "hinweis_spreizung_niedrig": { "name": "Hint: throttle circulation pump" },
+      "hinweis_spreizung_hoch": { "name": "Hint: volumetric flow too low" },
+      "hinweis_taktung_hoch": { "name": "Hint: compressor cycles often" },
+      "hinweis_vorlauf_zu_hoch": { "name": "Hint: flow temperature higher than needed" },
+      "hinweis_effizienz_unter_erwartung": { "name": "Hint: efficiency below expectation" },
+      "hinweis_temperaturen_identisch": { "name": "Flow and return report the same value" },
+      "durchfluss_geschaetzt": { "name": "Volumetric flow estimated" }
+    }
+  }
+}

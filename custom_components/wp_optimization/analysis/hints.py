@@ -40,6 +40,12 @@ ABWEICHUNG_AUS = -15.0
 VORLAUF_UEBER_AN = 5.0
 VORLAUF_UEBER_AUS = 3.0
 
+# Anteil der Abtastpunkte mit praktisch null Spreizung bei laufendem
+# Verdichter. Bleibt er hoch, ist das kein Anlagenproblem, sondern ein
+# Messproblem: dieselbe Quelle fuer Vor- und Ruecklauf.
+NULL_ANTEIL_AN = 0.9
+NULL_ANTEIL_AUS = 0.6
+
 
 @dataclass(frozen=True)
 class Tagesbild:
@@ -49,6 +55,9 @@ class Tagesbild:
     takte_pro_tag: float | None = None
     cop_abweichung_prozent: float | None = None
     vorlauf_ueberhoehung_k: float | None = None
+    # Anteil 0..1 der Punkte mit praktisch null Spreizung bei laufendem
+    # Verdichter.
+    anteil_spreizung_null: float | None = None
     datenbasis: str = DATENBASIS_VORLAEUFIG
 
 
@@ -59,8 +68,21 @@ def bewerte(z: HinweisZustand, bild: Tagesbild) -> HinweisZustand:
     Stand — er wird nicht stillschweigend geloescht, denn ein Messausfall ist
     kein Beleg dafuer, dass das Problem weg ist.
     """
+    # Melden Vor- und Ruecklauf dieselbe Zahl, ist die Spreizung strukturell
+    # null. Dann waere "Umwaelzpumpe drosseln" ein Fehlschluss aus einem
+    # Messfehler — der Spreizungshinweis bleibt in diesem Fall aus.
+    identisch = _halte(
+        z.temperaturen_identisch,
+        bild.anteil_spreizung_null,
+        NULL_ANTEIL_AN,
+        NULL_ANTEIL_AUS,
+    )
+
     return HinweisZustand(
-        spreizung_niedrig=_halte(
+        temperaturen_identisch=identisch,
+        spreizung_niedrig=False
+        if identisch
+        else _halte(
             z.spreizung_niedrig,
             bild.spreizung_mittel_k,
             SPREIZUNG_NIEDRIG_AN,

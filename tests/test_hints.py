@@ -63,6 +63,37 @@ def test_datenblattvergleich_verlangt_belastbare_datenbasis():
     assert stark.effizienz_unter_erwartung
 
 
+def test_identische_temperaturen_werden_als_messproblem_gemeldet():
+    z = hints.bewerte(HinweisZustand(), hints.Tagesbild(anteil_spreizung_null=0.95))
+    assert z.temperaturen_identisch
+
+    z = hints.bewerte(z, hints.Tagesbild(anteil_spreizung_null=0.75))
+    assert z.temperaturen_identisch  # Zwischenbereich hält
+
+    z = hints.bewerte(z, hints.Tagesbild(anteil_spreizung_null=0.4))
+    assert not z.temperaturen_identisch
+
+
+def test_bei_identischen_temperaturen_kein_pumpenhinweis():
+    # Sonst empfiehlt das System, die Umwälzpumpe zu drosseln, weil zwei
+    # Sensoren dieselbe Quelle lesen — ein Fehlschluss aus einem Messfehler.
+    z = hints.bewerte(
+        HinweisZustand(),
+        hints.Tagesbild(spreizung_mittel_k=0.0, anteil_spreizung_null=0.98),
+    )
+    assert z.temperaturen_identisch
+    assert not z.spreizung_niedrig
+
+
+def test_niedrige_spreizung_bleibt_hinweis_wenn_die_messung_stimmt():
+    z = hints.bewerte(
+        HinweisZustand(),
+        hints.Tagesbild(spreizung_mittel_k=2.5, anteil_spreizung_null=0.1),
+    )
+    assert z.spreizung_niedrig
+    assert not z.temperaturen_identisch
+
+
 def test_leichte_abweichung_loest_nichts_aus():
     # Die Schwelle liegt jenseits des Modellfehlers von rund 17 Prozent.
     z = hints.bewerte(

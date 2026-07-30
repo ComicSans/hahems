@@ -1,0 +1,106 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "WP-Optimierung einrichten",
+        "description": "Ein beratendes System: es misst und empfiehlt, schaltet aber nichts. Pflicht sind Vorlauf, Rücklauf, elektrische Leistung und Außentemperatur. Ohne Volumenstromzähler tritt der Nennwert des Presets ein — der COP ist dann geschätzt und wird nie als belastbar gemeldet.",
+        "data": {
+          "preset": "Gerätemodell",
+          "vorlauf_temp": "Vorlauftemperatur",
+          "ruecklauf_temp": "Rücklauftemperatur",
+          "leistung_elektrisch": "Elektrische Leistung der Wärmepumpe",
+          "aussentemperatur": "Außentemperatur",
+          "durchfluss": "Volumenstrom (optional)",
+          "verdichter_frequenz": "Verdichterfrequenz (optional)",
+          "betriebsart": "Betriebsart (optional)",
+          "steuerung_aktiv": "Energiemanagement übersteuert (optional)",
+          "steuerung_grund": "Grund der Übersteuerung (optional)",
+          "standby_w": "Standby-Sockel überschreiben (0 = aus dem Preset)"
+        },
+        "data_description": {
+          "betriebsart": "Trennt Heizen, Warmwasser und Abtauen. Fehlt sie, vermischen sich die Kennzahlen und die Datenbasis wird abgewertet.",
+          "standby_w": "Leistungsaufnahme bei stehendem Verdichter, also Regelung und Umwälzpumpe. Zu niedrig angesetzt, gilt der Sockel als Verdichterbetrieb und erzeugt einen erfundenen COP."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "WP-Optimierung anpassen",
+        "description": "Rollen nachträglich verdrahten oder das Gerätemodell wechseln.",
+        "data": {
+          "preset": "Gerätemodell",
+          "vorlauf_temp": "Vorlauftemperatur",
+          "ruecklauf_temp": "Rücklauftemperatur",
+          "leistung_elektrisch": "Elektrische Leistung der Wärmepumpe",
+          "aussentemperatur": "Außentemperatur",
+          "durchfluss": "Volumenstrom (optional)",
+          "verdichter_frequenz": "Verdichterfrequenz (optional)",
+          "betriebsart": "Betriebsart (optional)",
+          "steuerung_aktiv": "Energiemanagement übersteuert (optional)",
+          "steuerung_grund": "Grund der Übersteuerung (optional)",
+          "standby_w": "Standby-Sockel überschreiben (0 = aus dem Preset)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cop_momentan": { "name": "COP momentan" },
+      "cop_soll": { "name": "COP erwartet" },
+      "cop_soll_unsicherheit": { "name": "Unsicherheit der Erwartung" },
+      "cop_abweichung": { "name": "Abweichung vom Datenblatt" },
+      "waermeleistung": { "name": "Wärmeleistung" },
+      "waermemenge": { "name": "Wärmemenge" },
+      "spreizung": { "name": "Spreizung" },
+      "waermeverlust_koeffizient": { "name": "Wärmeverlustkoeffizient" },
+      "takte": { "name": "Verdichterstarts" },
+      "laufzeit_summe": { "name": "Verdichterlaufzeit" },
+      "laufzeit_mittel": { "name": "Mittlere Laufzeit pro Takt" },
+      "empfehlung_fusspunkt": { "name": "Empfehlung Fußpunkt" },
+      "empfehlung_steilheit": { "name": "Empfehlung Steilheit" },
+      "empfehlung_vorlauf_min": { "name": "Empfehlung Mindestvorlauf" },
+      "kontrakt_version": { "name": "Kontraktversion" },
+      "datenbasis": {
+        "name": "Datenbasis Messung",
+        "state": {
+          "keine_daten": "keine Daten",
+          "unzureichend": "unzureichend",
+          "vorlaeufig": "vorläufig",
+          "belastbar": "belastbar"
+        }
+      },
+      "datenbasis_empfehlung": {
+        "name": "Datenbasis Empfehlung",
+        "state": {
+          "keine_daten": "keine Daten",
+          "unzureichend": "unzureichend",
+          "vorlaeufig": "vorläufig",
+          "belastbar": "belastbar"
+        }
+      },
+      "verwerfungsgrund": {
+        "name": "Messwert verworfen wegen",
+        "state": {
+          "ok": "gültig",
+          "spreizung_zu_klein": "Spreizung zu klein",
+          "keine_leistung": "Verdichter steht",
+          "kein_durchfluss": "kein Volumenstrom",
+          "abtauen": "Abtauung",
+          "warmwasser": "Warmwasserbereitung",
+          "unplausibel": "unplausibel"
+        }
+      }
+    },
+    "binary_sensor": {
+      "hinweis_spreizung_niedrig": { "name": "Hinweis: Umwälzpumpe drosseln" },
+      "hinweis_spreizung_hoch": { "name": "Hinweis: Volumenstrom zu gering" },
+      "hinweis_taktung_hoch": { "name": "Hinweis: Verdichter taktet häufig" },
+      "hinweis_vorlauf_zu_hoch": { "name": "Hinweis: Vorlauf höher als nötig" },
+      "hinweis_effizienz_unter_erwartung": { "name": "Hinweis: Effizienz unter Erwartung" },
+      "hinweis_temperaturen_identisch": { "name": "Vorlauf und Rücklauf melden denselben Wert" },
+      "durchfluss_geschaetzt": { "name": "Volumenstrom geschätzt" }
+    }
+  }
+}

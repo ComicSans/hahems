@@ -8,9 +8,9 @@ arbeitet sie gerade wirklich, wie gut *sollte* sie es laut Datenblatt, und
 was ließe sich verbessern — läuft die Umwälzpumpe zu stark, taktet der
 Verdichter zu oft, ist die Heizkurve höher als nötig.
 
-> **Stand:** Der fachliche Kern steht und ist getestet. Die Anbindung an Home
-> Assistant — Konfigurationsdialog, Entities, Karte — folgt. Installierbar,
-> aber noch nicht einrichtbar.
+> **Stand:** Einsatzbereit. Fachlicher Kern und HA-Schicht stehen, 65 Tests
+> grün, Import gegen HA 2026.7.2 geprüft. Offen ist die eigene
+> Lovelace-Karte; die Anzeige läuft zunächst über das HEMS-Panel.
 
 ## Geräteunabhängig
 

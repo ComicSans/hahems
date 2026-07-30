@@ -3,13 +3,27 @@ from __future__ import annotations
 
 import pytest
 from analysis import cycling
-from analysis.types import Messwert, TaktZustand
+from analysis.types import Messwert, Preset, TaktZustand
+
+# Standby-Sockel von 220 W wie bei den ausgelieferten Presets: die
+# Leistungsschwellen sind Vielfache davon, keine festen Watt-Werte.
+PRESET = Preset(
+    schluessel="test",
+    anzeigename="Test",
+    quelle="test",
+    p1=0.0,
+    p2=-0.1,
+    p3=8.0,
+    p4=0.19,
+    modellfehler_prozent=15.0,
+    standby_w=220.0,
+)
 
 
 def _lauf(werte: list[tuple[float, float]], feld: str = "verdichter_hz") -> TaktZustand:
     z = TaktZustand()
     for ts, wert in werte:
-        z = cycling.fortschreiben(z, Messwert(ts=ts, **{feld: wert}))
+        z = cycling.fortschreiben(z, Messwert(ts=ts, **{feld: wert}), PRESET)
     return z
 
 

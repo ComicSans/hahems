@@ -108,6 +108,28 @@ Automationen adressierbar.
 Jeder Hinweis hat Ein- und Ausschaltschwelle, nie eine einzelne, und wird
 über Tage gemittelt statt je Zyklus ausgewertet.
 
+## B2 — Automatische Erkennung
+
+Eine konsumierende Seite soll diese Integration finden können, ohne dass
+jemand Entities von Hand verdrahtet. Dafür gilt:
+
+- **Die Kennung einer Entity ist `<eintrag-id>_<rolle>`.** Der Teil hinter dem
+  letzten Unterstrich ist genau der Rollenname aus Abschnitt B. Diese Kennung
+  ist stabil und liegt in der Entity-Registry — anders als die `entity_id`,
+  die Nutzende jederzeit umbenennen.
+- **Alle Entities einer Einrichtung hängen an einem Gerät** mit der Kennung
+  `(wp_optimization, <eintrag-id>)`.
+- **Vorhandensein prüft man an der Rolle `kontrakt_version`.** Sie ist als
+  Diagnose-Entity standardmäßig abgeschaltet, aber immer in der Registry.
+
+Damit ist die Erkennung: Einträge der Domäne `wp_optimization` suchen, deren
+Entities aus der Registry holen, und über das Kennungs-Suffix den Rollen
+zuordnen. Kein Konfigurationsschritt, und trotzdem kein Verlass auf
+umbenennbare `entity_id`.
+
+Der Weg über Rollen aus Abschnitt A bleibt daneben bestehen: er ist für alles
+gedacht, was **nicht** aus dieser Integration kommt.
+
 ## C — Eingaben vom Energiemanagement
 
 Ohne diese Richtung sind die Kennzahlen verfälscht: Wenn das Energiemanagement

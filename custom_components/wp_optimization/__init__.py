@@ -1,28 +1,54 @@
 """WP-Optimierung — Effizienzmessung und Verbesserungshinweise.
 
-Diese Datei ist die Home-Assistant-Schicht. Sie ist derzeit ein Platzhalter:
-der fachliche Kern unter `analysis/` steht und ist getestet, die Anbindung an
-Home Assistant (Konfigurationsdialog, Entities, Karte) folgt.
-
-`config_flow` steht im Manifest deshalb bewusst auf `false` — eine
-Integration, die einen Dialog verspricht, den es noch nicht gibt, laesst sich
-zwar installieren, aber nicht einrichten.
-
-Grundregel dieser Integration: **sie schreibt nie an die Anlage.** Es gibt
-keinen Aktuierungspfad und keine Steuer-Entities. Empfehlungen werden
-veroeffentlicht, umgesetzt werden sie vom Energiemanagement. So koennen zwei
-Integrationen sich nie um denselben Sollwert streiten.
+Ein beratendes System. **Es schreibt nie an die Anlage**: kein
+Aktuierungspfad, keine Steuer-Entities, kein Modus. Gesteuert wird am Gerät
+oder im Energiemanagement; hier werden Empfehlungen nur veröffentlicht. So
+können zwei Integrationen sich nie um denselben Sollwert streiten.
 """
 from __future__ import annotations
 
+import logging
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import DOMAIN
+from .coordinator import WpOptimizationCoordinator
 
-__all__ = ["DOMAIN", "async_setup"]
+_LOGGER = logging.getLogger(__name__)
+
+PLATTFORMEN: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Noch nichts einzurichten — siehe Modulbeschreibung."""
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Eine Einrichtung laden."""
+    coordinator = WpOptimizationCoordinator(hass, entry)
+    try:
+        await coordinator.async_vorbereiten()
+    except ValueError as err:
+        raise ConfigEntryNotReady(str(err)) from err
+
+    await coordinator.async_config_entry_first_refresh()
+
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    await hass.config_entries.async_forward_entry_setups(entry, PLATTFORMEN)
+    entry.async_on_unload(entry.add_update_listener(_neu_laden))
     return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Eine Einrichtung entladen."""
+    entladen = await hass.config_entries.async_unload_platforms(entry, PLATTFORMEN)
+    if entladen:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+    return entladen
+
+
+async def _neu_laden(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Nach geänderten Optionen neu laden.
+
+    Eine nachträglich verdrahtete Rolle soll ohne Neuinstallation greifen.
+    """
+    await hass.config_entries.async_reload(entry.entry_id)

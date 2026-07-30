@@ -64,12 +64,13 @@ def analysiere(eingang: AnalyseEingang) -> Analyse:
 
     guete = thermal.bewerte(m, preset)
     spreiz = thermal.spreizung_k(m.vorlauf_c, m.ruecklauf_c)
+    fluss, geschaetzt = thermal.durchfluss_effektiv(m, preset)
 
     p_th = None
     cop_ist = None
     if guete.gueltig:
         p_th = thermal.waermeleistung_w(
-            m.durchfluss_lh, spreiz, preset.waermetraeger_faktor
+            fluss, spreiz, preset.waermetraeger_faktor
         )
         cop_ist = thermal.cop(p_th, m.p_el_w)
 
@@ -78,13 +79,13 @@ def analysiere(eingang: AnalyseEingang) -> Analyse:
     if cop_ist is not None and cop_soll:
         abweichung = (cop_ist - cop_soll) / cop_soll * 100.0
 
-    takt = cycling.fortschreiben(eingang.takt, m)
+    takt = cycling.fortschreiben(eingang.takt, m, preset)
 
     verlust = curve.waermeverlust(eingang.verlust_punkte)
     heizgrenze = verlust[1] if verlust else None
     empfehlung = curve.empfiehl_kurve(eingang.kurven_punkte, heizgrenze)
 
-    basis = _datenbasis(eingang, guete.gueltig)
+    basis = _datenbasis(eingang, guete.gueltig, geschaetzt)
 
     # Der Datenblattvergleich ist eine Aussage ueber das Geraet ueber die
     # Zeit, nicht ueber diesen Abtastpunkt. Er braucht deshalb beides: eine
@@ -108,6 +109,7 @@ def analysiere(eingang: AnalyseEingang) -> Analyse:
         waermeleistung_w=_gerundet(p_th, 0),
         spreizung_k=_gerundet(spreiz, 2),
         verwerfungsgrund=guete.grund,
+        durchfluss_geschaetzt=geschaetzt,
         waermeverlust_w_pro_k=_gerundet(verlust[0], 1) if verlust else None,
         kurve=empfehlung,
         hinweise=hints.bewerte(eingang.hinweise, tagesbild),
@@ -119,7 +121,9 @@ def analysiere(eingang: AnalyseEingang) -> Analyse:
     )
 
 
-def _datenbasis(eingang: AnalyseEingang, gueltig: bool) -> str:
+def _datenbasis(
+    eingang: AnalyseEingang, gueltig: bool, durchfluss_geschaetzt: bool
+) -> str:
     """Guete der Messkette fuer diesen Abtastpunkt.
 
     Bewusst getrennt von der Datenbasis der Kurvenempfehlung: die eine sagt,
@@ -137,6 +141,12 @@ def _datenbasis(eingang: AnalyseEingang, gueltig: bool) -> str:
         # nur eben keine Grundlage fuer eine Effizienzaussage.
         return DATENBASIS_KEINE if m.p_el_w is None else DATENBASIS_UNZUREICHEND
     basis = DATENBASIS_BELASTBAR
+
+    # Ein geschaetzter Volumenstrom kann nie belastbar werden. Der Nennwert
+    # aus dem Preset trifft die Groessenordnung, aber der COP haengt linear
+    # daran — ohne Zaehler bleibt er eine Hausnummer mit Trendwert.
+    if durchfluss_geschaetzt:
+        basis = schlechtere_datenbasis(basis, DATENBASIS_VORLAEUFIG)
 
     # Ohne Betriebsart vermischen sich Heizen und Warmwasser.
     if m.betrieb is None:
