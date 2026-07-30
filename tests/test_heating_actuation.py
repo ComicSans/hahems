@@ -136,3 +136,37 @@ def test_ww_bereitung_default_ist_aus():
 
 def test_ww_bereitung_bei_unbekanntem_modus_bleibt_leer():
     assert _hp(modus="unbekannt", ww_bereitung=True) == HeatingPlan(None, None)
+
+
+# --- Taktschutz: die Pause kommt als Modus "aus" an ---------------------------
+
+
+def test_taktschutz_pause_wird_als_aus_gestellt():
+    # Die Strategie liefert waehrend der Zwangspause "aus" ohne Vorlauf-Soll.
+    hp = _hp(modus="aus", vlt_ziel_c=None, current_mode="kuehlen", current_setpoint=21.0)
+    assert hp == HeatingPlan("aus", None)
+
+
+def test_taktschutz_pause_waehrend_der_warmwasserladung_stellt_nichts():
+    # Laedt die Anlage gerade Warmwasser, wird nichts gestellt - die Pause
+    # greift erst danach. Sie laeuft in der Zwischenzeit weiter (Zeitfenster).
+    hp = _hp(
+        modus="aus",
+        vlt_ziel_c=None,
+        current_mode="kuehlen",
+        current_setpoint=21.0,
+        ww_bereitung=True,
+    )
+    assert hp == HeatingPlan(None, None)
+
+
+def test_nach_der_pause_wird_der_kuehl_sollwert_neu_geschrieben():
+    # Beim Moduswechsel belegt die Anlage ihren Sollwert selbst (HR24 folgt dem
+    # Modus). Beim Wiederanlauf muss HEMS ihn deshalb erneut stellen.
+    hp = _hp(
+        modus="kuehlen",
+        vlt_ziel_c=21.0,
+        current_mode="aus",
+        current_setpoint=55.0,
+    )
+    assert hp == HeatingPlan("kuehlen", 21.0)

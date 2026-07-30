@@ -89,6 +89,10 @@ Zurück zur [Übersicht](../README.md).
 | **Saison-Richtung Select (optional)** | Select/Input_select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht. |
 | **Störungs-/Fehler-Entität (optional)** | `binary_sensor` (an = Störung) oder `sensor`, dessen Rohwert ≠ `0`/`ok` als Fehlercode gilt (z. B. ein Modbus-Fehlerregister). HEMS überwacht ihn und meldet Betriebsstörungen — steuert aber nichts. Siehe [Diagnose](diagnose.md). |
 | **Rückmeldung Warmwasserbereitung (optional)** | `binary_sensor`/`switch`/`input_boolean`, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt (z. B. ein Modbus-Statusbit). Solange er an ist, stellt HEMS am Heizkreis weder Modus noch Vorlauf-Soll: Viele Anlagen heben den Vorlauf-Soll für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat. |
+| **Rückmeldung Verdichter läuft (optional)** | `binary_sensor`/`switch`/`input_boolean`, der an ist, solange der Verdichter läuft. Einzige Quelle des Taktschutzes: Ohne diese Rolle zählt HEMS keine Starts und pausiert nie. |
+| **Taktschutz: Verdichterstarts je Fenster** | Ab wie vielen Starts im Beobachtungsfenster HEMS eine Zwangspause einlegt. `0` schaltet den Taktschutz ab. |
+| **Taktschutz: Beobachtungsfenster** | Länge des Fensters, in dem die Starts gezählt werden. |
+| **Taktschutz: Zwangspause** | Wie lange HEMS nach zu vielen Starts „aus“ empfiehlt. Siehe [Regelverhalten](regelverhalten.md). |
 
 ## Schaltbare Last
 

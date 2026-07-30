@@ -252,7 +252,11 @@
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
           "season_select_entity": "Saison-Richtung input_select (optional)",
           "fault_entity": "Störungs-/Fehler-Entität (optional)",
-          "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)"
+          "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)",
+          "compressor_entity": "Rückmeldung Verdichter läuft (optional)",
+          "antitakt_starts": "Taktschutz: Verdichterstarts je Fenster (0 = aus)",
+          "antitakt_window_min": "Taktschutz: Beobachtungsfenster",
+          "antitakt_pause_min": "Taktschutz: Zwangspause"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -280,7 +284,11 @@
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
           "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht.",
           "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts.",
-          "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert."
+          "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert.",
+          "compressor_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange der Verdichter läuft. HEMS zählt daraus die Starts und legt im Kühlbetrieb eine Zwangspause ein, wenn es zu viele werden - Kurzzyklen sind Verdichterverschleiß, und die wenigsten Anlagen bieten dafür einen Stellwert. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt der Taktschutz aus.",
+          "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift nur im Kühlbetrieb.",
+          "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden.",
+          "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
         }
       }
     },
@@ -672,7 +680,11 @@
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
           "season_select_entity": "Saison-Richtung input_select (optional)",
           "fault_entity": "Störungs-/Fehler-Entität (optional)",
-          "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)"
+          "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)",
+          "compressor_entity": "Rückmeldung Verdichter läuft (optional)",
+          "antitakt_starts": "Taktschutz: Verdichterstarts je Fenster (0 = aus)",
+          "antitakt_window_min": "Taktschutz: Beobachtungsfenster",
+          "antitakt_pause_min": "Taktschutz: Zwangspause"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -700,7 +712,11 @@
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
           "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht.",
           "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts.",
-          "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert."
+          "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert.",
+          "compressor_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange der Verdichter läuft. HEMS zählt daraus die Starts und legt im Kühlbetrieb eine Zwangspause ein, wenn es zu viele werden - Kurzzyklen sind Verdichterverschleiß, und die wenigsten Anlagen bieten dafür einen Stellwert. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt der Taktschutz aus.",
+          "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift nur im Kühlbetrieb.",
+          "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden.",
+          "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
         }
       },
       "edit_heating": {
@@ -732,7 +748,11 @@
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
           "season_select_entity": "Saison-Richtung input_select (optional)",
           "fault_entity": "Störungs-/Fehler-Entität (optional)",
-          "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)"
+          "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)",
+          "compressor_entity": "Rückmeldung Verdichter läuft (optional)",
+          "antitakt_starts": "Taktschutz: Verdichterstarts je Fenster (0 = aus)",
+          "antitakt_window_min": "Taktschutz: Beobachtungsfenster",
+          "antitakt_pause_min": "Taktschutz: Zwangspause"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -760,7 +780,11 @@
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
           "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht.",
           "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts.",
-          "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert."
+          "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert.",
+          "compressor_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange der Verdichter läuft. HEMS zählt daraus die Starts und legt im Kühlbetrieb eine Zwangspause ein, wenn es zu viele werden - Kurzzyklen sind Verdichterverschleiß, und die wenigsten Anlagen bieten dafür einen Stellwert. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt der Taktschutz aus.",
+          "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift nur im Kühlbetrieb.",
+          "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden.",
+          "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
         }
       }
     },

@@ -1,7 +1,10 @@
 """Heizkreis-Domäne: witterungsgeführte Modus- und Vorlaufempfehlung."""
 from __future__ import annotations
 
+from datetime import timedelta
+
 from ..const import (
+    ANTITAKT_RELEASE_MIN,
     HEATING_COLD_THRESHOLD_C,
     HEATING_DEMAND_SHIFT_K,
     SILENT_VLT_OFF_C,
@@ -34,6 +37,7 @@ def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
     t = h.outdoor_temp_c
     if t is None:
         result.modus = "unbekannt"
+        _taktschutz(inp, res, result)
         return result
     result.t_aussen_c = t
 
@@ -80,4 +84,77 @@ def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
         result.vlt_ziel_c = h.cool_vlt_c
     else:
         result.modus = "aus"
+    _taktschutz(inp, res, result)
     return result
+
+
+def _taktschutz(inp: PlanInput, res: PlanResult, result: HeatingResult) -> None:
+    """Zwangspause gegen zu häufige Verdichterstarts (nur Kühlbetrieb).
+
+    Gezählt werden die Einschaltflanken der Rolle „Verdichter läuft" in einem
+    Fenster fester Länge. Reißt die Zahl die Schwelle, empfiehlt HEMS für die
+    Pausendauer „aus"; die Anlage bekommt damit eine lange Ruhephase statt der
+    vier Minuten, die ihre eigene Wiederanlaufsperre hergibt. Das senkt die
+    STARTRATE — der einzelne Takt wird davon nicht länger.
+
+    Zwei Schwellen, wie bei jeder Ja/Nein-Entscheidung hier: die Startzahl legt
+    die Pause ein, `ANTITAKT_RELEASE_MIN` hält sie danach für eine Weile fern.
+    Ohne diese zweite Schwelle könnte HEMS den Kühlbetrieb dauerhaft aussperren.
+
+    Nur Kühlen: Für den Heizbetrieb gibt es keine Messung, ob und wie er taktet,
+    und eine halbe Stunde Zwangspause im Winter ist eine Komfortentscheidung,
+    die niemand belegt hat. Die Zählung läuft trotzdem immer mit, damit das
+    Taktverhalten in beiden Betriebsarten sichtbar ist.
+
+    Während einer Warmwasserladung werden keine Starts gezählt: die gehören dem
+    Speicher, nicht dem Heizkreis, und würden den Taktschutz grundlos auslösen.
+    """
+    h = inp.heating
+    prev, now = inp.flags, inp.now
+    fenster = timedelta(minutes=h.antitakt_window_min)
+
+    # Verdichterzustand fortschreiben. Ohne Rolle (oder bei nicht erreichbarer
+    # Entität) hält der letzte bekannte Zustand: eine Lücke im Signal darf
+    # keine Flanke erfinden, wenn der Wert zurückkommt.
+    an = h.compressor_on
+    res.flags.takt_verdichter_an = prev.takt_verdichter_an if an is None else an
+    start = an is True and not prev.takt_verdichter_an and not h.dhw_active
+
+    fenster_start = prev.takt_fenster_start
+    starts = prev.takt_starts
+    if fenster_start is None or now - fenster_start >= fenster:
+        fenster_start, starts = now, 0
+    if start:
+        starts += 1
+
+    pause_bis, frei_seit = prev.takt_pause_bis, prev.takt_frei_seit
+    if pause_bis is not None and now >= pause_bis:
+        # Pause abgelaufen: freigeben und mit einem frischen Fenster weiterzählen.
+        pause_bis, frei_seit = None, now
+        fenster_start, starts = now, 0
+    elif (
+        pause_bis is None
+        and result.modus == "kuehlen"
+        and h.antitakt_starts > 0
+        and starts >= h.antitakt_starts
+        and (
+            frei_seit is None
+            or now - frei_seit >= timedelta(minutes=ANTITAKT_RELEASE_MIN)
+        )
+    ):
+        pause_bis = now + timedelta(minutes=h.antitakt_pause_min)
+
+    res.flags.takt_fenster_start = fenster_start
+    res.flags.takt_starts = starts
+    res.flags.takt_pause_bis = pause_bis
+    res.flags.takt_frei_seit = frei_seit
+
+    result.verdichterstarts = starts
+    # Die Pause übersteuert nur die Ausgabe. Der Kühl-Latch läuft weiter mit der
+    # Außentemperatur mit — würde er zurückgesetzt, finge die Hysterese nach
+    # jeder Pause von vorn an und HEMS bekäme sein eigenes Takten.
+    if pause_bis is not None and result.modus == "kuehlen":
+        result.modus = "aus"
+        result.vlt_ziel_c = None
+        result.taktschutz = True
+        result.taktschutz_bis = pause_bis

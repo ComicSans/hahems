@@ -8,6 +8,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .const import (
+    DEFAULT_ANTITAKT_PAUSE_MIN,
+    DEFAULT_ANTITAKT_STARTS,
+    DEFAULT_ANTITAKT_WINDOW_MIN,
     DEFAULT_BASE_TARGET,
     DEFAULT_BOOST_SALDO_OFF_W,
     DEFAULT_BOOST_SALDO_ON_W,
@@ -164,6 +167,17 @@ class HeatingCircuit:
     # autonom, wann sie lädt, auch im Heiz- oder Kühlbetrieb. Ohne dieses
     # Entity bleibt das Verhalten unverändert.
     dhw_active_entity: str | None = None
+    # Optionale Rückmeldung „der Verdichter läuft" (on = läuft): binary_sensor/
+    # switch/input_boolean. Einzige Quelle des Taktschutzes — ohne dieses Entity
+    # zählt HEMS keine Starts und pausiert nie. Bewusst nicht aus der
+    # Leistungsmessung abgeleitet: die Umwälzpumpe läuft auch ohne Verdichter,
+    # und die Schwelle dazwischen ist anlagenabhängig.
+    compressor_entity: str | None = None
+    # Taktschutz (nur Kühlbetrieb): ab wie vielen Starts im Fenster HEMS eine
+    # Zwangspause einlegt und wie lange sie dauert. starts = 0 schaltet ihn ab.
+    antitakt_starts: int = DEFAULT_ANTITAKT_STARTS
+    antitakt_window_min: int = DEFAULT_ANTITAKT_WINDOW_MIN
+    antitakt_pause_min: int = DEFAULT_ANTITAKT_PAUSE_MIN
     heat_on_c: float = DEFAULT_HEAT_ON_C
     heat_off_c: float = DEFAULT_HEAT_OFF_C
     cool_on_c: float = DEFAULT_COOL_ON_C

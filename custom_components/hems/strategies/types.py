@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from ..const import (
+    DEFAULT_ANTITAKT_PAUSE_MIN,
+    DEFAULT_ANTITAKT_STARTS,
+    DEFAULT_ANTITAKT_WINDOW_MIN,
     DEFAULT_BOOST_SALDO_OFF_W,
     DEFAULT_BOOST_SALDO_ON_W,
     DEFAULT_BOOST_SOC_OFF,
@@ -60,6 +63,14 @@ class HeatingState:
     # und setzt die Aktuierung aus, siehe HeatingResult.ww_bereitung. Ohne
     # konfigurierte Rolle bleibt er False, und alles bleibt wie bisher.
     dhw_active: bool = False
+    # Der Verdichter läuft gerade (optionale Rolle). Nur daraus zählt der
+    # Taktschutz die Starts; ohne die Rolle bleibt der Wert None und der
+    # Taktschutz ruht vollständig.
+    compressor_on: bool | None = None
+    # Taktschutz-Parameter, siehe _taktschutz. starts = 0 schaltet ihn ab.
+    antitakt_starts: int = DEFAULT_ANTITAKT_STARTS
+    antitakt_window_min: int = DEFAULT_ANTITAKT_WINDOW_MIN
+    antitakt_pause_min: int = DEFAULT_ANTITAKT_PAUSE_MIN
 
 
 @dataclass
@@ -252,6 +263,12 @@ class HeatingResult:
     # ist die Anzeige erklärbar: Empfehlung und Ist dürfen auseinanderlaufen,
     # ohne dass etwas kaputt ist.
     ww_bereitung: bool = False
+    # Taktschutz: Zwangspause gegen zu viele Verdichterstarts. `modus` steht
+    # dann auf "aus", obwohl die Außentemperatur Kühlen hergäbe — beides
+    # zusammen macht die Anzeige erklärbar.
+    taktschutz: bool = False
+    taktschutz_bis: datetime | None = None
+    verdichterstarts: int = 0  # Starts im laufenden Beobachtungsfenster
 
 
 @dataclass
@@ -284,6 +301,17 @@ class PlanFlags:
     waermepumpe_leise: bool = False
     # Frostschutz-Trigger: eigener Latch, unabhängig vom Heiz-/Sperr-Zustand.
     waermepumpe_frost: bool = False
+    # Taktschutz: Verdichterzustand des letzten Laufs (für die Flankenerkennung),
+    # Starts im laufenden Fenster samt Fensteranfang, Ende der Zwangspause und
+    # der Zeitpunkt, seit dem der Heizkreis nach einer Pause wieder frei läuft.
+    # Bewusst nur Skalare: `compute_plan` schreibt die Flags mit
+    # `dataclasses.replace` fort, das Referenzen kopiert — eine Liste hier wäre
+    # zwischen Ein- und Ausgabe geteilt und würde die Eingabe mitverändern.
+    takt_verdichter_an: bool = False
+    takt_starts: int = 0
+    takt_fenster_start: datetime | None = None
+    takt_pause_bis: datetime | None = None
+    takt_frei_seit: datetime | None = None
     # E-Auto: Überschuss reicht (mit Marge) für die Wallbox-Mindestleistung.
     # Start konservativ False, damit der erste Lauf nach einem Neustart nicht
     # sofort "E-Auto laden" meldet, ohne den Momentanüberschuss zu kennen.

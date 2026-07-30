@@ -287,6 +287,16 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             # und Ist dürfen dann auseinanderlaufen; das ist kein Fehlzustand,
             # und dieses Attribut ist der Beleg dafür.
             "warmwasserbereitung_aktiv": d.plan.heizung.ww_bereitung,
+            # Taktschutz: Zwangspause gegen zu viele Verdichterstarts. Steht
+            # "taktschutz" an, ist der Modus deshalb "aus" und nicht wegen der
+            # Außentemperatur. "verdichterstarts" zählt das laufende Fenster.
+            "taktschutz": d.plan.heizung.taktschutz,
+            "taktschutz_bis": (
+                dt_util.as_local(d.plan.heizung.taktschutz_bis).isoformat()
+                if d.plan.heizung.taktschutz_bis
+                else None
+            ),
+            "verdichterstarts": d.plan.heizung.verdichterstarts,
             # Gelerntes Verbrauchsmodell für die Bedarfsprognose
             "verbrauchsmodell": d.waermepumpe_modell,
         }

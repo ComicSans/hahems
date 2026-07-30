@@ -181,6 +181,21 @@ DEFAULT_HEAT_FROST_OFF_C = 8.0
 SILENT_VLT_ON_C = 35
 SILENT_VLT_OFF_C = 37
 
+# Taktschutz im Kühlbetrieb: Startet der Verdichter zu oft, legt HEMS eine
+# Zwangspause ein (Empfehlung „aus", die Anlage kommt zur Ruhe). Das begrenzt
+# die STARTRATE, nicht die Länge des einzelnen Takts: Aus vier Minuten Pause
+# werden dreißig, der Takt selbst bleibt so kurz, wie die Anlage ihn fährt.
+# Kurzzyklen sind Verdichterverschleiß, und die Anlage bietet dafür keinen
+# Stellwert an — die 3-Minuten-Wiederanlaufsperre ist nur lesbar.
+DEFAULT_ANTITAKT_STARTS = 4  # Starts im Fenster, ab denen pausiert wird (0 = aus)
+DEFAULT_ANTITAKT_WINDOW_MIN = 60
+DEFAULT_ANTITAKT_PAUSE_MIN = 30
+# Nach einer Pause läuft der Heizkreis mindestens so lange frei, bevor erneut
+# pausiert werden darf. Das ist die zweite Schwelle: ohne sie könnte die
+# nächste Pause unmittelbar folgen und HEMS würde den Kühlbetrieb dauerhaft
+# aussperren. Starts werden in dieser Zeit weitergezählt, nur das Auslösen ruht.
+ANTITAKT_RELEASE_MIN = 15
+
 # E-Auto: Die "E-Auto laden"-Empfehlung setzt voraus, dass der Überschuss die
 # physikalische Mindestladeleistung der Wallbox erreicht (min_a × Phasen ×
 # Netzspannung) — darunter kann real gar nicht geladen werden. Die

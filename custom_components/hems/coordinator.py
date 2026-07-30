@@ -695,6 +695,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     h.demand_entity,
                     h.fault_entity,
                     h.dhw_active_entity,
+                    h.compressor_entity,
                 )
                 if e
             )
@@ -800,6 +801,17 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         antwortet, darf nichts auslösen (fail open)."""
         state = self._state(entity_id)
         return state is not None and state.state == "on"
+
+    def _is_on_or_none(self, entity_id: str | None) -> bool | None:
+        """Wie `_is_on`, aber eine ausgefallene Rückmeldung bleibt unbekannt.
+
+        Für Signale, aus denen HEMS Flanken zählt: Das Modbus-Gateway fällt
+        regelmäßig für Sekunden aus, und `_is_on` würde daraus erst eine
+        Abschalt- und dann eine Einschaltflanke machen — also Verdichterstarts
+        erfinden, die es nie gab.
+        """
+        state = self._state(entity_id)
+        return None if state is None else state.state == "on"
 
     def _warn_unit(self, entity_id: str, unit: str, expected: str) -> None:
         if entity_id in self._unit_warned:
@@ -1187,6 +1199,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 vlt_max_c=heating_cfg.vlt_max_c,
                 cool_vlt_c=heating_cfg.cool_vlt_c,
                 dhw_active=self._is_on(heating_cfg.dhw_active_entity),
+                # Ohne Rolle (und bei ausgefallener Rückmeldung) bleibt der
+                # Verdichterzustand unbekannt, und der Taktschutz zählt nicht.
+                compressor_on=self._is_on_or_none(heating_cfg.compressor_entity),
+                antitakt_starts=heating_cfg.antitakt_starts,
+                antitakt_window_min=heating_cfg.antitakt_window_min,
+                antitakt_pause_min=heating_cfg.antitakt_pause_min,
             )
 
         modulateds = self._modulated_states(reg, now)

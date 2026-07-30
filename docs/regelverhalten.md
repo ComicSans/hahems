@@ -157,6 +157,28 @@ In den Sperrmonaten (Standard Mai–September) wird Heizen nie empfohlen, außer
 der Frostschutz greift. Bei niedrigem Vorlauf-Soll meldet das Attribut
 `leise_empfohlen`, dass der Flüsterbetrieb der Anlage reicht.
 
+### Taktschutz: Zwangspause bei zu vielen Verdichterstarts
+
+Ist die optionale Rückmeldung „Verdichter läuft“ konfiguriert, zählt HEMS deren
+Einschaltflanken in einem Fenster fester Länge. Reißt die Zahl die Schwelle,
+empfiehlt HEMS im **Kühlbetrieb** für die eingestellte Pausendauer „aus“; die
+Attribute `taktschutz`, `taktschutz_bis` und `verdichterstarts` von
+`sensor.hems_heizkreis` machen das sichtbar. Danach läuft der Heizkreis
+mindestens eine Viertelstunde frei, bevor die nächste Pause greifen darf — sonst
+sperrt HEMS den Kühlbetrieb dauerhaft aus.
+
+Was das leistet und was nicht: Es begrenzt die **Startrate**, nicht die Länge
+des einzelnen Takts. Aus den drei bis vier Minuten Pause, die sich eine Anlage
+über ihre eigene Wiederanlaufsperre gönnt, wird eine halbe Stunde. Kurzzyklen
+entstehen, wenn die kleinste Leistung der Anlage über der Restlast liegt — das
+ändert keine Regel in HEMS, dagegen helfen mehr Durchfluss, mehr Wasserinhalt
+oder ein anderer Sollwert.
+
+Nur Kühlen: Für den Heizbetrieb fehlt die Messung, ob und wie er taktet, und
+eine halbe Stunde Zwangspause im Winter ist eine Komfortentscheidung, die
+niemand belegt hat. Gezählt wird trotzdem in beiden Betriebsarten. Die Starts
+einer Warmwasserladung zählen nicht mit: die gehören dem Speicher.
+
 ### Während der Warmwasserbereitung stellt HEMS nichts
 
 Ist die optionale Rückmeldung „Warmwasserbereitung“ konfiguriert und an, lässt

@@ -21,6 +21,9 @@ from .const import (
     CONF_PV_MINUS_BATTERY,
     CONF_PV_POWER,
     CONF_WEATHER,
+    DEFAULT_ANTITAKT_PAUSE_MIN,
+    DEFAULT_ANTITAKT_STARTS,
+    DEFAULT_ANTITAKT_WINDOW_MIN,
     DEFAULT_BASE_TARGET,
     DEFAULT_BASELINE_W,
     DEFAULT_BOOST_SALDO_OFF_W,
@@ -203,6 +206,18 @@ HEATING_SCHEMA = vol.Schema(
         vol.Optional("dhw_active_entity"): _entity(
             ["binary_sensor", "switch", "input_boolean"]
         ),
+        vol.Optional("compressor_entity"): _entity(
+            ["binary_sensor", "switch", "input_boolean"]
+        ),
+        vol.Required("antitakt_starts", default=DEFAULT_ANTITAKT_STARTS): _number(
+            0, 20, "Starts", 1
+        ),
+        vol.Required(
+            "antitakt_window_min", default=DEFAULT_ANTITAKT_WINDOW_MIN
+        ): _number(15, 240, "min", 5),
+        vol.Required(
+            "antitakt_pause_min", default=DEFAULT_ANTITAKT_PAUSE_MIN
+        ): _number(5, 120, "min", 5),
         vol.Required("heat_on_c", default=DEFAULT_HEAT_ON_C): _number(
             -10, 25, "°C", 0.5
         ),

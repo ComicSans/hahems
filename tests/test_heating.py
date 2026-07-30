@@ -5,7 +5,9 @@ wird (Schritt 3, reiner Move).
 """
 from __future__ import annotations
 
-from factories import heating, plan_input
+from datetime import timedelta
+
+from factories import NOON, heating, plan_input
 from hems import planner as P
 from hems.strategies.types import HeatingResult, PlanFlags
 
@@ -114,3 +116,134 @@ def test_ww_bereitung_auch_ohne_aussentemperatur():
     r = _hz(heating_state=heating(outdoor_temp_c=None, dhw_active=True))
     assert r.modus == "unbekannt"
     assert r.ww_bereitung is True
+
+
+# --- Taktschutz: Zwangspause gegen zu viele Verdichterstarts ------------------
+
+
+def _lauf(flags, minute: int, *, an: bool, **kw):
+    """Ein Planlauf zur Minute `minute` nach NOON. Gibt (Empfehlung, Flags)."""
+    kw.setdefault("outdoor_temp_c", 28.0)
+    inp = plan_input(
+        now=NOON + timedelta(minutes=minute),
+        thermal_present=False,
+        flags=flags,
+        heating_state=heating(compressor_on=an, **kw),
+    )
+    res = P.compute_plan(inp)
+    return res.heizung, res.flags
+
+
+def _takte(flags, *, ab: int, anzahl: int, abstand: int = 8, **kw):
+    """`anzahl` Verdichterstarts im Abstand von `abstand` Minuten."""
+    r = None
+    for i in range(anzahl):
+        r, flags = _lauf(flags, ab + i * abstand - 1, an=False, **kw)
+        r, flags = _lauf(flags, ab + i * abstand, an=True, **kw)
+    return r, flags
+
+
+def test_taktschutz_pausiert_nach_zu_vielen_starts():
+    r, flags = _takte(PlanFlags(), ab=0, anzahl=4)
+    assert r.verdichterstarts == 4
+    assert r.taktschutz is True
+    assert r.modus == "aus"
+    assert r.vlt_ziel_c is None
+    assert r.taktschutz_bis == NOON + timedelta(minutes=24 + 30)
+
+
+def test_taktschutz_haelt_bis_zum_ende_der_pause():
+    _, flags = _takte(PlanFlags(), ab=0, anzahl=4)
+    r, _ = _lauf(flags, 53, an=False)
+    assert r.taktschutz is True
+    assert r.modus == "aus"
+
+
+def test_taktschutz_gibt_nach_der_pause_wieder_frei():
+    _, flags = _takte(PlanFlags(), ab=0, anzahl=4)
+    r, flags = _lauf(flags, 55, an=False)
+    assert r.taktschutz is False
+    assert r.modus == "kuehlen"
+    assert r.vlt_ziel_c == 18.0
+    # Frisches Fenster: die alten Starts loesen nicht sofort erneut aus.
+    assert r.verdichterstarts == 0
+
+
+def test_taktschutz_loest_nach_der_pause_nicht_sofort_erneut_aus():
+    # Nach der Freigabe laeuft der Heizkreis eine Mindestzeit, auch wenn es
+    # sofort wieder taktet - sonst sperrt HEMS den Kuehlbetrieb dauerhaft aus.
+    _, flags = _takte(PlanFlags(), ab=0, anzahl=4)
+    _, flags = _lauf(flags, 55, an=False)
+    r, flags = _takte(flags, ab=56, anzahl=4, abstand=2)
+    assert r.verdichterstarts == 4
+    assert r.taktschutz is False
+    assert r.modus == "kuehlen"
+
+
+def test_taktschutz_zaehlt_die_starts_der_warmwasserladung_nicht():
+    # Die Starts gehoeren dem Speicher, nicht dem Heizkreis.
+    r, _ = _takte(PlanFlags(), ab=0, anzahl=4, dhw_active=True)
+    assert r.verdichterstarts == 0
+    assert r.taktschutz is False
+
+
+def test_taktschutz_ruht_ohne_rolle():
+    flags = PlanFlags()
+    r = None
+    for i in range(8):
+        inp = plan_input(
+            now=NOON + timedelta(minutes=i * 4),
+            thermal_present=False,
+            flags=flags,
+            heating_state=heating(outdoor_temp_c=28.0),  # compressor_on=None
+        )
+        res = P.compute_plan(inp)
+        r, flags = res.heizung, res.flags
+    assert r.taktschutz is False
+    assert r.modus == "kuehlen"
+
+
+def test_taktschutz_nur_im_kuehlbetrieb():
+    # Fuer den Heizbetrieb fehlt die Messung, ob er ueberhaupt taktet.
+    r, _ = _takte(PlanFlags(), ab=0, anzahl=4, outdoor_temp_c=5.0)
+    assert r.verdichterstarts == 4
+    assert r.taktschutz is False
+    assert r.modus == "heizen"
+
+
+def test_taktschutz_zaehlt_nur_im_fenster():
+    # Vier Starts, aber ueber mehr als eine Stunde verteilt.
+    r, _ = _takte(PlanFlags(), ab=0, anzahl=4, abstand=25)
+    assert r.taktschutz is False
+    assert r.modus == "kuehlen"
+
+
+def test_taktschutz_laesst_den_kuehl_latch_stehen():
+    # Die Pause uebersteuert nur die Ausgabe. Setzte sie den Latch zurueck,
+    # finge die Aussentemperatur-Hysterese nach jeder Pause von vorn an.
+    r, flags = _takte(PlanFlags(), ab=0, anzahl=4)
+    assert r.taktschutz is True
+    assert flags.waermepumpe_kuehlen is True
+
+
+def test_taktschutz_veraendert_die_eingabe_flags_nicht():
+    flags = PlanFlags()
+    _takte(flags, ab=0, anzahl=4)
+    assert flags.takt_starts == 0
+    assert flags.takt_pause_bis is None
+
+
+def test_taktschutz_erfindet_bei_signalluecke_keine_flanke():
+    # Verdichter laeuft, Rolle faellt aus, Rolle kommt zurueck: kein Start.
+    flags = PlanFlags()
+    _, flags = _lauf(flags, 0, an=False)
+    _, flags = _lauf(flags, 1, an=True)
+    inp = plan_input(
+        now=NOON + timedelta(minutes=2),
+        thermal_present=False,
+        flags=flags,
+        heating_state=heating(outdoor_temp_c=28.0),  # Signal weg
+    )
+    flags = P.compute_plan(inp).flags
+    r, _ = _lauf(flags, 3, an=True)
+    assert r.verdichterstarts == 1

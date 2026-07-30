@@ -177,6 +177,13 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
                 f"nicht: HEMS erkennt laufende Speicherladungen nicht und "
                 f"stellt den Heizkreis auch währenddessen"
             )
+        # Verdichter-Rückmeldung: ebenfalls reine Leserolle. Fehlt sie, zählt
+        # HEMS keine Starts und legt nie eine Zwangspause ein.
+        if h.compressor_entity and not _exists(hass, h.compressor_entity):
+            c.warnings.append(
+                f"{ctx}: Verdichter-Rückmeldung {h.compressor_entity} existiert "
+                f"nicht: der Taktschutz zählt keine Starts und pausiert nie"
+            )
         if h.control_entity:
             _mark("Wärmepumpe")
             _need(

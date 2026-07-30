@@ -103,6 +103,10 @@ def heating(
     vlt_max_c: float = 45.0,
     cool_vlt_c: float = 18.0,
     dhw_active: bool = False,
+    compressor_on: bool | None = None,
+    antitakt_starts: int = 4,
+    antitakt_window_min: int = 60,
+    antitakt_pause_min: int = 30,
 ) -> P.HeatingState:
     return P.HeatingState(
         name=name,
@@ -122,6 +126,10 @@ def heating(
         vlt_max_c=vlt_max_c,
         cool_vlt_c=cool_vlt_c,
         dhw_active=dhw_active,
+        compressor_on=compressor_on,
+        antitakt_starts=antitakt_starts,
+        antitakt_window_min=antitakt_window_min,
+        antitakt_pause_min=antitakt_pause_min,
     )
 
 

@@ -252,7 +252,11 @@
           "silent_switch_entity": "Silent-mode switch (optional)",
           "season_select_entity": "Season-direction input_select (optional)",
           "fault_entity": "Fault/error entity (optional)",
-          "dhw_active_entity": "Hot-water charging feedback (optional)"
+          "dhw_active_entity": "Hot-water charging feedback (optional)",
+          "compressor_entity": "Compressor running feedback (optional)",
+          "antitakt_starts": "Anti-cycling: compressor starts per window (0 = off)",
+          "antitakt_window_min": "Anti-cycling: observation window",
+          "antitakt_pause_min": "Anti-cycling: forced pause"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -280,7 +284,11 @@
           "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
           "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch.",
           "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing.",
-          "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged."
+          "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged.",
+          "compressor_entity": "Optional binary_sensor/switch/input_boolean that is on while the compressor runs. HEMS counts its starts and, in cooling mode, forces a pause once there are too many of them - short cycles wear the compressor out, and most units offer no setting for it. Leave empty if your device has no such feedback; anti-cycling then stays off.",
+          "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Only ever applies to cooling.",
+          "antitakt_window_min": "Length of the window the starts are counted in.",
+          "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
         }
       }
     },
@@ -672,7 +680,11 @@
           "silent_switch_entity": "Silent-mode switch (optional)",
           "season_select_entity": "Season-direction input_select (optional)",
           "fault_entity": "Fault/error entity (optional)",
-          "dhw_active_entity": "Hot-water charging feedback (optional)"
+          "dhw_active_entity": "Hot-water charging feedback (optional)",
+          "compressor_entity": "Compressor running feedback (optional)",
+          "antitakt_starts": "Anti-cycling: compressor starts per window (0 = off)",
+          "antitakt_window_min": "Anti-cycling: observation window",
+          "antitakt_pause_min": "Anti-cycling: forced pause"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -700,7 +712,11 @@
           "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
           "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch.",
           "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing.",
-          "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged."
+          "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged.",
+          "compressor_entity": "Optional binary_sensor/switch/input_boolean that is on while the compressor runs. HEMS counts its starts and, in cooling mode, forces a pause once there are too many of them - short cycles wear the compressor out, and most units offer no setting for it. Leave empty if your device has no such feedback; anti-cycling then stays off.",
+          "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Only ever applies to cooling.",
+          "antitakt_window_min": "Length of the window the starts are counted in.",
+          "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
         }
       },
       "edit_heating": {
@@ -732,7 +748,11 @@
           "silent_switch_entity": "Silent-mode switch (optional)",
           "season_select_entity": "Season-direction input_select (optional)",
           "fault_entity": "Fault/error entity (optional)",
-          "dhw_active_entity": "Hot-water charging feedback (optional)"
+          "dhw_active_entity": "Hot-water charging feedback (optional)",
+          "compressor_entity": "Compressor running feedback (optional)",
+          "antitakt_starts": "Anti-cycling: compressor starts per window (0 = off)",
+          "antitakt_window_min": "Anti-cycling: observation window",
+          "antitakt_pause_min": "Anti-cycling: forced pause"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -760,7 +780,11 @@
           "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
           "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch.",
           "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing.",
-          "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged."
+          "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged.",
+          "compressor_entity": "Optional binary_sensor/switch/input_boolean that is on while the compressor runs. HEMS counts its starts and, in cooling mode, forces a pause once there are too many of them - short cycles wear the compressor out, and most units offer no setting for it. Leave empty if your device has no such feedback; anti-cycling then stays off.",
+          "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Only ever applies to cooling.",
+          "antitakt_window_min": "Length of the window the starts are counted in.",
+          "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
         }
       }
     },
