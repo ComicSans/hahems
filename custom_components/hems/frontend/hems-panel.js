@@ -50,6 +50,12 @@ const EFFIZIENZ_GRUPPEN = [
     rollen: ["cop_momentan", "cop_soll", "cop_abweichung", "spreizung", "waermeleistung"],
   },
   {
+    // Zielwerte für den Volumenstrom, nicht für die Pumpenstufe: eine
+    // Umwälzpumpe fördert nicht linear zu ihrer Prozentanzeige.
+    titel: "Zielwerte Volumenstrom",
+    rollen: ["durchfluss_ziel_prozent", "durchfluss_abweichung_prozent"],
+  },
+  {
     titel: "Verdichter",
     rollen: ["takte", "laufzeit_summe", "laufzeit_mittel"],
   },
@@ -263,11 +269,29 @@ class HemsPanel extends HTMLElement {
       // Hinweise als Textliste. Der Zustand steht ausdrücklich als Wort da und
       // nicht nur als Farbe — sonst ist er für einen Teil der Nutzenden nicht
       // wahrnehmbar.
+      // Zielwert direkt am Hinweis, nicht in einer eigenen Zeile: „drosseln"
+      // allein lässt offen, um wie viel.
+      const zielText = () => {
+        const ziel = wert("durchfluss_ziel_prozent");
+        const abw = wert("durchfluss_abweichung_prozent");
+        if (!ziel || !abw) return "";
+        const z = Number(ziel.state);
+        const a = Number(abw.state);
+        if (!Number.isFinite(z) || !Number.isFinite(a)) return "";
+        const richtung = a > 0 ? "zu viel" : "zu wenig";
+        return ` — Volumenstrom auf ${Math.round(z)} % des heutigen,
+          derzeit ${Math.abs(Math.round(a))} % ${richtung}`;
+      };
+
       const aktive = EFFIZIENZ_HINWEISE.map((r) => [r, wert(r)])
         .filter(([, st]) => st && st.state === "on")
-        .map(([, st]) => {
+        .map(([r, st]) => {
           const name = (st.attributes || {}).friendly_name || "Hinweis";
-          return `<li>${escapeHtml(name)}</li>`;
+          const zusatz =
+            r === "hinweis_spreizung_niedrig" || r === "hinweis_spreizung_hoch"
+              ? zielText()
+              : "";
+          return `<li>${escapeHtml(name)}${escapeHtml(zusatz)}</li>`;
         })
         .join("");
       const hinweise = aktive

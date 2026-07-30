@@ -38,6 +38,8 @@ ROLLEN: tuple[str, ...] = (
     "waermeleistung",
     "waermemenge",
     "spreizung",
+    "durchfluss_ziel_prozent",
+    "durchfluss_abweichung_prozent",
     "waermeverlust_koeffizient",
     "takte",
     "laufzeit_summe",
