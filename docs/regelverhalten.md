@@ -179,6 +179,13 @@ eine halbe Stunde Zwangspause im Winter ist eine Komfortentscheidung, die
 niemand belegt hat. Gezählt wird trotzdem in beiden Betriebsarten. Die Starts
 einer Warmwasserladung zählen nicht mit: die gehören dem Speicher.
 
+Zwei Grenzen: Läuft gerade eine Warmwasserladung, stellt HEMS am Heizkreis
+nichts (siehe unten) — die Pause wird dann erst nach der Ladung geschrieben und,
+wenn sie noch währenddessen abläuft, gar nicht. Der Heizkreis taktet in diesem
+Fenster ohnehin nicht. Und der Zählerstand lebt nur im Speicher: Nach einem
+Neustart von Home Assistant beginnt das Fenster bei null, eine laufende Pause
+ist weg.
+
 ### Während der Warmwasserbereitung stellt HEMS nichts
 
 Ist die optionale Rückmeldung „Warmwasserbereitung“ konfiguriert und an, lässt
