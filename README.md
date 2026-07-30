@@ -65,13 +65,19 @@ längere Zeit ein regulärer Zustand und kein Fehler.
 
 ## Hinweise
 
-Bewusst qualitativ formuliert. „Umwälzpumpe drosseln" statt „80 Prozent
-würden reichen" — die Pumpenkennlinie ist hier nicht bekannt, eine
-Prozentangabe wäre Scheingenauigkeit.
-
 Jeder Hinweis hat **zwei Schwellen**, nie eine, und wird über Tage gemittelt
 statt je Zyklus ausgewertet. Ein Hinweis, der im Abfragetakt kippt, ist kein
 Hinweis, sondern Flackern.
+
+**Mit Zielwert.** „Drosseln" allein lässt offen, um wie viel. Zu den
+Spreizungshinweisen gehört deshalb eine Zahl: *Volumenstrom auf 80 % des
+heutigen, derzeit 25 % zu viel.* Sie folgt daraus, dass bei gegebener
+Wärmeleistung Volumenstrom und Spreizung umgekehrt proportional sind.
+
+Die Zahl gilt für den **Volumenstrom, nicht für die Pumpenstufe** — eine
+Umwälzpumpe fördert nicht linear zu ihrer Prozentanzeige, und ihre Kennlinie
+kennt diese Integration nicht. Deshalb steht dort eine Zielgröße und keine
+Einstellempfehlung.
 
 ## Presets
 

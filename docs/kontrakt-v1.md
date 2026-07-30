@@ -69,6 +69,8 @@ Preset.
 | `takte_periode` | – | Verdichterstarts, monoton zählend |
 | `laufzeit_summe` | h | Verdichterlaufzeit, monoton zählend |
 | `laufzeit_mittel` | min | abgeleiteter Anzeigewert |
+| `durchfluss_ziel_prozent` | % | Zielvolumenstrom als Anteil des heutigen |
+| `durchfluss_abweichung_prozent` | % | Abweichung vom Ziel, positiv = zu viel |
 | `waermeverlust_koeffizient` | W/K | aus Regression |
 | `empfehlung_fusspunkt` | °C | Heizkurve |
 | `empfehlung_steilheit` | – | Heizkurve |
@@ -107,6 +109,30 @@ Automationen adressierbar.
 
 Jeder Hinweis hat Ein- und Ausschaltschwelle, nie eine einzelne, und wird
 über Tage gemittelt statt je Zyklus ausgewertet.
+
+### Zielwerte
+
+Zu den beiden Spreizungshinweisen gehört eine Zahl, sonst bleibt offen, um wie
+viel. Sie folgt daraus, dass bei gegebener Wärmeleistung Volumenstrom und
+Spreizung umgekehrt proportional sind (`Q = V̇ · ΔT · c`):
+
+```
+V̇_ziel / V̇_ist = ΔT_ist / ΔT_ziel
+```
+
+`ΔT_ziel` ist die Auslegungsspreizung aus dem Preset, dieselbe, aus der der
+Nennvolumenstrom abgeleitet wurde. Beispiel: gemessene 4 K gegen 5 K Ziel
+ergeben 80 % — der Volumenstrom liegt 25 % zu hoch.
+
+**Es ist eine Aussage über den Volumenstrom, nicht über die Pumpenstufe.** Eine
+Umwälzpumpe fördert nicht linear zu ihrer Prozentanzeige, und ihre Kennlinie
+ist hier nicht bekannt. „Volumenstrom auf 80 %" ist eine Zielgröße; „Pumpe auf
+Stufe 80 %" wäre geraten.
+
+Grundlage ist die über Tage gemittelte Spreizung, nie der Momentanwert. Und
+der Zielwert entfällt, solange `hinweis_temperaturen_identisch` ansteht: aus
+zwei Sensoren auf derselben Quelle wäre jede Zielangabe aus einem Messfehler
+abgeleitet.
 
 ## B2 — Automatische Erkennung
 

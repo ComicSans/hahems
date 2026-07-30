@@ -5,7 +5,7 @@ Assistant, keine Uhr. Alles, was sie wissen muss, steht im Eingang.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from . import curve, cycling, hints, presets, thermal
 from .types import (
@@ -90,15 +90,25 @@ def analysiere(eingang: AnalyseEingang) -> Analyse:
     # Der Datenblattvergleich ist eine Aussage ueber das Geraet ueber die
     # Zeit, nicht ueber diesen Abtastpunkt. Er braucht deshalb beides: eine
     # saubere Messkette *und* genug Historie.
-    tagesbild = eingang.tagesbild
     langfrist = schlechtere_datenbasis(basis, empfehlung.datenbasis)
-    if tagesbild.datenbasis != langfrist:
-        tagesbild = hints.Tagesbild(
-            spreizung_mittel_k=tagesbild.spreizung_mittel_k,
-            takte_pro_tag=tagesbild.takte_pro_tag,
-            cop_abweichung_prozent=tagesbild.cop_abweichung_prozent,
-            vorlauf_ueberhoehung_k=tagesbild.vorlauf_ueberhoehung_k,
-            datenbasis=langfrist,
+    # Über `replace`, nicht von Hand neu gebaut: eine Handkopie verliert
+    # stillschweigend jedes später ergänzte Feld. Genau so fiel
+    # `anteil_spreizung_null` heraus, wodurch der Hinweis auf identische
+    # Vor- und Rücklauftemperaturen nie auslösen konnte.
+    tagesbild = replace(eingang.tagesbild, datenbasis=langfrist)
+
+    # Zielwerte aus der über Tage gemittelten Spreizung, nie aus dem
+    # Momentanwert: ein Ziel, das im Abfragetakt springt, ist unbrauchbar.
+    # Und nur, wenn die Spreizung überhaupt glaubwürdig ist — bei zwei
+    # Sensoren auf derselben Quelle wäre jeder Zielwert Unsinn.
+    hinweise = hints.bewerte(eingang.hinweise, tagesbild)
+    ziel = abweichung_fluss = None
+    if not hinweise.temperaturen_identisch:
+        ziel = thermal.durchfluss_ziel_prozent(
+            tagesbild.spreizung_mittel_k, preset.spreizung_ziel_k
+        )
+        abweichung_fluss = thermal.durchfluss_abweichung_prozent(
+            tagesbild.spreizung_mittel_k, preset.spreizung_ziel_k
         )
 
     return Analyse(
@@ -112,8 +122,10 @@ def analysiere(eingang: AnalyseEingang) -> Analyse:
         durchfluss_geschaetzt=geschaetzt,
         waermeverlust_w_pro_k=_gerundet(verlust[0], 1) if verlust else None,
         kurve=empfehlung,
-        hinweise=hints.bewerte(eingang.hinweise, tagesbild),
+        hinweise=hinweise,
         datenbasis=basis,
+        durchfluss_ziel_prozent=_gerundet(ziel, 0),
+        durchfluss_abweichung_prozent=_gerundet(abweichung_fluss, 0),
         takt=takt,
         laufzeit_mittel_min=_gerundet(
             cycling.mittlere_laufzeit_min(takt.starts, takt.laufzeit_s), 1

@@ -83,6 +83,47 @@ def cop(p_th_w: float | None, p_el_w: float | None) -> float | None:
     return p_th_w / p_el_w
 
 
+def durchfluss_ziel_prozent(
+    spreizung_mittel_k: float | None, spreizung_ziel_k: float
+) -> float | None:
+    """Zielvolumenstrom in Prozent des heutigen.
+
+    Bei gegebener Waermeleistung sind Volumenstrom und Spreizung umgekehrt
+    proportional: `Q = V * dT * c`. Also gilt
+    `V_ziel / V_ist = dT_ist / dT_ziel`.
+
+    Ist die Spreizung zu klein, foerdert die Pumpe mehr als noetig, und das
+    Ergebnis liegt unter 100 Prozent. Ist sie zu gross, kommt zu wenig durch,
+    und es liegt darueber.
+
+    **Das ist eine Aussage ueber den Volumenstrom, nicht ueber die Pumpenstufe.**
+    Eine Umwaelzpumpe foerdert nicht linear zu ihrer Prozentanzeige, und ihre
+    Kennlinie ist hier nicht bekannt. „Volumenstrom auf 80 Prozent" ist eine
+    Zielgroesse; „Pumpe auf Stufe 80 Prozent" waere geraten.
+    """
+    if not spreizung_mittel_k or spreizung_ziel_k <= 0:
+        return None
+    if spreizung_mittel_k <= 0:
+        return None
+    return spreizung_mittel_k / spreizung_ziel_k * 100.0
+
+
+def durchfluss_abweichung_prozent(
+    spreizung_mittel_k: float | None, spreizung_ziel_k: float
+) -> float | None:
+    """Wie weit der Volumenstrom neben dem Ziel liegt, mit Vorzeichen.
+
+    Positiv heisst zu viel Volumenstrom (drosseln), negativ zu wenig. Es ist
+    derselbe Sachverhalt wie `durchfluss_ziel_prozent`, nur als Abweichung —
+    das ist die Zahl, die in einen Hinweis gehoert: „drosseln, 25 Prozent zu
+    viel".
+    """
+    ziel = durchfluss_ziel_prozent(spreizung_mittel_k, spreizung_ziel_k)
+    if ziel is None:
+        return None
+    return 100.0 / ziel * 100.0 - 100.0
+
+
 def bewerte(m: Messwert, preset: Preset) -> Guete:
     """Taugt dieser Abtastpunkt fuer eine Effizienzaussage?
 

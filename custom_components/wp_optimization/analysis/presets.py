@@ -78,6 +78,7 @@ def aus_dict(roh: dict) -> Preset:
         modellfehler_prozent=float(roh.get("cop_modellfehler_prozent", 0.0)),
         generisch=bool(roh.get("generisch", False)),
         spreizung_min_gueltig_k=float(roh.get("spreizung_min_gueltig_k", 2.0)),
+        spreizung_ziel_k=float(roh.get("spreizung_ziel_k", 5.0)),
         durchfluss_nominal_lh=(
             float(roh["durchfluss_nominal_lh"])
             if roh.get("durchfluss_nominal_lh")

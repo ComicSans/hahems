@@ -89,6 +89,25 @@ SENSOREN: tuple[WpSensorDescription, ...] = (
         suggested_display_precision=2,
         wert=lambda a: a.spreizung_k,
     ),
+    # Zielwerte zu den Hinweisen. Beide beziehen sich auf den Volumenstrom und
+    # nicht auf die Pumpenstufe — eine Umwälzpumpe fördert nicht linear zu
+    # ihrer Prozentanzeige, und ihre Kennlinie ist hier nicht bekannt.
+    WpSensorDescription(
+        key="durchfluss_ziel_prozent",
+        translation_key="durchfluss_ziel_prozent",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        wert=lambda a: a.durchfluss_ziel_prozent,
+    ),
+    WpSensorDescription(
+        key="durchfluss_abweichung_prozent",
+        translation_key="durchfluss_abweichung_prozent",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        wert=lambda a: a.durchfluss_abweichung_prozent,
+    ),
     WpSensorDescription(
         key="waermeverlust_koeffizient",
         translation_key="waermeverlust_koeffizient",

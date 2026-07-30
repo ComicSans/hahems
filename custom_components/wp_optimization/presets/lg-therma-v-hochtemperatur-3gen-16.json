@@ -15,5 +15,6 @@
   "gueltig_ab_c": -20.0,
   "gueltig_bis_c": 20.0,
   "durchfluss_nominal_lh": 1651,
-  "standby_w": 220.0
+  "standby_w": 220.0,
+  "spreizung_ziel_k": 5.0
 }

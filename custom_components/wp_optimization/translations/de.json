@@ -47,21 +47,51 @@
   },
   "entity": {
     "sensor": {
-      "cop_momentan": { "name": "COP momentan" },
-      "cop_soll": { "name": "COP erwartet" },
-      "cop_soll_unsicherheit": { "name": "Unsicherheit der Erwartung" },
-      "cop_abweichung": { "name": "Abweichung vom Datenblatt" },
-      "waermeleistung": { "name": "Wärmeleistung" },
-      "waermemenge": { "name": "Wärmemenge" },
-      "spreizung": { "name": "Spreizung" },
-      "waermeverlust_koeffizient": { "name": "Wärmeverlustkoeffizient" },
-      "takte": { "name": "Verdichterstarts" },
-      "laufzeit_summe": { "name": "Verdichterlaufzeit" },
-      "laufzeit_mittel": { "name": "Mittlere Laufzeit pro Takt" },
-      "empfehlung_fusspunkt": { "name": "Empfehlung Fußpunkt" },
-      "empfehlung_steilheit": { "name": "Empfehlung Steilheit" },
-      "empfehlung_vorlauf_min": { "name": "Empfehlung Mindestvorlauf" },
-      "kontrakt_version": { "name": "Kontraktversion" },
+      "cop_momentan": {
+        "name": "COP momentan"
+      },
+      "cop_soll": {
+        "name": "COP erwartet"
+      },
+      "cop_soll_unsicherheit": {
+        "name": "Unsicherheit der Erwartung"
+      },
+      "cop_abweichung": {
+        "name": "Abweichung vom Datenblatt"
+      },
+      "waermeleistung": {
+        "name": "Wärmeleistung"
+      },
+      "waermemenge": {
+        "name": "Wärmemenge"
+      },
+      "spreizung": {
+        "name": "Spreizung"
+      },
+      "waermeverlust_koeffizient": {
+        "name": "Wärmeverlustkoeffizient"
+      },
+      "takte": {
+        "name": "Verdichterstarts"
+      },
+      "laufzeit_summe": {
+        "name": "Verdichterlaufzeit"
+      },
+      "laufzeit_mittel": {
+        "name": "Mittlere Laufzeit pro Takt"
+      },
+      "empfehlung_fusspunkt": {
+        "name": "Empfehlung Fußpunkt"
+      },
+      "empfehlung_steilheit": {
+        "name": "Empfehlung Steilheit"
+      },
+      "empfehlung_vorlauf_min": {
+        "name": "Empfehlung Mindestvorlauf"
+      },
+      "kontrakt_version": {
+        "name": "Kontraktversion"
+      },
       "datenbasis": {
         "name": "Datenbasis Messung",
         "state": {
@@ -91,16 +121,36 @@
           "warmwasser": "Warmwasserbereitung",
           "unplausibel": "unplausibel"
         }
+      },
+      "durchfluss_ziel_prozent": {
+        "name": "Zielvolumenstrom (Anteil vom heutigen)"
+      },
+      "durchfluss_abweichung_prozent": {
+        "name": "Volumenstrom-Abweichung vom Ziel"
       }
     },
     "binary_sensor": {
-      "hinweis_spreizung_niedrig": { "name": "Hinweis: Umwälzpumpe drosseln" },
-      "hinweis_spreizung_hoch": { "name": "Hinweis: Volumenstrom zu gering" },
-      "hinweis_taktung_hoch": { "name": "Hinweis: Verdichter taktet häufig" },
-      "hinweis_vorlauf_zu_hoch": { "name": "Hinweis: Vorlauf höher als nötig" },
-      "hinweis_effizienz_unter_erwartung": { "name": "Hinweis: Effizienz unter Erwartung" },
-      "hinweis_temperaturen_identisch": { "name": "Vorlauf und Rücklauf melden denselben Wert" },
-      "durchfluss_geschaetzt": { "name": "Volumenstrom geschätzt" }
+      "hinweis_spreizung_niedrig": {
+        "name": "Hinweis: Umwälzpumpe drosseln"
+      },
+      "hinweis_spreizung_hoch": {
+        "name": "Hinweis: Volumenstrom zu gering"
+      },
+      "hinweis_taktung_hoch": {
+        "name": "Hinweis: Verdichter taktet häufig"
+      },
+      "hinweis_vorlauf_zu_hoch": {
+        "name": "Hinweis: Vorlauf höher als nötig"
+      },
+      "hinweis_effizienz_unter_erwartung": {
+        "name": "Hinweis: Effizienz unter Erwartung"
+      },
+      "hinweis_temperaturen_identisch": {
+        "name": "Vorlauf und Rücklauf melden denselben Wert"
+      },
+      "durchfluss_geschaetzt": {
+        "name": "Volumenstrom geschätzt"
+      }
     }
   }
 }

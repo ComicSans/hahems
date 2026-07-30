@@ -73,6 +73,9 @@ class Preset:
     modellfehler_prozent: float
     generisch: bool = False
     spreizung_min_gueltig_k: float = 2.0
+    # Auslegungsspreizung. Sie ist der Bezug fuer den Zielvolumenstrom und
+    # dieselbe, aus der der Nennvolumenstrom abgeleitet wurde.
+    spreizung_ziel_k: float = 5.0
     # Nennvolumenstrom bei 5 K Auslegungsspreizung, abgeleitet aus der
     # Nennwaermeleistung. Ersatz, wenn kein Volumenstromzaehler verdrahtet
     # ist — dann ist der COP geschaetzt und nie belastbar.
@@ -171,6 +174,10 @@ class Analyse:
     # Wahr, wenn der Volumenstrom aus dem Preset stammt und nicht gemessen
     # wurde. Die Datenbasis ist dann gedeckelt.
     durchfluss_geschaetzt: bool = False
+    # Zielwerte zu den Hinweisen. Beide beziehen sich auf den Volumenstrom,
+    # nicht auf die Pumpenstufe — die Pumpenkennlinie ist nicht bekannt.
+    durchfluss_ziel_prozent: float | None = None
+    durchfluss_abweichung_prozent: float | None = None
     waermeverlust_w_pro_k: float | None = None
     kurve: Kurvenempfehlung = field(default_factory=Kurvenempfehlung)
     hinweise: HinweisZustand = field(default_factory=HinweisZustand)

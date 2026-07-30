@@ -47,21 +47,51 @@
   },
   "entity": {
     "sensor": {
-      "cop_momentan": { "name": "COP now" },
-      "cop_soll": { "name": "COP expected" },
-      "cop_soll_unsicherheit": { "name": "Uncertainty of expectation" },
-      "cop_abweichung": { "name": "Deviation from datasheet" },
-      "waermeleistung": { "name": "Thermal power" },
-      "waermemenge": { "name": "Thermal energy" },
-      "spreizung": { "name": "Temperature spread" },
-      "waermeverlust_koeffizient": { "name": "Heat loss coefficient" },
-      "takte": { "name": "Compressor starts" },
-      "laufzeit_summe": { "name": "Compressor runtime" },
-      "laufzeit_mittel": { "name": "Mean runtime per cycle" },
-      "empfehlung_fusspunkt": { "name": "Recommended base point" },
-      "empfehlung_steilheit": { "name": "Recommended slope" },
-      "empfehlung_vorlauf_min": { "name": "Recommended minimum flow temperature" },
-      "kontrakt_version": { "name": "Contract version" },
+      "cop_momentan": {
+        "name": "COP now"
+      },
+      "cop_soll": {
+        "name": "COP expected"
+      },
+      "cop_soll_unsicherheit": {
+        "name": "Uncertainty of expectation"
+      },
+      "cop_abweichung": {
+        "name": "Deviation from datasheet"
+      },
+      "waermeleistung": {
+        "name": "Thermal power"
+      },
+      "waermemenge": {
+        "name": "Thermal energy"
+      },
+      "spreizung": {
+        "name": "Temperature spread"
+      },
+      "waermeverlust_koeffizient": {
+        "name": "Heat loss coefficient"
+      },
+      "takte": {
+        "name": "Compressor starts"
+      },
+      "laufzeit_summe": {
+        "name": "Compressor runtime"
+      },
+      "laufzeit_mittel": {
+        "name": "Mean runtime per cycle"
+      },
+      "empfehlung_fusspunkt": {
+        "name": "Recommended base point"
+      },
+      "empfehlung_steilheit": {
+        "name": "Recommended slope"
+      },
+      "empfehlung_vorlauf_min": {
+        "name": "Recommended minimum flow temperature"
+      },
+      "kontrakt_version": {
+        "name": "Contract version"
+      },
       "datenbasis": {
         "name": "Data basis of measurement",
         "state": {
@@ -91,16 +121,36 @@
           "warmwasser": "hot water",
           "unplausibel": "implausible"
         }
+      },
+      "durchfluss_ziel_prozent": {
+        "name": "Target volumetric flow (share of today’s)"
+      },
+      "durchfluss_abweichung_prozent": {
+        "name": "Volumetric flow deviation from target"
       }
     },
     "binary_sensor": {
-      "hinweis_spreizung_niedrig": { "name": "Hint: throttle circulation pump" },
-      "hinweis_spreizung_hoch": { "name": "Hint: volumetric flow too low" },
-      "hinweis_taktung_hoch": { "name": "Hint: compressor cycles often" },
-      "hinweis_vorlauf_zu_hoch": { "name": "Hint: flow temperature higher than needed" },
-      "hinweis_effizienz_unter_erwartung": { "name": "Hint: efficiency below expectation" },
-      "hinweis_temperaturen_identisch": { "name": "Flow and return report the same value" },
-      "durchfluss_geschaetzt": { "name": "Volumetric flow estimated" }
+      "hinweis_spreizung_niedrig": {
+        "name": "Hint: throttle circulation pump"
+      },
+      "hinweis_spreizung_hoch": {
+        "name": "Hint: volumetric flow too low"
+      },
+      "hinweis_taktung_hoch": {
+        "name": "Hint: compressor cycles often"
+      },
+      "hinweis_vorlauf_zu_hoch": {
+        "name": "Hint: flow temperature higher than needed"
+      },
+      "hinweis_effizienz_unter_erwartung": {
+        "name": "Hint: efficiency below expectation"
+      },
+      "hinweis_temperaturen_identisch": {
+        "name": "Flow and return report the same value"
+      },
+      "durchfluss_geschaetzt": {
+        "name": "Volumetric flow estimated"
+      }
     }
   }
 }
