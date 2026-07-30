@@ -1,0 +1,17 @@
+{
+  "schluessel": "lg-therma-v-r32-split-4-6",
+  "anzeigename": "LG Therma V R32 Split 4/6 kW",
+  "quelle": "keymark",
+  "cop_polynom": {
+    "p1": 221.73959,
+    "p2": -0.109855,
+    "p3": 8.063073,
+    "p4": -221.572247
+  },
+  "cop_modellfehler_prozent": 15.1,
+  "generisch": false,
+  "spreizung_min_gueltig_k": 2.0,
+  "waermetraeger_faktor": 1.163,
+  "gueltig_ab_c": -20.0,
+  "gueltig_bis_c": 20.0
+}

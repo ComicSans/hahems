@@ -1,0 +1,17 @@
+{
+  "schluessel": "lg-therma-v-r32-split-5-7-9",
+  "anzeigename": "LG Therma V R32 Split 5/7/9 kW",
+  "quelle": "keymark",
+  "cop_polynom": {
+    "p1": -89.204479,
+    "p2": -0.109127,
+    "p3": 7.997985,
+    "p4": 89.396482
+  },
+  "cop_modellfehler_prozent": 16.6,
+  "generisch": false,
+  "spreizung_min_gueltig_k": 2.0,
+  "waermetraeger_faktor": 1.163,
+  "gueltig_ab_c": -20.0,
+  "gueltig_bis_c": 20.0
+}
