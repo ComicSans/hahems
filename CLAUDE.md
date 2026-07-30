@@ -10,7 +10,9 @@ pump and wallbox, and is **device-agnostic**: everything is configured as a
 *role* through the UI, so no entity ID ever appears in the code.
 
 Distributed through HACS, folder-based from `custom_components/hems/`.
-Concept and phase plan: [CONCEPT.md](CONCEPT.md). User-facing docs: [README.md](README.md).
+Concept and phase plan: [CONCEPT.md](CONCEPT.md). User-facing docs: [README.md](README.md)
+as the entry point, reference material under `docs/` (`konfiguration.md`,
+`regelverhalten.md`, `diagnose.md`).
 
 ## This integration can switch real hardware
 
@@ -84,9 +86,9 @@ central promise of the integration.
 An `entity_id` at least leaves an unavailable entity behind in the registry as a
 visible sign. **Attributes are not anchored in the registry** — they change the
 moment the update lands, and a Lovelace card using `state_attr(...)` simply goes
-blank. Both kinds of rename have happened (0.6.0, 1.0.5) and both needed a
-breaking-change note at the top of the README. Do the same for any further
-rename.
+blank. Both kinds of rename have happened (0.6.0, 1.0.5) and both are recorded
+in `CHANGELOG.md`, which exists only for changes that force users to touch their
+own dashboards. Add any further rename there, with what to do about it.
 
 **The HA layer is the largest untested surface.** `coordinator.py` is the
 biggest file and carries the widest blast radius; its behaviour is verified
