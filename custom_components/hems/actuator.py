@@ -263,11 +263,14 @@ class Actuator:
         if h.silent_switch_entity and plan.heizung.leise_empfohlen is not None:
             await self._turn(h.silent_switch_entity, plan.heizung.leise_empfohlen)
 
-        # Saison-Statistik-Richtung (optional): heizen/kuehlen/aus.
+        # Saison-Statistik-Richtung (optional): heizen/kuehlen/aus. select_option
+        # auf der echten Domain des Entitys — season_select_entity darf ein
+        # `select` oder ein `input_select` sein (beide bieten select_option); der
+        # feste "input_select"-Aufruf schlug auf einem `select` lautlos fehl.
         if h.season_select_entity and plan.heizung.modus in ("heizen", "kuehlen", "aus"):
             if self._state(h.season_select_entity) != plan.heizung.modus:
                 await self._call(
-                    "input_select",
+                    h.season_select_entity.split(".")[0],
                     "select_option",
                     h.season_select_entity,
                     option=plan.heizung.modus,
