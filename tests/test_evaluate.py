@@ -11,6 +11,7 @@ from analysis.types import (
     GRUND_OK,
     GRUND_SPREIZUNG_ZU_KLEIN,
     Messwert,
+    TaktZustand,
 )
 from conftest import PRESET_DIR
 
@@ -166,6 +167,34 @@ def test_datenblattvergleich_braucht_messguete_und_historie():
     voll = [(t, 24.0 + (15.0 - t) * 0.8) for t in (-10.0 + i * 0.05 for i in range(400))]
     mit_historie = evaluate.analysiere(_eingang(tagesbild=bild, kurven_punkte=voll))
     assert mit_historie.hinweise.effizienz_unter_erwartung
+
+
+def test_taktzaehler_werden_ueber_mehrere_laeufe_fortgeschrieben():
+    # Die Auswertung bleibt zustandslos: der Zaehlerstand geht hinein und
+    # kommt fortgeschrieben wieder heraus.
+    takt = None
+    for i, hz in enumerate((0.0, 40.0, 40.0, 2.0, 40.0)):
+        eingang = _eingang(
+            messwert=Messwert(ts=i * 60.0, p_el_w=1400.0, verdichter_hz=hz)
+        )
+        if takt is not None:
+            eingang.takt = takt
+        takt = evaluate.analysiere(eingang).takt
+
+    assert takt.starts == 2
+    assert takt.laufzeit_s == pytest.approx(120.0)
+
+
+def test_mittlere_laufzeit_wird_mitgeliefert():
+    eingang = _eingang(messwert=Messwert(ts=0.0, verdichter_hz=40.0, p_el_w=1400.0))
+    eingang.takt = TaktZustand(laeuft=True, starts=4, laufzeit_s=4800.0, letzter_ts=0.0)
+    assert evaluate.analysiere(eingang).laufzeit_mittel_min == pytest.approx(20.0)
+
+
+def test_datenbasis_der_empfehlung_ist_direkt_erreichbar():
+    voll = [(t, 24.0 + (15.0 - t) * 0.8) for t in (-10.0 + i * 0.05 for i in range(400))]
+    a = evaluate.analysiere(_eingang(kurven_punkte=voll))
+    assert a.datenbasis_empfehlung == a.kurve.datenbasis == DATENBASIS_BELASTBAR
 
 
 def test_leerer_eingang_stuerzt_nicht_ab():

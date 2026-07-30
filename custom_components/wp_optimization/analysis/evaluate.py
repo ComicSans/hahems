@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import curve, hints, presets, thermal
+from . import curve, cycling, hints, presets, thermal
 from .types import (
     DATENBASIS_BELASTBAR,
     DATENBASIS_KEINE,
@@ -17,6 +17,7 @@ from .types import (
     HinweisZustand,
     Messwert,
     Preset,
+    TaktZustand,
     schlechtere_datenbasis,
 )
 
@@ -31,6 +32,10 @@ class AnalyseEingang:
     messwert: Messwert
     preset: Preset
     hinweise: HinweisZustand = field(default_factory=HinweisZustand)
+    # Fortgeschriebener Verdichterzustand. Kommt herein und geht als Teil der
+    # Analyse wieder heraus — die Auswertung selbst bleibt zustandslos, das
+    # Halten uebernimmt die aufrufende Schicht.
+    takt: TaktZustand = field(default_factory=TaktZustand)
     tagesbild: hints.Tagesbild = field(default_factory=hints.Tagesbild)
     # Stundenpaare aus der Langzeitstatistik.
     verlust_punkte: list[tuple[float, float]] = field(default_factory=list)
@@ -73,6 +78,8 @@ def analysiere(eingang: AnalyseEingang) -> Analyse:
     if cop_ist is not None and cop_soll:
         abweichung = (cop_ist - cop_soll) / cop_soll * 100.0
 
+    takt = cycling.fortschreiben(eingang.takt, m)
+
     verlust = curve.waermeverlust(eingang.verlust_punkte)
     heizgrenze = verlust[1] if verlust else None
     empfehlung = curve.empfiehl_kurve(eingang.kurven_punkte, heizgrenze)
@@ -105,6 +112,10 @@ def analysiere(eingang: AnalyseEingang) -> Analyse:
         kurve=empfehlung,
         hinweise=hints.bewerte(eingang.hinweise, tagesbild),
         datenbasis=basis,
+        takt=takt,
+        laufzeit_mittel_min=_gerundet(
+            cycling.mittlere_laufzeit_min(takt.starts, takt.laufzeit_s), 1
+        ),
     )
 
 

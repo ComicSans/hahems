@@ -160,6 +160,19 @@ class Analyse:
     kurve: Kurvenempfehlung = field(default_factory=Kurvenempfehlung)
     hinweise: HinweisZustand = field(default_factory=HinweisZustand)
     datenbasis: str = DATENBASIS_KEINE
+    # Fortgeschriebene Zaehler; die aufrufende Schicht haelt sie und gibt sie
+    # beim naechsten Lauf wieder herein.
+    takt: TaktZustand = field(default_factory=TaktZustand)
+    laufzeit_mittel_min: float | None = None
+
+    @property
+    def datenbasis_empfehlung(self) -> str:
+        """Datenbasis der Heizkurvenempfehlung.
+
+        Eigene Groesse neben `datenbasis`: die eine sagt, wie sauber gerade
+        gemessen wird, die andere, wie lange schon beobachtet wurde.
+        """
+        return self.kurve.datenbasis
 
 
 def latch(aktiv: bool, wert: float, on: float, off: float) -> bool:

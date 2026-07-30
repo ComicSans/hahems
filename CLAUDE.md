@@ -109,3 +109,10 @@ Kontraste nach WCAG AA auch im dunklen Erscheinungsbild.
 Die HA-Schicht: Konfigurationsdialog, Entities, Koordinator mit Ringpuffer,
 Lovelace-Karte. `config_flow` steht im Manifest bewusst auf `false`, solange
 es keinen Dialog gibt.
+
+Zwei Punkte, die dabei leicht untergehen: Die Taktzähler kommen als
+`TaktZustand` aus jedem Auswertelauf heraus und müssen über Neustarts hinweg
+gehalten werden — ein Zähler, der bei jedem Neustart auf null fällt, ist als
+`total_increasing` schlimmer als keiner. Und `Tagesbild` wird derzeit von
+nichts befüllt; die Verdichtung über Tage ist Aufgabe der HA-Schicht, die
+dafür aus der Langzeitstatistik zurückliest.
