@@ -250,7 +250,8 @@
           "mode_cool_option": "Mode-select option for cooling (optional)",
           "mode_off_option": "Mode-select option for off (only with a mode select)",
           "silent_switch_entity": "Silent-mode switch (optional)",
-          "season_select_entity": "Season-direction input_select (optional)"
+          "season_select_entity": "Season-direction input_select (optional)",
+          "fault_entity": "Fault/error entity (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -276,7 +277,8 @@
           "mode_cool_option": "The select option that means cooling (e.g. \"Kühlen\"). Leave empty for heat-only devices.",
           "mode_off_option": "The select option that means off / hot-water-only (e.g. \"Aus/nur Warmwasser\"), written when HEMS recommends off. Only with a select control.",
           "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
-          "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch."
+          "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch.",
+          "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing."
         }
       }
     },
@@ -666,7 +668,8 @@
           "mode_cool_option": "Mode-select option for cooling (optional)",
           "mode_off_option": "Mode-select option for off (only with a mode select)",
           "silent_switch_entity": "Silent-mode switch (optional)",
-          "season_select_entity": "Season-direction input_select (optional)"
+          "season_select_entity": "Season-direction input_select (optional)",
+          "fault_entity": "Fault/error entity (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -692,7 +695,8 @@
           "mode_cool_option": "The select option that means cooling (e.g. \"Kühlen\"). Leave empty for heat-only devices.",
           "mode_off_option": "The select option that means off / hot-water-only (e.g. \"Aus/nur Warmwasser\"), written when HEMS recommends off. Only with a select control.",
           "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
-          "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch."
+          "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch.",
+          "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing."
         }
       },
       "edit_heating": {
@@ -722,7 +726,8 @@
           "mode_cool_option": "Mode-select option for cooling (optional)",
           "mode_off_option": "Mode-select option for off (only with a mode select)",
           "silent_switch_entity": "Silent-mode switch (optional)",
-          "season_select_entity": "Season-direction input_select (optional)"
+          "season_select_entity": "Season-direction input_select (optional)",
+          "fault_entity": "Fault/error entity (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -748,7 +753,8 @@
           "mode_cool_option": "The select option that means cooling (e.g. \"Kühlen\"). Leave empty for heat-only devices.",
           "mode_off_option": "The select option that means off / hot-water-only (e.g. \"Aus/nur Warmwasser\"), written when HEMS recommends off. Only with a select control.",
           "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
-          "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch."
+          "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch.",
+          "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing."
         }
       }
     },
@@ -801,6 +807,20 @@
       "ev_force": {
         "name": "Force EV charging"
       }
+    }
+  },
+  "issues": {
+    "wp_stoerung": {
+      "title": "Heat pump {name}: fault reported",
+      "description": "The heat pump “{name}” reports a fault (code/status: {code}) via {entity}. Please check the unit."
+    },
+    "stoerung_quelle_weg": {
+      "title": "Heat pump {name}: fault signal unavailable",
+      "description": "The fault entity “{entity}” of heat pump “{name}” is unavailable — a real fault would go unnoticed right now. Please check the connection."
+    },
+    "config_fehler": {
+      "title": "HEMS: configuration error ({anzahl})",
+      "description": "Auto mode would fail with the current configuration:\n{fehler}"
     }
   }
 }

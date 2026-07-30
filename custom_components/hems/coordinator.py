@@ -4,8 +4,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
+from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import (
     EventStateChangedData,
     async_track_state_change_event,
@@ -14,7 +16,12 @@ from homeassistant.helpers.sun import get_astral_event_date, get_astral_event_ne
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
+from .actuator import Actuator
+from .changelog import ChangeLog, decision_snapshot, diff_snapshots
+from .config_check import ConfigCheck, check_config
 from .const import (
+    ALERT_CHANNELS,
+    ALERT_UNAVAILABLE,
     CONF_BASELINE_W,
     CONF_DEVICES,
     CONF_FREE_H,
@@ -45,13 +52,10 @@ from .const import (
     SALDO_JUMP_W,
     SWITCH_LEARN_FLOOR_HEAT_W,
     SWITCH_LEARN_FLOOR_W,
-    WEATHER_CONDITION_FACTORS,
     WAERMEPUMPE_MODEL_DAYS,
     WAERMEPUMPE_MODEL_MIN_HOURS,
+    WEATHER_CONDITION_FACTORS,
 )
-from .actuator import Actuator
-from .changelog import ChangeLog, decision_snapshot, diff_snapshots
-from .config_check import ConfigCheck, check_config
 from .models import DeviceRegistry, parse_devices
 from .planner import (
     block_windows,
@@ -61,6 +65,8 @@ from .planner import (
     weekly_windows,
 )
 from .power_memory import PowerMemory
+from .strategies.alerts import Alert, FaultLatch, FaultSignal
+from .strategies.alerts import evaluate as evaluate_alerts
 from .strategies.switchable import lern_leistung
 from .strategies.types import (
     HeatingState,
@@ -534,6 +540,13 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._prev_mode: str = MODE_OBSERVE
         # Signatur des letzten Config-Checks, damit nur bei Änderung geloggt wird.
         self._check_signature: tuple | None = None
+        # Störungsmeldungen: entprellte Latch-Zustände je Heizkreis-Rolle
+        # (in-memory; nach Neustart neu aufgebaut, der Reconcile ist trotzdem
+        # restart-fest), Signatur der zuletzt zugestellten Meldungen (verhindert
+        # Zyklus-Lärm), und die aktiven Störungen für den Push-Sensor.
+        self._fault_latches: dict[str, FaultLatch] = {}
+        self._alert_signature: tuple | None = None
+        self.fault_alerts: list[Alert] = []
         # Optimierungsziel und E-Auto-Zwangsladung (von Select bzw. Switch
         # gesetzt, in RestoreEntity persistiert).
         self.goal: str = GOAL_SELF_CONSUMPTION
@@ -583,6 +596,78 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
     def registry(self) -> DeviceRegistry:
         return parse_devices(self.entry.options.get(CONF_DEVICES, []))
 
+    def _fault_signals(self, reg: DeviceRegistry) -> list[FaultSignal]:
+        """Rohsignale der als Störungsquelle konfigurierten Heizkreis-Entitäten
+        ablesen; fehlt die Entität, geht raw=None als „unbestimmt" durch."""
+        signals: list[FaultSignal] = []
+        for h in reg.heatings:
+            if not h.fault_entity:
+                continue
+            st = self.hass.states.get(h.fault_entity)
+            signals.append(
+                FaultSignal(
+                    role_id=h.id,
+                    role_name=h.name,
+                    entity_id=h.fault_entity,
+                    domain=h.fault_entity.split(".")[0],
+                    raw=st.state if st else None,
+                )
+            )
+        return signals
+
+    def _deliver_alerts(self, reg: DeviceRegistry, config_errors: list[str]) -> None:
+        """Meldungen bewerten und über ihre Kanäle abgleichen. Reconcile über
+        die volle Kandidatenmenge (aktiv → anlegen, inaktiv → löschen), damit es
+        ohne persistierten Zustand restart-fest bleibt."""
+        result = evaluate_alerts(
+            self._fault_signals(reg), config_errors, self._fault_latches
+        )
+        self._fault_latches = result.latches
+        # Push-Sensor spiegelt die aktiven Meldungen mit „sensor"-Kanal.
+        self.fault_alerts = [
+            a
+            for a in result.alerts
+            if a.active and "sensor" in ALERT_CHANNELS.get(a.severity, ())
+        ]
+        # Nur bei Änderung zustellen: eine daueraktive Störung soll nicht jede
+        # Minute die Notification neu hochziehen, und eine weggeklickte Meldung
+        # nicht sofort zurückkommen. Nach Neustart ist die Signatur leer, der
+        # erste Zyklus reconcilet die volle Menge.
+        sig = tuple(
+            (a.key, a.active, tuple(sorted(a.placeholders.items())))
+            for a in result.alerts
+        )
+        if sig == self._alert_signature:
+            return
+        self._alert_signature = sig
+        for a in result.alerts:
+            channels = ALERT_CHANNELS.get(a.severity, ())
+            slug = f"{DOMAIN}_{a.key.replace(':', '_')}"
+            if a.active:
+                if "repair" in channels:
+                    ir.async_create_issue(
+                        self.hass,
+                        DOMAIN,
+                        slug,
+                        is_fixable=False,
+                        severity=(
+                            ir.IssueSeverity.WARNING
+                            if a.severity == ALERT_UNAVAILABLE
+                            else ir.IssueSeverity.ERROR
+                        ),
+                        translation_key=a.translation_key,
+                        translation_placeholders=a.placeholders,
+                    )
+                if "notify" in channels:
+                    persistent_notification.async_create(
+                        self.hass, a.message, title=a.title, notification_id=slug
+                    )
+            else:
+                if "repair" in channels:
+                    ir.async_delete_issue(self.hass, DOMAIN, slug)
+                if "notify" in channels:
+                    persistent_notification.async_dismiss(self.hass, slug)
+
     def _tracked_entities(self) -> set[str]:
         """Alle Quell-Entitäten, deren Verfügbarwerden eine Neurechnung auslöst."""
         reg = self.registry
@@ -603,7 +688,11 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             if t.temp_entity:
                 ids.add(t.temp_entity)
         for h in reg.heatings:
-            ids.update(e for e in (h.outdoor_temp_entity, h.demand_entity) if e)
+            ids.update(
+                e
+                for e in (h.outdoor_temp_entity, h.demand_entity, h.fault_entity)
+                if e
+            )
         for s in reg.switchables:
             ids.update(e for e in (s.switch_entity, s.power_entity) if e)
         for m in reg.modulateds:
@@ -1203,6 +1292,15 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 _LOGGER.warning("HEMS-Config-Fehler: %s", msg)
             for msg in data.config_check.warnings:
                 _LOGGER.info("HEMS-Config-Warnung: %s", msg)
+
+        # Störungs-/Warnmeldungen an den Nutzer (Repair-Issue, Notification,
+        # Push-Sensor) — Bewertung HA-frei in strategies/alerts, Zustellung hier.
+        # Defensiv gekapselt: eine Meldung ist optional und darf nie den ganzen
+        # Update-Zyklus reißen (sonst gingen alle HEMS-Entitäten auf unavailable).
+        try:
+            self._deliver_alerts(reg, data.config_check.errors)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("HEMS: Zustellung der Störungsmeldungen fehlgeschlagen")
 
         data.lastprofil_quelle = self._load_model.profile_source
         data.lastprofil = profile_rows(

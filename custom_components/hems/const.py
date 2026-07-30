@@ -266,3 +266,46 @@ WEATHER_CONDITION_FACTORS = {
     "snowy-rainy": 0.15,
     "exceptional": 0.5,
 }
+
+# Störungs-/Warnmeldungen an den Nutzer (Repair-Issue, persistente Notification,
+# Push-Sensor). Reine Bewertung in strategies/alerts.py, Zustellung im
+# Coordinator. Schweregrade steuern, über welche Kanäle eine Meldung läuft:
+#  • FAULT   — echte WP-Betriebsstörung: Push-Sensor + Notification + Repair.
+#  • ERROR   — Config-Fehler (Auto-Modus würde scheitern): Repair (zusätzlich
+#              zum bestehenden Log + binary_sensor.hems_konfiguration).
+#  • WARNING — Config-Warnung: bleibt Sensor + Log, kein neuer Kanal (Setup-
+#              Thema, kein Betriebsalarm).
+ALERT_FAULT = "fault"
+ALERT_ERROR = "error"
+ALERT_WARNING = "warning"
+ALERT_UNAVAILABLE = "unavailable"  # Störungs-Entität nicht erreichbar (sanft)
+
+# Schweregrad → Zustellkanäle. Policy „nach Schweregrad": Betriebsalarme (FAULT)
+# pushen und landen als Repair, Config-Fehler (ERROR) werden Repair, die
+# Nichterreichbarkeit der Störungs-Quelle (UNAVAILABLE) nur ein sanftes Repair
+# ohne Push. Config-Warnungen tauchen hier bewusst nicht auf — sie bleiben
+# Sensor + Log. „sensor" heißt: fließt in den Push-Sensor binary_sensor.hems_
+# stoerung ein (Quelle für die Nutzer-Automation aufs Handy).
+ALERT_CHANNELS = {
+    ALERT_FAULT: ("repair", "notify", "sensor"),
+    ALERT_ERROR: ("repair",),
+    ALERT_UNAVAILABLE: ("repair",),
+}
+
+# WP-Störungsmeldung: die als Störungs-Entität konfigurierte Rolle liefert das
+# Rohsignal — ein binary_sensor (on = Störung) oder ein sensor (Wert ≠ 0/„ok" =
+# Störung; der Rohwert ist der Fehlercode und wandert in die Meldung). Entprellt
+# über aufeinanderfolgende Zyklen, weil die Modbus-/ESPHome-Strecke real für
+# einzelne Polls ausfällt und ein einzelner Aussetzer keinen Push auslösen darf.
+# Asymmetrisch: langsamer an (eine echte Störung hält an), schneller wieder aus
+# (eine behobene Störung soll den Alarm zügig räumen). `unavailable`/`unknown`
+# ist ein dritter Zustand — er hält nur die letzte Wertung und meldet die
+# fehlende Erreichbarkeit über einen eigenen, sanfteren Kanal (Repair statt
+# Push), statt als Störung durchzuschlagen.
+FAULT_DEBOUNCE_ON = 3  # Zyklen mit Störsignal, bis die Meldung greift
+FAULT_DEBOUNCE_OFF = 5  # störungsfreie Zyklen, bis sie wieder verschwindet
+# Rohwerte eines sensor-Störsignals, die als „keine Störung" gelten (case-
+# insensitiv). Alles andere (ein Fehlercode, „fault", „error") ist eine Störung.
+FAULT_OK_VALUES = ("0", "0.0", "ok", "none", "no_fault", "normal", "off", "false")
+# Sonderzustände einer Entität, die Nichterreichbarkeit bedeuten (kein Störwert).
+STATE_UNAVAILABLE_VALUES = ("unavailable", "unknown", "none", "")

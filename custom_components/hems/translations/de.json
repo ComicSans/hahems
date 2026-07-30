@@ -250,7 +250,8 @@
           "mode_cool_option": "Select-Option für Kühlen (optional)",
           "mode_off_option": "Select-Option für Aus (nur bei einem Modus-Select)",
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
-          "season_select_entity": "Saison-Richtung input_select (optional)"
+          "season_select_entity": "Saison-Richtung input_select (optional)",
+          "fault_entity": "Störungs-/Fehler-Entität (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -276,7 +277,8 @@
           "mode_cool_option": "Die Select-Option, die Kühlen bedeutet (z. B. „Kühlen“). Bei reinen Heizgeräten leer lassen.",
           "mode_off_option": "Die Select-Option, die Aus / nur Warmwasser bedeutet (z. B. „Aus/nur Warmwasser“), wird geschrieben, wenn HEMS Aus empfiehlt. Nur bei einer Select-Steuerung.",
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
-          "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht."
+          "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht.",
+          "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts."
         }
       }
     },
@@ -666,7 +668,8 @@
           "mode_cool_option": "Select-Option für Kühlen (optional)",
           "mode_off_option": "Select-Option für Aus (nur bei einem Modus-Select)",
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
-          "season_select_entity": "Saison-Richtung input_select (optional)"
+          "season_select_entity": "Saison-Richtung input_select (optional)",
+          "fault_entity": "Störungs-/Fehler-Entität (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -692,7 +695,8 @@
           "mode_cool_option": "Die Select-Option, die Kühlen bedeutet (z. B. „Kühlen“). Bei reinen Heizgeräten leer lassen.",
           "mode_off_option": "Die Select-Option, die Aus / nur Warmwasser bedeutet (z. B. „Aus/nur Warmwasser“), wird geschrieben, wenn HEMS Aus empfiehlt. Nur bei einer Select-Steuerung.",
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
-          "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht."
+          "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht.",
+          "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts."
         }
       },
       "edit_heating": {
@@ -722,7 +726,8 @@
           "mode_cool_option": "Select-Option für Kühlen (optional)",
           "mode_off_option": "Select-Option für Aus (nur bei einem Modus-Select)",
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
-          "season_select_entity": "Saison-Richtung input_select (optional)"
+          "season_select_entity": "Saison-Richtung input_select (optional)",
+          "fault_entity": "Störungs-/Fehler-Entität (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -748,7 +753,8 @@
           "mode_cool_option": "Die Select-Option, die Kühlen bedeutet (z. B. „Kühlen“). Bei reinen Heizgeräten leer lassen.",
           "mode_off_option": "Die Select-Option, die Aus / nur Warmwasser bedeutet (z. B. „Aus/nur Warmwasser“), wird geschrieben, wenn HEMS Aus empfiehlt. Nur bei einer Select-Steuerung.",
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
-          "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht."
+          "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht.",
+          "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts."
         }
       }
     },
@@ -801,6 +807,20 @@
       "ev_force": {
         "name": "E-Auto Zwangsladung"
       }
+    }
+  },
+  "issues": {
+    "wp_stoerung": {
+      "title": "Wärmepumpe {name}: Störung gemeldet",
+      "description": "Die Wärmepumpe „{name}“ meldet eine Störung (Code/Status: {code}) über {entity}. Bitte die Anlage prüfen."
+    },
+    "stoerung_quelle_weg": {
+      "title": "Wärmepumpe {name}: Störungsmeldung nicht verfügbar",
+      "description": "Die Störungs-Entität „{entity}“ der Wärmepumpe „{name}“ ist nicht erreichbar — eine echte Störung würde gerade nicht erkannt. Bitte die Anbindung prüfen."
+    },
+    "config_fehler": {
+      "title": "HEMS: Konfigurationsfehler ({anzahl})",
+      "description": "Der Auto-Modus würde mit der aktuellen Konfiguration scheitern:\n{fehler}"
     }
   }
 }

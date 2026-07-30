@@ -141,6 +141,7 @@ Felder ohne Erklärung sind selbsterklärend (z. B. reine Namen/Labels).
 | **Modus-Optionen (nur bei Select): Heizen / Kühlen / Aus** | Klartext-Optionen des Modus-Select, die HEMS für heizen/kühlen/aus schreibt (z. B. „Heizen“, „Kühlen“, „Aus/nur Warmwasser“). Müssen exakt echten Optionen des Select entsprechen. Kühlen darf bei reinen Heizgeräten leer bleiben. |
 | **Schalter Flüsterbetrieb (optional)** | Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen. |
 | **Saison-Richtung input_select (optional)** | Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht. |
+| **Störungs-/Fehler-Entität (optional)** | Optionaler `binary_sensor` (an = Störung) oder `sensor`, dessen Rohwert ≠ `0`/`ok` als Fehlercode gilt (z. B. ein Modbus-Fehlerregister der Wärmepumpe). HEMS überwacht ihn und meldet Betriebsstörungen an dich — steuert nichts. Siehe [Störungs- und Warnmeldungen](#störungs--und-warnmeldungen). |
 
 ### Schaltbare Last
 
@@ -555,6 +556,58 @@ Alles Weitere steht in den Attributen:
   Automations-Referenzen intern nicht hergibt).
 
 Fehler und Warnungen werden zusätzlich bei Änderung ins Log geschrieben.
+
+## Störungs- und Warnmeldungen
+
+Neben dem Config-Sensor stellt HEMS aktive Störungen und harte Fehler über drei
+Kanäle zu — **nach Schweregrad**, damit nichts doppelt lärmt:
+
+| Meldung | Push-Sensor | Notification | Reparatur |
+|---|:---:|:---:|:---:|
+| **WP-Betriebsstörung** (Störungs-Entität meldet einen Fehler) | ✓ | ✓ | ✓ |
+| **Störungsquelle nicht erreichbar** (Störungs-Entität `unavailable`) | – | – | ✓ (Warnung) |
+| **Konfigurationsfehler** (Auto-Modus würde scheitern) | – | – | ✓ |
+| **Konfigurationswarnung** | – | – | – *(bleibt Config-Sensor + Log)* |
+
+- **Reparatur** — ein Eintrag unter *Einstellungen → Reparaturen*. Erscheint und
+  verschwindet automatisch mit dem Zustand (Reconcile jeden Zyklus, restart-fest).
+- **Notification** — eine persistente Meldung in der HA-Glocke.
+- **Push-Sensor** — `binary_sensor.hems_warmepumpen_storung` (device_class
+  `problem`), **an**, sobald eine WP eine entprellte Störung meldet. Attribute:
+  `anzahl`, `stoerungen` (je `anlage`, `code`, `meldung`) und `meldung`
+  (Ein-Zeilen-Zusammenfassung). Er ist die **Quelle für einen echten Handy-Push**.
+
+**Entprellung:** Eine Störung greift erst nach drei aufeinanderfolgenden
+Störsignalen und verschwindet erst nach fünf störungsfreien Zyklen — ein
+einzelner Modbus-/ESPHome-Aussetzer löst also keinen Fehlalarm aus. Fällt die
+Störungs-Entität selbst auf `unavailable`, gilt das als eigener, sanfter Fall
+(nur Reparatur, kein Push), statt als Störung durchzuschlagen.
+
+### Echten Push aufs Handy einrichten
+
+HEMS kann selbst nicht aufs Handy pushen — dafür braucht es eine Automation, die
+auf den Push-Sensor triggert und die
+[Mobile-App-Notification](https://www.home-assistant.io/integrations/mobile_app/)
+deines Geräts aufruft:
+
+```yaml
+automation:
+  - alias: HEMS Wärmepumpen-Störung aufs Handy
+    trigger:
+      - trigger: state
+        entity_id: binary_sensor.hems_warmepumpen_storung
+        from: "off"
+        to: "on"
+    action:
+      - action: notify.mobile_app_dein_geraet   # an dein Gerät anpassen
+        data:
+          title: "Wärmepumpe: Störung"
+          message: "{{ state_attr('binary_sensor.hems_warmepumpen_storung', 'meldung') }}"
+```
+
+> Der Entity-Slug kann je nach Instanz abweichen — die tatsächliche Entity-ID
+> unter *Entwicklerwerkzeuge → Zustände* nachsehen (nach „Wärmepumpen-Störung"
+> filtern).
 
 ## Heizkreis (Wärmepumpe)
 

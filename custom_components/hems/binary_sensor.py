@@ -1,4 +1,4 @@
-"""Binärsensoren: freie Kapazität und Config-Sanity-Check."""
+"""Binärsensoren: freie Kapazität, Config-Sanity-Check und WP-Störung."""
 from __future__ import annotations
 
 from homeassistant.components.binary_sensor import (
@@ -20,7 +20,11 @@ async def async_setup_entry(
 ) -> None:
     coordinator: HemsCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        [HemsCapacityFreeSensor(coordinator), HemsConfigCheckSensor(coordinator)]
+        [
+            HemsCapacityFreeSensor(coordinator),
+            HemsConfigCheckSensor(coordinator),
+            HemsFaultSensor(coordinator),
+        ]
     )
 
 
@@ -93,4 +97,46 @@ class HemsConfigCheckSensor(
             "ueberlappung": check.overlaps,
             "hinweise": check.info,
             "ueberlappungspruefung": "ok" if check.scan_ok else "nicht verfügbar",
+        }
+
+
+class HemsFaultSensor(CoordinatorEntity[HemsCoordinator], BinarySensorEntity):
+    """An, wenn eine als Störungsquelle konfigurierte Wärmepumpe eine
+    (entprellte) Betriebsstörung meldet. Als Push-Quelle gedacht: eine
+    Nutzer-Automation triggert auf diesen Sensor und ruft `notify.mobile_app_…`.
+    Die einzelnen Störungen (Anlage, Code, Klartext) stehen als Attribute."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Wärmepumpen-Störung"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, coordinator: HemsCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_waermepumpen_stoerung"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name="HEMS",
+            manufacturer="Tobias Reithmeier",
+            model="HEMS Planner",
+        )
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self.coordinator.fault_alerts)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        alerts = self.coordinator.fault_alerts
+        return {
+            "anzahl": len(alerts),
+            "stoerungen": [
+                {
+                    "anlage": a.placeholders.get("name", ""),
+                    "code": a.placeholders.get("code", ""),
+                    "meldung": a.message,
+                }
+                for a in alerts
+            ],
+            # Ein-Zeilen-Zusammenfassung, direkt für die Push-Nachricht nutzbar.
+            "meldung": " | ".join(a.title for a in alerts),
         }

@@ -151,6 +151,10 @@ class HeatingCircuit:
     mode_off_option: str | None = None
     silent_switch_entity: str | None = None
     season_select_entity: str | None = None
+    # Optionale Störungsquelle für Betriebsalarme (Push/Notification/Repair):
+    # ein binary_sensor (on = Störung) oder ein sensor, dessen Rohwert ≠ „ok"
+    # als Fehlercode gilt. Rein informativ — steuert nichts, wird nur überwacht.
+    fault_entity: str | None = None
     heat_on_c: float = DEFAULT_HEAT_ON_C
     heat_off_c: float = DEFAULT_HEAT_OFF_C
     cool_on_c: float = DEFAULT_COOL_ON_C
