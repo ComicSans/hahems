@@ -282,6 +282,11 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "sommersperre": d.plan.heizung.sommer_sperre,
             "frostschutz": d.plan.heizung.frostschutz,
             "leise_empfohlen": d.plan.heizung.leise_empfohlen,
+            # Solange das an ist, stellt HEMS am Heizkreis nichts: die Anlage
+            # führt den Vorlauf-Soll für die Speicherladung selbst. Empfehlung
+            # und Ist dürfen dann auseinanderlaufen; das ist kein Fehlzustand,
+            # und dieses Attribut ist der Beleg dafür.
+            "warmwasserbereitung_aktiv": d.plan.heizung.ww_bereitung,
             # Gelerntes Verbrauchsmodell für die Bedarfsprognose
             "verbrauchsmodell": d.waermepumpe_modell,
         }

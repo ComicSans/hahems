@@ -251,7 +251,8 @@
           "mode_off_option": "Select-Option für Aus (nur bei einem Modus-Select)",
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
           "season_select_entity": "Saison-Richtung input_select (optional)",
-          "fault_entity": "Störungs-/Fehler-Entität (optional)"
+          "fault_entity": "Störungs-/Fehler-Entität (optional)",
+          "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -278,7 +279,8 @@
           "mode_off_option": "Die Select-Option, die Aus / nur Warmwasser bedeutet (z. B. „Aus/nur Warmwasser“), wird geschrieben, wenn HEMS Aus empfiehlt. Nur bei einer Select-Steuerung.",
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
           "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht.",
-          "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts."
+          "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts.",
+          "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert."
         }
       }
     },
@@ -669,7 +671,8 @@
           "mode_off_option": "Select-Option für Aus (nur bei einem Modus-Select)",
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
           "season_select_entity": "Saison-Richtung input_select (optional)",
-          "fault_entity": "Störungs-/Fehler-Entität (optional)"
+          "fault_entity": "Störungs-/Fehler-Entität (optional)",
+          "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -696,7 +699,8 @@
           "mode_off_option": "Die Select-Option, die Aus / nur Warmwasser bedeutet (z. B. „Aus/nur Warmwasser“), wird geschrieben, wenn HEMS Aus empfiehlt. Nur bei einer Select-Steuerung.",
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
           "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht.",
-          "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts."
+          "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts.",
+          "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert."
         }
       },
       "edit_heating": {
@@ -727,7 +731,8 @@
           "mode_off_option": "Select-Option für Aus (nur bei einem Modus-Select)",
           "silent_switch_entity": "Schalter Flüsterbetrieb (optional)",
           "season_select_entity": "Saison-Richtung input_select (optional)",
-          "fault_entity": "Störungs-/Fehler-Entität (optional)"
+          "fault_entity": "Störungs-/Fehler-Entität (optional)",
+          "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -754,7 +759,8 @@
           "mode_off_option": "Die Select-Option, die Aus / nur Warmwasser bedeutet (z. B. „Aus/nur Warmwasser“), wird geschrieben, wenn HEMS Aus empfiehlt. Nur bei einer Select-Steuerung.",
           "silent_switch_entity": "Optionaler Schalter/Input_boolean, den HEMS bei knappem Überschuss einschaltet, um die Wärmepumpe im Silent-Modus laufen zu lassen.",
           "season_select_entity": "Optionaler Input_select/Select, mit dem HEMS eine Wärmepumpe zwischen Heiz- und Kühlrichtung umschaltet, falls dein Gerät einen expliziten Saison-Umschalter braucht.",
-          "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts."
+          "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts.",
+          "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert."
         }
       }
     },

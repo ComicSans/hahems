@@ -155,6 +155,15 @@ class HeatingCircuit:
     # ein binary_sensor (on = Störung) oder ein sensor, dessen Rohwert ≠ „ok"
     # als Fehlercode gilt. Rein informativ — steuert nichts, wird nur überwacht.
     fault_entity: str | None = None
+    # Optionale Rückmeldung „die Anlage bereitet gerade Warmwasser“ (on = Ladung
+    # läuft): binary_sensor/switch/input_boolean. Solange sie an ist, lässt HEMS
+    # den Heizkreis in Ruhe: Viele Wärmepumpen heben den Vorlauf-Sollwert
+    # während der Speicherladung selbst an und schreiben gegen jeden Wert an,
+    # den HEMS setzt (Schreib-Pingpong). Bewusst NICHT aus dem Betriebsmodus
+    # oder der eigenen WW-Empfehlung abgeleitet: die Anlage entscheidet
+    # autonom, wann sie lädt, auch im Heiz- oder Kühlbetrieb. Ohne dieses
+    # Entity bleibt das Verhalten unverändert.
+    dhw_active_entity: str | None = None
     heat_on_c: float = DEFAULT_HEAT_ON_C
     heat_off_c: float = DEFAULT_HEAT_OFF_C
     cool_on_c: float = DEFAULT_COOL_ON_C

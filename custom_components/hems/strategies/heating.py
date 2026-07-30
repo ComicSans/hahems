@@ -22,9 +22,15 @@ def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
     die Frostschwelle (mit eigener Hysterese), wird Heizen erzwungen, damit der
     Heizkreis in den Sperrmonaten bei Spätfrost nicht einfriert. Der Vorlauf
     bleibt dabei auf dem Minimum — Ziel ist Umwälzung, nicht Komfort.
+
+    Die Warmwasser-Rückmeldung (optionale Rolle) wird nur durchgereicht: die
+    Empfehlung bleibt, was sie ist, gestellt wird in diesem Fenster nichts;
+    das entscheidet ``plan_heating_control``.
     """
     h = inp.heating
-    result = HeatingResult(name=h.name, sommer_sperre=h.heat_locked)
+    result = HeatingResult(
+        name=h.name, sommer_sperre=h.heat_locked, ww_bereitung=h.dhw_active
+    )
     t = h.outdoor_temp_c
     if t is None:
         result.modus = "unbekannt"

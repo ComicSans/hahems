@@ -690,7 +690,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         for h in reg.heatings:
             ids.update(
                 e
-                for e in (h.outdoor_temp_entity, h.demand_entity, h.fault_entity)
+                for e in (
+                    h.outdoor_temp_entity,
+                    h.demand_entity,
+                    h.fault_entity,
+                    h.dhw_active_entity,
+                )
                 if e
             )
         for s in reg.switchables:
@@ -788,6 +793,13 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             return float(state.state)
         except ValueError:
             return None
+
+    def _is_on(self, entity_id: str | None) -> bool:
+        """Ein/Aus-Rückmeldung als bool. Nicht konfiguriert, nicht vorhanden
+        oder unavailable/unknown → False: eine optionale Rückmeldung, die nicht
+        antwortet, darf nichts auslösen (fail open)."""
+        state = self._state(entity_id)
+        return state is not None and state.state == "on"
 
     def _warn_unit(self, entity_id: str, unit: str, expected: str) -> None:
         if entity_id in self._unit_warned:
@@ -1174,6 +1186,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 vlt_min_cold_c=heating_cfg.vlt_min_cold_c,
                 vlt_max_c=heating_cfg.vlt_max_c,
                 cool_vlt_c=heating_cfg.cool_vlt_c,
+                dhw_active=self._is_on(heating_cfg.dhw_active_entity),
             )
 
         modulateds = self._modulated_states(reg, now)

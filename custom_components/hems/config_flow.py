@@ -200,6 +200,9 @@ HEATING_SCHEMA = vol.Schema(
         vol.Optional("silent_switch_entity"): _entity(["switch", "input_boolean"]),
         vol.Optional("season_select_entity"): _entity(["input_select", "select"]),
         vol.Optional("fault_entity"): _entity(["binary_sensor", "sensor"]),
+        vol.Optional("dhw_active_entity"): _entity(
+            ["binary_sensor", "switch", "input_boolean"]
+        ),
         vol.Required("heat_on_c", default=DEFAULT_HEAT_ON_C): _number(
             -10, 25, "°C", 0.5
         ),

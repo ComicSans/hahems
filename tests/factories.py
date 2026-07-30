@@ -102,6 +102,7 @@ def heating(
     vlt_min_cold_c: float = 32.0,
     vlt_max_c: float = 45.0,
     cool_vlt_c: float = 18.0,
+    dhw_active: bool = False,
 ) -> P.HeatingState:
     return P.HeatingState(
         name=name,
@@ -120,6 +121,7 @@ def heating(
         vlt_min_cold_c=vlt_min_cold_c,
         vlt_max_c=vlt_max_c,
         cool_vlt_c=cool_vlt_c,
+        dhw_active=dhw_active,
     )
 
 

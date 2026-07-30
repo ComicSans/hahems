@@ -88,3 +88,29 @@ def test_regulaerer_heizbetrieb_kein_frostschutz_flag():
     assert r.modus == "heizen"
     assert r.frostschutz is False
     assert r.vlt_ziel_c == 42.0  # 40 − 1×0.8 + 50 % × 5 K
+
+
+# --- Warmwasserbereitung: die Rolle wird nur durchgereicht --------------------
+
+
+def test_ww_bereitung_wird_in_die_empfehlung_gereicht():
+    # Die Empfehlung selbst bleibt unveraendert - das Aussetzen entscheidet
+    # spaeter plan_heating_control, nicht die Strategie.
+    r = _hz(heating_state=heating(outdoor_temp_c=28.0, dhw_active=True))
+    assert r.modus == "kuehlen"
+    assert r.vlt_ziel_c == 18.0
+    assert r.ww_bereitung is True
+
+
+def test_ohne_rolle_bleibt_ww_bereitung_aus():
+    r = _hz(heating_state=heating(outdoor_temp_c=28.0))
+    assert r.ww_bereitung is False
+
+
+def test_ww_bereitung_auch_ohne_aussentemperatur():
+    # Ohne Aussentemperatur endet die Strategie frueh (Modus "unbekannt").
+    # Die Rueckmeldung muss trotzdem am Ergebnis haengen, sonst faellt das Gate
+    # genau dann aus, wenn der Temperaturfuehler ausfaellt.
+    r = _hz(heating_state=heating(outdoor_temp_c=None, dhw_active=True))
+    assert r.modus == "unbekannt"
+    assert r.ww_bereitung is True

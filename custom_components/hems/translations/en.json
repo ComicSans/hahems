@@ -251,7 +251,8 @@
           "mode_off_option": "Mode-select option for off (only with a mode select)",
           "silent_switch_entity": "Silent-mode switch (optional)",
           "season_select_entity": "Season-direction input_select (optional)",
-          "fault_entity": "Fault/error entity (optional)"
+          "fault_entity": "Fault/error entity (optional)",
+          "dhw_active_entity": "Hot-water charging feedback (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -278,7 +279,8 @@
           "mode_off_option": "The select option that means off / hot-water-only (e.g. \"Aus/nur Warmwasser\"), written when HEMS recommends off. Only with a select control.",
           "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
           "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch.",
-          "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing."
+          "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing.",
+          "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged."
         }
       }
     },
@@ -669,7 +671,8 @@
           "mode_off_option": "Mode-select option for off (only with a mode select)",
           "silent_switch_entity": "Silent-mode switch (optional)",
           "season_select_entity": "Season-direction input_select (optional)",
-          "fault_entity": "Fault/error entity (optional)"
+          "fault_entity": "Fault/error entity (optional)",
+          "dhw_active_entity": "Hot-water charging feedback (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -696,7 +699,8 @@
           "mode_off_option": "The select option that means off / hot-water-only (e.g. \"Aus/nur Warmwasser\"), written when HEMS recommends off. Only with a select control.",
           "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
           "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch.",
-          "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing."
+          "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing.",
+          "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged."
         }
       },
       "edit_heating": {
@@ -727,7 +731,8 @@
           "mode_off_option": "Mode-select option for off (only with a mode select)",
           "silent_switch_entity": "Silent-mode switch (optional)",
           "season_select_entity": "Season-direction input_select (optional)",
-          "fault_entity": "Fault/error entity (optional)"
+          "fault_entity": "Fault/error entity (optional)",
+          "dhw_active_entity": "Hot-water charging feedback (optional)"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -754,7 +759,8 @@
           "mode_off_option": "The select option that means off / hot-water-only (e.g. \"Aus/nur Warmwasser\"), written when HEMS recommends off. Only with a select control.",
           "silent_switch_entity": "Optional switch/input_boolean HEMS turns on during low-surplus periods to run the heat pump in its quiet mode.",
           "season_select_entity": "Optional input_select/select HEMS uses to switch a heat pump between heating and cooling direction, if your device needs an explicit season switch.",
-          "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing."
+          "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing.",
+          "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged."
         }
       }
     },

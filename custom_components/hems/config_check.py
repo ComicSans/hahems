@@ -165,6 +165,18 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
     # --- Heizkreis (Wärmepumpe) --------------------------------------------
     for h in reg.heatings:
         ctx = f"Heizkreis '{h.name}'"
+        # Warmwasser-Rückmeldung: reine Leserolle, deshalb kein _need: sie
+        # gehört nicht in den Overlap-Scan (eine Automation, die darauf
+        # schreibt, ist kein Konflikt mit HEMS). Antwortet sie nicht, setzt
+        # HEMS die Heizkreis-Regelung während der Ladung nicht mehr aus; das
+        # ist eine Warnung wert, aber kein Fehler; ohne die Rolle lief HEMS
+        # vorher genauso.
+        if h.dhw_active_entity and not _exists(hass, h.dhw_active_entity):
+            c.warnings.append(
+                f"{ctx}: Warmwasser-Rückmeldung {h.dhw_active_entity} existiert "
+                f"nicht: HEMS erkennt laufende Speicherladungen nicht und "
+                f"stellt den Heizkreis auch währenddessen"
+            )
         if h.control_entity:
             _mark("Wärmepumpe")
             _need(

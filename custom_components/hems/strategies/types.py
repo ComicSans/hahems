@@ -55,6 +55,11 @@ class HeatingState:
     vlt_min_cold_c: float
     vlt_max_c: float
     cool_vlt_c: float
+    # Die Anlage bereitet gerade Warmwasser (optionale Rolle, vom Coordinator
+    # abgelesen). Ändert die Empfehlung nicht; der Wert wird nur durchgereicht
+    # und setzt die Aktuierung aus, siehe HeatingResult.ww_bereitung. Ohne
+    # konfigurierte Rolle bleibt er False, und alles bleibt wie bisher.
+    dhw_active: bool = False
 
 
 @dataclass
@@ -242,6 +247,11 @@ class HeatingResult:
     sommer_sperre: bool = False
     leise_empfohlen: bool | None = None  # Flüsterbetrieb reicht (niedriger Vorlauf)
     frostschutz: bool = False  # Heizen nur wegen Frostschutz erzwungen (Sperre übersteuert)
+    # Die Anlage bereitet gerade Warmwasser: die Empfehlung bleibt stehen, aber
+    # HEMS stellt in diesem Fenster nichts (siehe plan_heating_control). Damit
+    # ist die Anzeige erklärbar: Empfehlung und Ist dürfen auseinanderlaufen,
+    # ohne dass etwas kaputt ist.
+    ww_bereitung: bool = False
 
 
 @dataclass
