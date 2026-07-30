@@ -74,7 +74,7 @@ HEMS meldet Warmwasser nur während des konfigurierten Fensters als „aus“.
 ## HEMS-Panel
 
 Die Integration registriert einen eigenen Eintrag **HEMS** in der Seitenleiste
-mit vier Ansichten:
+mit folgenden Ansichten:
 
 - **Übersicht** — Lastfluss- und Entladeplan-Karte
 - **Steuerung** — Betriebsmodus, Optimierungsziel und E-Auto-Zwangsladung
@@ -83,6 +83,22 @@ mit vier Ansichten:
 
 Der native Options-Flow (Einstellungen → Geräte & Dienste → HEMS →
 Konfigurieren) bleibt als gleichwertiger Weg erhalten.
+
+### Effizienz — erscheint automatisch
+
+Ist die eigenständige Integration
+[wp-optimization](https://github.com/ComicSans/wp-optimization) installiert,
+kommt ein weiterer Reiter **Effizienz** hinzu: COP gegen Datenblatt,
+Spreizung, Taktung, Wärmeverlustkoeffizient und ein Vorschlag für die
+Heizkurve. Ohne sie bleibt der Reiter aus, und HEMS ist unverändert
+vollständig.
+
+Es ist nichts zu verdrahten. HEMS erkennt die Integration über die Kennungen
+der Entity-Registry, nicht über `entity_id` — umbenannte Entities brechen die
+Erkennung deshalb nicht.
+
+Die Werte dort sind **beratend**. Geschaltet wird nichts: Steuerung passiert
+am Gerät oder über die Steuerung in HEMS.
 
 ## Lovelace-Karten
 

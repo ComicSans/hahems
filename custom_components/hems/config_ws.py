@@ -21,6 +21,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .config_flow import GENERAL_SCHEMA, ROLE_LABELS, ROLE_SCHEMAS
 from .const import CONF_DEVICES, DOMAIN
+from .partners import KONTRAKT_VERSION, entdecke
 
 _WS_REGISTERED = f"{DOMAIN}_ws_registered"
 _LABELS_CACHE = f"{DOMAIN}_field_labels"
@@ -35,6 +36,7 @@ def async_register_ws(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_remove)
     websocket_api.async_register_command(hass, ws_set_general)
     websocket_api.async_register_command(hass, ws_logs)
+    websocket_api.async_register_command(hass, ws_partner)
     hass.data[_WS_REGISTERED] = True
 
 
@@ -310,3 +312,21 @@ def ws_logs(hass, connection, msg):
     changelog = getattr(coordinator, "changelog", None)
     entries = list(changelog.entries()) if changelog is not None else []
     connection.send_result(msg["id"], {"entries": entries})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "hems/partner/get"})
+@callback
+def ws_partner(hass, connection, msg):
+    """Erkannte Partner-Integrationen samt Rollenzuordnung liefern.
+
+    Nur Lesen, deshalb ohne require_admin. Eine leere Liste ist der Normalfall
+    und kein Fehler: dann ist `wp-optimization` einfach nicht installiert und
+    das Panel blendet den Reiter aus.
+    """
+    connection.send_result(
+        msg["id"],
+        {
+            "kontrakt_version": KONTRAKT_VERSION,
+            "wp_optimization": entdecke(hass),
+        },
+    )
