@@ -157,6 +157,23 @@ In den Sperrmonaten (Standard Mai–September) wird Heizen nie empfohlen, außer
 der Frostschutz greift. Bei niedrigem Vorlauf-Soll meldet das Attribut
 `leise_empfohlen`, dass der Flüsterbetrieb der Anlage reicht.
 
+### Was `vorlauf_ziel_c` wirklich führt
+
+HEMS schreibt den Sollwert in die Größe, auf die die Anlage geregelt wird — und
+welche das ist, steht am Bedienteil, nicht in HEMS. Regelt die Anlage auf den
+Rücklauf, führt das Attribut `vorlauf_ziel_c` von `sensor.hems_heizkreis` den
+Rücklauf-Soll, und der Vorlauf liegt im Kühlbetrieb deutlich darunter. Der Name
+bleibt trotzdem, weil eine Umbenennung Lovelace-Karten leert, ohne dass eine
+unavailable gewordene Entität davon erzählt.
+
+Im Kühlbetrieb rechnet HEMS ohnehin keine Kurve: Es reicht den konfigurierten
+festen Sollwert durch, Fußpunkt, Steigung und Grenzen gelten nur fürs Heizen.
+
+Wer auf Rücklauf regelt und Flächenkühlung hat, sollte den Vorlauf im Auge
+behalten: Am 30.07.2026 lag er bei einem Rücklauf-Soll von 21 °C siebzehn
+Minuten unter dem Raumtaupunkt von 13,3 °C, mit einem Minimum von 11,4 °C in
+der Volllastphase am Taktende. Eine Taupunkt-Untergrenze kennt HEMS nicht.
+
 ### Taktschutz: Zwangspause bei zu vielen Verdichterstarts
 
 Ist die optionale Rückmeldung „Verdichter läuft“ konfiguriert, zählt HEMS deren
