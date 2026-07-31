@@ -172,7 +172,40 @@ festen Sollwert durch, Fußpunkt, Steigung und Grenzen gelten nur fürs Heizen.
 Wer auf Rücklauf regelt und Flächenkühlung hat, sollte den Vorlauf im Auge
 behalten: Am 30.07.2026 lag er bei einem Rücklauf-Soll von 21 °C siebzehn
 Minuten unter dem Raumtaupunkt von 13,3 °C, mit einem Minimum von 11,4 °C in
-der Volllastphase am Taktende. Eine Taupunkt-Untergrenze kennt HEMS nicht.
+der Volllastphase am Taktende. Dagegen hilft die Taupunkt-Untergrenze.
+
+### Taupunkt-Untergrenze im Kühlbetrieb
+
+Sind die beiden optionalen Rollen „Raumtemperatur“ und „Raumfeuchte“
+konfiguriert, rechnet HEMS daraus den Taupunkt (Magnus-Formel) und hebt den
+Kühl-Sollwert an, wenn er darunter läge. Gesenkt wird nie: Die Grenze ist eine
+Untergrenze, kein zweiter Sollwert. Beide Rollen wirken nur zusammen — einen
+Taupunkt aus Temperatur allein gibt es nicht, und mit nur einer von beiden
+bleibt die Grenze still aus. Genau davor warnt der Konfigurations-Check.
+
+Der Sicherheitsabstand ist konfigurierbar und steht auf 2 K. Er ist nötig, weil
+die Vorlauftemperatur nicht die Oberflächentemperatur ist: Estrich und Putz
+liegen dazwischen, die Oberfläche bleibt wärmer als das Wasser. Eine Grenze
+exakt auf dem Taupunkt wäre zu scharf, gar keine käme zu spät. Die Grenze wird
+auf ganze Grad **aufgerundet**, weil die Aktuierung auf ganze Grad vergleicht
+und ein halbes Grad zu warm hier billiger ist als ein halbes Grad zu kalt.
+
+Zwei Schwellen, wie überall hier: Angehoben wird, sobald die Untergrenze über
+dem Kühl-Sollwert liegt; losgelassen erst, wenn sie ein Kelvin darunter
+gefallen ist. Sonst schaltete die Anhebung mit jedem Zucken des Feuchtesensors
+ein und aus.
+
+Sichtbar ist das an drei Attributen von `sensor.hems_heizkreis`: `taupunkt_c`
+(immer gemeldet, sobald beide Rollen antworten), `taupunkt_grenze_c` (die
+Untergrenze im Kühlbetrieb) und `taupunkt_begrenzt` (die Anhebung greift
+gerade). Liegt `taupunkt_grenze_c` unter dem Kühl-Sollwert, wacht die Grenze
+nur. Außerhalb des Kühlbetriebs ruht sie ganz; beim Heizen wird der Vorlauf
+nach oben geführt, ein Taupunkt-Deckel wäre dort sinnlos. Und legt der
+Taktschutz eine Pause ein, gibt es keinen Vorlauf-Soll und damit nichts zu
+begrenzen.
+
+Ohne die beiden Rollen ändert sich nichts: Der Kühl-Vorlauf fährt auf den
+konfigurierten Sollwert, auch wenn der unter dem Taupunkt liegt.
 
 ### Taktschutz: Zwangspause bei zu vielen Verdichterstarts
 

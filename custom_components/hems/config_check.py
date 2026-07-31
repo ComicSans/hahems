@@ -184,6 +184,25 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
                 f"{ctx}: Verdichter-Rückmeldung {h.compressor_entity} existiert "
                 f"nicht: der Taktschutz zählt keine Starts und pausiert nie"
             )
+        # Raumklima für die Taupunkt-Untergrenze: ebenfalls reine Leserollen.
+        # Beide gehören zusammen — mit nur einer von beiden gibt es keinen
+        # Taupunkt, und die Grenze bleibt still aus. Das ist die Sorte Fehler,
+        # die man in der Konfiguration nicht sieht.
+        for entity, label in (
+            (h.room_temp_entity, "Raumtemperatur"),
+            (h.room_humidity_entity, "Raumfeuchte"),
+        ):
+            if entity and not _exists(hass, entity):
+                c.warnings.append(
+                    f"{ctx}: {label} {entity} existiert nicht: der Kühl-Vorlauf "
+                    f"wird nicht mehr gegen den Taupunkt begrenzt"
+                )
+        if bool(h.room_temp_entity) != bool(h.room_humidity_entity):
+            c.warnings.append(
+                f"{ctx}: nur eine der beiden Raumklima-Rollen gesetzt — der "
+                f"Taupunkt braucht Temperatur und Feuchte, die Untergrenze für "
+                f"den Kühl-Vorlauf bleibt aus"
+            )
         if h.control_entity:
             _mark("Wärmepumpe")
             _need(

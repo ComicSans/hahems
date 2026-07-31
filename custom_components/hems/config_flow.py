@@ -36,6 +36,7 @@ from .const import (
     DEFAULT_COOL_VLT_C,
     DEFAULT_CURVE_BASE_C,
     DEFAULT_CURVE_SLOPE,
+    DEFAULT_DEWPOINT_MARGIN_K,
     DEFAULT_FREE_H,
     DEFAULT_FREE_KWH,
     DEFAULT_HEAT_FROST_OFF_C,
@@ -209,6 +210,11 @@ HEATING_SCHEMA = vol.Schema(
         vol.Optional("compressor_entity"): _entity(
             ["binary_sensor", "switch", "input_boolean"]
         ),
+        vol.Optional("room_temp_entity"): _entity(device_class="temperature"),
+        vol.Optional("room_humidity_entity"): _entity(device_class="humidity"),
+        vol.Required(
+            "dewpoint_margin_k", default=DEFAULT_DEWPOINT_MARGIN_K
+        ): _number(0, 6, "K", 0.5),
         vol.Required("antitakt_starts", default=DEFAULT_ANTITAKT_STARTS): _number(
             0, 20, "Starts", 1
         ),

@@ -181,6 +181,26 @@ DEFAULT_HEAT_FROST_OFF_C = 8.0
 SILENT_VLT_ON_C = 35
 SILENT_VLT_OFF_C = 37
 
+# Taupunkt-Untergrenze im Kühlbetrieb: Unterschreitet der Vorlauf den Taupunkt
+# der Raumluft, schlägt sich an einer Flächenkühlung Wasser nieder. Gemessen am
+# 30.07.2026: 17 Minuten Vorlauf unter dem Raumtaupunkt von 13,3 °C, Minimum
+# 11,4 °C. Der Sicherheitsabstand liegt bei 2 K, weil die Vorlauftemperatur
+# nicht die Oberflächentemperatur ist — Estrich und Putz liegen dazwischen und
+# die Oberfläche bleibt einige Kelvin wärmer als das Wasser. Eine Grenze exakt
+# auf dem Taupunkt wäre deshalb zu scharf; ganz ohne Abstand fehlt die Reserve
+# für die Trägheit des Feuchtesensors.
+DEFAULT_DEWPOINT_MARGIN_K = 2.0
+# Zweite Schwelle: Einmal angehoben, bleibt der Vorlauf angehoben, bis die
+# Untergrenze diesen Betrag UNTER den Kühl-Sollwert gefallen ist. Ohne sie
+# würde der geschriebene Sollwert um die Grenze herum zwischen zwei Werten
+# springen, sobald die Raumfeuchte ein wenig schwankt.
+DEWPOINT_RELEASE_K = 1.0
+# Magnus-Koeffizienten für die Taupunktrechnung über Wasser (Sonntag 1990),
+# gültig von -45 bis +60 °C. Genauer als die oft zitierte 17.27/237.7-Fassung
+# und im hier relevanten Bereich auf besser als 0,1 K.
+MAGNUS_A = 17.62
+MAGNUS_B = 243.12
+
 # Taktschutz im Kühlbetrieb: Startet der Verdichter zu oft, legt HEMS eine
 # Zwangspause ein (Empfehlung „aus", die Anlage kommt zur Ruhe). Das begrenzt
 # die STARTRATE, nicht die Länge des einzelnen Takts: Aus vier Minuten Pause

@@ -297,6 +297,13 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
                 else None
             ),
             "verdichterstarts": d.plan.heizung.verdichterstarts,
+            # Taupunkt-Untergrenze im Kühlbetrieb: "taupunkt_grenze_c" ist der
+            # Wert, unter den der Vorlauf nicht soll (Taupunkt plus
+            # Sicherheitsabstand). Steht "taupunkt_begrenzt" an, ist der
+            # Vorlauf-Soll deshalb höher als der konfigurierte Kühlwert.
+            "taupunkt_c": d.plan.heizung.taupunkt_c,
+            "taupunkt_grenze_c": d.plan.heizung.taupunkt_grenze_c,
+            "taupunkt_begrenzt": d.plan.heizung.taupunkt_begrenzt,
             # Gelerntes Verbrauchsmodell für die Bedarfsprognose
             "verbrauchsmodell": d.waermepumpe_modell,
         }

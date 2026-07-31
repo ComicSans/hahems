@@ -254,6 +254,9 @@
           "fault_entity": "Störungs-/Fehler-Entität (optional)",
           "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)",
           "compressor_entity": "Rückmeldung Verdichter läuft (optional)",
+          "room_temp_entity": "Raumtemperatur für den Taupunkt (optional)",
+          "room_humidity_entity": "Raumfeuchte für den Taupunkt (optional)",
+          "dewpoint_margin_k": "Sicherheitsabstand zum Taupunkt",
           "antitakt_starts": "Taktschutz: Verdichterstarts je Fenster (0 = aus)",
           "antitakt_window_min": "Taktschutz: Beobachtungsfenster",
           "antitakt_pause_min": "Taktschutz: Zwangspause"
@@ -286,6 +289,9 @@
           "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts.",
           "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert.",
           "compressor_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange der Verdichter läuft. HEMS zählt daraus die Starts und legt im Kühlbetrieb eine Zwangspause ein, wenn es zu viele werden - Kurzzyklen sind Verdichterverschleiß, und die wenigsten Anlagen bieten dafür einen Stellwert. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt der Taktschutz aus.",
+          "room_temp_entity": "Optionaler Temperatursensor eines repräsentativen Raums. Zusammen mit der Raumfeuchte rechnet HEMS daraus den Taupunkt und hält den Kühl-Vorlauf darüber - an einer Flächenkühlung schlägt sich sonst Wasser auf Boden oder Wand nieder. Es wirken nur beide Felder zusammen; bleibt eines leer, gilt der Kühl-Sollwert unverändert.",
+          "room_humidity_entity": "Optionaler Feuchtesensor desselben Raums, in % relativer Feuchte. Erst zusammen mit der Raumtemperatur ergibt sich ein Taupunkt. Ohne diese Rolle bleibt die Untergrenze für den Kühl-Vorlauf aus, und der Vorlauf fährt auf den konfigurierten Kühl-Sollwert, auch wenn der darunter liegt.",
+          "dewpoint_margin_k": "Wie weit der Kühl-Vorlauf über dem Taupunkt bleiben soll. Die Vorlauftemperatur ist nicht die Oberflächentemperatur - Estrich und Putz liegen dazwischen, die Oberfläche bleibt wärmer als das Wasser. 2 K sind ein brauchbarer Anfang; 0 legt die Grenze genau auf den Taupunkt.",
           "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift im Heiz- und im Kühlbetrieb, nicht im Frostschutz.",
           "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden. Das Fenster rolliert mit: gezählt wird, was jünger als diese Spanne ist.",
           "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
@@ -682,6 +688,9 @@
           "fault_entity": "Störungs-/Fehler-Entität (optional)",
           "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)",
           "compressor_entity": "Rückmeldung Verdichter läuft (optional)",
+          "room_temp_entity": "Raumtemperatur für den Taupunkt (optional)",
+          "room_humidity_entity": "Raumfeuchte für den Taupunkt (optional)",
+          "dewpoint_margin_k": "Sicherheitsabstand zum Taupunkt",
           "antitakt_starts": "Taktschutz: Verdichterstarts je Fenster (0 = aus)",
           "antitakt_window_min": "Taktschutz: Beobachtungsfenster",
           "antitakt_pause_min": "Taktschutz: Zwangspause"
@@ -714,6 +723,9 @@
           "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts.",
           "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert.",
           "compressor_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange der Verdichter läuft. HEMS zählt daraus die Starts und legt im Kühlbetrieb eine Zwangspause ein, wenn es zu viele werden - Kurzzyklen sind Verdichterverschleiß, und die wenigsten Anlagen bieten dafür einen Stellwert. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt der Taktschutz aus.",
+          "room_temp_entity": "Optionaler Temperatursensor eines repräsentativen Raums. Zusammen mit der Raumfeuchte rechnet HEMS daraus den Taupunkt und hält den Kühl-Vorlauf darüber - an einer Flächenkühlung schlägt sich sonst Wasser auf Boden oder Wand nieder. Es wirken nur beide Felder zusammen; bleibt eines leer, gilt der Kühl-Sollwert unverändert.",
+          "room_humidity_entity": "Optionaler Feuchtesensor desselben Raums, in % relativer Feuchte. Erst zusammen mit der Raumtemperatur ergibt sich ein Taupunkt. Ohne diese Rolle bleibt die Untergrenze für den Kühl-Vorlauf aus, und der Vorlauf fährt auf den konfigurierten Kühl-Sollwert, auch wenn der darunter liegt.",
+          "dewpoint_margin_k": "Wie weit der Kühl-Vorlauf über dem Taupunkt bleiben soll. Die Vorlauftemperatur ist nicht die Oberflächentemperatur - Estrich und Putz liegen dazwischen, die Oberfläche bleibt wärmer als das Wasser. 2 K sind ein brauchbarer Anfang; 0 legt die Grenze genau auf den Taupunkt.",
           "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift im Heiz- und im Kühlbetrieb, nicht im Frostschutz.",
           "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden. Das Fenster rolliert mit: gezählt wird, was jünger als diese Spanne ist.",
           "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
@@ -750,6 +762,9 @@
           "fault_entity": "Störungs-/Fehler-Entität (optional)",
           "dhw_active_entity": "Rückmeldung Warmwasserbereitung (optional)",
           "compressor_entity": "Rückmeldung Verdichter läuft (optional)",
+          "room_temp_entity": "Raumtemperatur für den Taupunkt (optional)",
+          "room_humidity_entity": "Raumfeuchte für den Taupunkt (optional)",
+          "dewpoint_margin_k": "Sicherheitsabstand zum Taupunkt",
           "antitakt_starts": "Taktschutz: Verdichterstarts je Fenster (0 = aus)",
           "antitakt_window_min": "Taktschutz: Beobachtungsfenster",
           "antitakt_pause_min": "Taktschutz: Zwangspause"
@@ -782,6 +797,9 @@
           "fault_entity": "Optionaler binary_sensor (an = Störung) oder sensor (Wert ≠ 0/„ok“ = Fehlercode), über den HEMS Betriebsstörungen der Wärmepumpe erkennt und dich per Push/Reparatur warnt. Rein informativ — steuert nichts.",
           "dhw_active_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange die Wärmepumpe den Warmwasserspeicher lädt. Solange er an ist, lässt HEMS den Heizkreis unangetastet: Viele Wärmepumpen heben den Vorlauf-Sollwert für die Ladung selbst an und schreiben jeden Wert von HEMS wieder zurück, sodass beide sich jeden Zyklus gegenseitig überschreiben. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt das Verhalten unverändert.",
           "compressor_entity": "Optionaler binary_sensor/switch/input_boolean, der an ist, solange der Verdichter läuft. HEMS zählt daraus die Starts und legt im Kühlbetrieb eine Zwangspause ein, wenn es zu viele werden - Kurzzyklen sind Verdichterverschleiß, und die wenigsten Anlagen bieten dafür einen Stellwert. Leer lassen, wenn dein Gerät keine solche Rückmeldung hat; dann bleibt der Taktschutz aus.",
+          "room_temp_entity": "Optionaler Temperatursensor eines repräsentativen Raums. Zusammen mit der Raumfeuchte rechnet HEMS daraus den Taupunkt und hält den Kühl-Vorlauf darüber - an einer Flächenkühlung schlägt sich sonst Wasser auf Boden oder Wand nieder. Es wirken nur beide Felder zusammen; bleibt eines leer, gilt der Kühl-Sollwert unverändert.",
+          "room_humidity_entity": "Optionaler Feuchtesensor desselben Raums, in % relativer Feuchte. Erst zusammen mit der Raumtemperatur ergibt sich ein Taupunkt. Ohne diese Rolle bleibt die Untergrenze für den Kühl-Vorlauf aus, und der Vorlauf fährt auf den konfigurierten Kühl-Sollwert, auch wenn der darunter liegt.",
+          "dewpoint_margin_k": "Wie weit der Kühl-Vorlauf über dem Taupunkt bleiben soll. Die Vorlauftemperatur ist nicht die Oberflächentemperatur - Estrich und Putz liegen dazwischen, die Oberfläche bleibt wärmer als das Wasser. 2 K sind ein brauchbarer Anfang; 0 legt die Grenze genau auf den Taupunkt.",
           "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift im Heiz- und im Kühlbetrieb, nicht im Frostschutz.",
           "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden. Das Fenster rolliert mit: gezählt wird, was jünger als diese Spanne ist.",
           "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."

@@ -254,6 +254,9 @@
           "fault_entity": "Fault/error entity (optional)",
           "dhw_active_entity": "Hot-water charging feedback (optional)",
           "compressor_entity": "Compressor running feedback (optional)",
+          "room_temp_entity": "Room temperature for dew point (optional)",
+          "room_humidity_entity": "Room humidity for dew point (optional)",
+          "dewpoint_margin_k": "Safety margin above dew point",
           "antitakt_starts": "Anti-cycling: compressor starts per window (0 = off)",
           "antitakt_window_min": "Anti-cycling: observation window",
           "antitakt_pause_min": "Anti-cycling: forced pause"
@@ -286,6 +289,9 @@
           "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing.",
           "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged.",
           "compressor_entity": "Optional binary_sensor/switch/input_boolean that is on while the compressor runs. HEMS counts its starts and, in cooling mode, forces a pause once there are too many of them - short cycles wear the compressor out, and most units offer no setting for it. Leave empty if your device has no such feedback; anti-cycling then stays off.",
+          "room_temp_entity": "Optional temperature sensor of a representative room. Together with room humidity, HEMS derives the dew point from it and keeps the cooling flow above it - otherwise water condenses on floors or walls with surface cooling. Only both fields together take effect; leave one empty and the cooling setpoint applies unchanged.",
+          "room_humidity_entity": "Optional humidity sensor of the same room, in % relative humidity. Only together with room temperature does it yield a dew point. Without this role the lower limit for the cooling flow stays off, and the flow runs to the configured cooling setpoint even if that is below the dew point.",
+          "dewpoint_margin_k": "How far above the dew point the cooling flow should stay. Flow temperature is not surface temperature - screed and plaster sit in between, and the surface stays warmer than the water. 2 K is a reasonable start; 0 puts the limit exactly on the dew point.",
           "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Applies to heating and cooling alike, but never during frost protection.",
           "antitakt_window_min": "Length of the window the starts are counted in. The window rolls along: what counts is every start younger than that span.",
           "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
@@ -682,6 +688,9 @@
           "fault_entity": "Fault/error entity (optional)",
           "dhw_active_entity": "Hot-water charging feedback (optional)",
           "compressor_entity": "Compressor running feedback (optional)",
+          "room_temp_entity": "Room temperature for dew point (optional)",
+          "room_humidity_entity": "Room humidity for dew point (optional)",
+          "dewpoint_margin_k": "Safety margin above dew point",
           "antitakt_starts": "Anti-cycling: compressor starts per window (0 = off)",
           "antitakt_window_min": "Anti-cycling: observation window",
           "antitakt_pause_min": "Anti-cycling: forced pause"
@@ -714,6 +723,9 @@
           "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing.",
           "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged.",
           "compressor_entity": "Optional binary_sensor/switch/input_boolean that is on while the compressor runs. HEMS counts its starts and, in cooling mode, forces a pause once there are too many of them - short cycles wear the compressor out, and most units offer no setting for it. Leave empty if your device has no such feedback; anti-cycling then stays off.",
+          "room_temp_entity": "Optional temperature sensor of a representative room. Together with room humidity, HEMS derives the dew point from it and keeps the cooling flow above it - otherwise water condenses on floors or walls with surface cooling. Only both fields together take effect; leave one empty and the cooling setpoint applies unchanged.",
+          "room_humidity_entity": "Optional humidity sensor of the same room, in % relative humidity. Only together with room temperature does it yield a dew point. Without this role the lower limit for the cooling flow stays off, and the flow runs to the configured cooling setpoint even if that is below the dew point.",
+          "dewpoint_margin_k": "How far above the dew point the cooling flow should stay. Flow temperature is not surface temperature - screed and plaster sit in between, and the surface stays warmer than the water. 2 K is a reasonable start; 0 puts the limit exactly on the dew point.",
           "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Applies to heating and cooling alike, but never during frost protection.",
           "antitakt_window_min": "Length of the window the starts are counted in. The window rolls along: what counts is every start younger than that span.",
           "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
@@ -750,6 +762,9 @@
           "fault_entity": "Fault/error entity (optional)",
           "dhw_active_entity": "Hot-water charging feedback (optional)",
           "compressor_entity": "Compressor running feedback (optional)",
+          "room_temp_entity": "Room temperature for dew point (optional)",
+          "room_humidity_entity": "Room humidity for dew point (optional)",
+          "dewpoint_margin_k": "Safety margin above dew point",
           "antitakt_starts": "Anti-cycling: compressor starts per window (0 = off)",
           "antitakt_window_min": "Anti-cycling: observation window",
           "antitakt_pause_min": "Anti-cycling: forced pause"
@@ -782,6 +797,9 @@
           "fault_entity": "Optional binary_sensor (on = fault) or sensor (value ≠ 0/“ok” = error code) HEMS watches to detect heat-pump faults and warn you via push notification / repair issue. Informational only — it controls nothing.",
           "dhw_active_entity": "Optional binary_sensor/switch/input_boolean that is on while the heat pump is charging the hot-water tank. While it is on, HEMS leaves the heating circuit untouched: many heat pumps raise the flow setpoint themselves during a charge and write back over whatever HEMS sets, so both keep overwriting each other every cycle. Leave empty if your device has no such feedback; behaviour is then unchanged.",
           "compressor_entity": "Optional binary_sensor/switch/input_boolean that is on while the compressor runs. HEMS counts its starts and, in cooling mode, forces a pause once there are too many of them - short cycles wear the compressor out, and most units offer no setting for it. Leave empty if your device has no such feedback; anti-cycling then stays off.",
+          "room_temp_entity": "Optional temperature sensor of a representative room. Together with room humidity, HEMS derives the dew point from it and keeps the cooling flow above it - otherwise water condenses on floors or walls with surface cooling. Only both fields together take effect; leave one empty and the cooling setpoint applies unchanged.",
+          "room_humidity_entity": "Optional humidity sensor of the same room, in % relative humidity. Only together with room temperature does it yield a dew point. Without this role the lower limit for the cooling flow stays off, and the flow runs to the configured cooling setpoint even if that is below the dew point.",
+          "dewpoint_margin_k": "How far above the dew point the cooling flow should stay. Flow temperature is not surface temperature - screed and plaster sit in between, and the surface stays warmer than the water. 2 K is a reasonable start; 0 puts the limit exactly on the dew point.",
           "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Applies to heating and cooling alike, but never during frost protection.",
           "antitakt_window_min": "Length of the window the starts are counted in. The window rolls along: what counts is every start younger than that span.",
           "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."

@@ -22,6 +22,7 @@ from .const import (
     DEFAULT_COOL_VLT_C,
     DEFAULT_CURVE_BASE_C,
     DEFAULT_CURVE_SLOPE,
+    DEFAULT_DEWPOINT_MARGIN_K,
     DEFAULT_HEAT_FROST_OFF_C,
     DEFAULT_HEAT_FROST_ON_C,
     DEFAULT_HEAT_LOCK_FROM,
@@ -173,6 +174,17 @@ class HeatingCircuit:
     # Leistungsmessung abgeleitet: die Umwälzpumpe läuft auch ohne Verdichter,
     # und die Schwelle dazwischen ist anlagenabhängig.
     compressor_entity: str | None = None
+    # Raumklima für die Taupunkt-Untergrenze im Kühlbetrieb (beide optional,
+    # aber nur zusammen wirksam — eine Taupunktrechnung braucht Temperatur UND
+    # relative Feuchte). Ohne sie fährt der Kühl-Vorlauf auf cool_vlt_c, auch
+    # wenn der unter dem Taupunkt liegt; an einer Flächenkühlung schlägt sich
+    # dann Wasser nieder.
+    room_temp_entity: str | None = None
+    room_humidity_entity: str | None = None
+    # Sicherheitsabstand des Vorlaufs zum Taupunkt. Die Vorlauftemperatur ist
+    # nicht die Oberflächentemperatur — der Aufbau puffert, die Oberfläche
+    # bleibt wärmer als das Wasser.
+    dewpoint_margin_k: float = DEFAULT_DEWPOINT_MARGIN_K
     # Taktschutz (nur Kühlbetrieb): ab wie vielen Starts im Fenster HEMS eine
     # Zwangspause einlegt und wie lange sie dauert. starts = 0 schaltet ihn ab.
     antitakt_starts: int = DEFAULT_ANTITAKT_STARTS

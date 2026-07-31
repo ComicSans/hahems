@@ -696,6 +696,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     h.fault_entity,
                     h.dhw_active_entity,
                     h.compressor_entity,
+                    h.room_temp_entity,
+                    h.room_humidity_entity,
                 )
                 if e
             )
@@ -1202,6 +1204,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 # Ohne Rolle (und bei ausgefallener Rückmeldung) bleibt der
                 # Verdichterzustand unbekannt, und der Taktschutz zählt nicht.
                 compressor_on=self._is_on_or_none(heating_cfg.compressor_entity),
+                # Raumklima für die Taupunkt-Untergrenze. Fehlt eines von
+                # beiden (nicht konfiguriert oder Sensor stumm), rechnet die
+                # Strategie keinen Taupunkt und die Grenze bleibt aus.
+                room_temp_c=self._num(heating_cfg.room_temp_entity),
+                room_humidity_pct=self._num(heating_cfg.room_humidity_entity),
+                dewpoint_margin_k=heating_cfg.dewpoint_margin_k,
                 antitakt_starts=heating_cfg.antitakt_starts,
                 antitakt_window_min=heating_cfg.antitakt_window_min,
                 antitakt_pause_min=heating_cfg.antitakt_pause_min,

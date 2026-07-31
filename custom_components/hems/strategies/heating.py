@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from math import ceil, log
 
 from ..const import (
     ANTITAKT_RELEASE_MIN,
     ANTITAKT_ZEITEN_MAX,
+    DEWPOINT_RELEASE_K,
     HEATING_COLD_THRESHOLD_C,
     HEATING_DEMAND_SHIFT_K,
+    MAGNUS_A,
+    MAGNUS_B,
     SILENT_VLT_OFF_C,
     SILENT_VLT_ON_C,
 )
@@ -30,11 +34,20 @@ def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
     Die Warmwasser-Rückmeldung (optionale Rolle) wird nur durchgereicht: die
     Empfehlung bleibt, was sie ist, gestellt wird in diesem Fenster nichts;
     das entscheidet ``plan_heating_control``.
+
+    Im Kühlbetrieb hält die Taupunkt-Untergrenze den Vorlauf über dem Taupunkt
+    der Raumluft, sofern beide Raumklima-Rollen konfiguriert sind.
     """
     h = inp.heating
     result = HeatingResult(
         name=h.name, sommer_sperre=h.heat_locked, ww_bereitung=h.dhw_active
     )
+    taupunkt = _taupunkt_c(h.room_temp_c, h.room_humidity_pct)
+    result.taupunkt_c = None if taupunkt is None else round(taupunkt, 1)
+    # Außerhalb des Kühlbetriebs wacht die Grenze nicht: dort wird der Vorlauf
+    # nach oben geführt, nicht nach unten. Der Latch startet damit jedes Mal
+    # sauber, wenn der Kühlbetrieb wieder aufgenommen wird.
+    res.flags.waermepumpe_taupunkt = False
     t = h.outdoor_temp_c
     if t is None:
         result.modus = "unbekannt"
@@ -82,11 +95,73 @@ def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
         result.leise_empfohlen = res.flags.waermepumpe_leise
     elif res.flags.waermepumpe_kuehlen:
         result.modus = "kuehlen"
-        result.vlt_ziel_c = h.cool_vlt_c
+        result.vlt_ziel_c = _taupunkt_grenze(inp, res, result, taupunkt)
     else:
         result.modus = "aus"
     _taktschutz(inp, res, result)
     return result
+
+
+def _taupunkt_c(temp_c: float | None, humidity_pct: float | None) -> float | None:
+    """Taupunkt der Raumluft nach Magnus, oder None ohne brauchbare Messwerte.
+
+    Beides wird gebraucht, Temperatur und relative Feuchte — fehlt eines, gibt
+    es keinen Taupunkt und die Untergrenze bleibt aus. Feuchtewerte außerhalb
+    von 0 bis 100 % sind Messfehler; 0 % ist zusätzlich der Pol des Logarithmus
+    und damit rechnerisch unbrauchbar.
+    """
+    if temp_c is None or humidity_pct is None:
+        return None
+    if not 0 < humidity_pct <= 100:
+        return None
+    gamma = log(humidity_pct / 100) + MAGNUS_A * temp_c / (MAGNUS_B + temp_c)
+    return MAGNUS_B * gamma / (MAGNUS_A - gamma)
+
+
+def _taupunkt_grenze(
+    inp: PlanInput, res: PlanResult, result: HeatingResult, taupunkt: float | None
+) -> float:
+    """Kühl-Vorlauf über dem Taupunkt halten (optionale Raumklima-Rollen).
+
+    An einer Flächenkühlung schlägt sich Wasser nieder, sobald die Oberfläche
+    den Taupunkt der Raumluft unterschreitet. Gemessen am 30.07.2026: 17 Minuten
+    Vorlauf unter dem Raumtaupunkt, Minimum 11,4 °C bei einem Taupunkt von
+    13,3 °C. Die Grenze hebt deshalb den Kühl-Sollwert an, statt ihn zu
+    unterschreiten — sie senkt ihn nie.
+
+    Der Sicherheitsabstand ist konfigurierbar, weil die Vorlauftemperatur nicht
+    die Oberflächentemperatur ist: Estrich und Putz liegen dazwischen, die
+    Oberfläche bleibt wärmer als das Wasser. Eine Grenze exakt auf dem Taupunkt
+    wäre zu scharf, gar keine zu spät.
+
+    Zwei Schwellen, wie bei jeder Ja/Nein-Entscheidung hier: Angehoben wird,
+    sobald die Untergrenze über dem Kühl-Sollwert liegt; losgelassen erst,
+    wenn sie `DEWPOINT_RELEASE_K` darunter gefallen ist. Ohne die zweite
+    Schwelle würde der geschriebene Sollwert um die Grenze herum zwischen zwei
+    Werten springen, sobald die Raumfeuchte ein wenig schwankt.
+    """
+    h = inp.heating
+    soll = h.cool_vlt_c
+    if taupunkt is None:
+        return soll
+    # Aufgerundet auf ganze Grad: die Aktuierung vergleicht und schreibt auf
+    # ganze Grad, eine Untergrenze mit Nachkommastellen erzeugte Schreibverkehr,
+    # den die Anlage gar nicht auflöst. Aufgerundet und nicht kaufmännisch,
+    # weil ein halbes Grad zu warm hier billiger ist als ein halbes Grad zu
+    # kalt — das eine kostet Kälteleistung, das andere setzt Wasser an.
+    grenze = float(ceil(taupunkt + h.dewpoint_margin_k))
+    result.taupunkt_grenze_c = grenze
+    res.flags.waermepumpe_taupunkt = _latch(
+        inp.flags.waermepumpe_taupunkt,
+        grenze - soll,
+        on=0.5,
+        off=-DEWPOINT_RELEASE_K,
+    )
+    if not res.flags.waermepumpe_taupunkt:
+        return soll
+    vlt = max(soll, grenze)
+    result.taupunkt_begrenzt = vlt > soll
+    return vlt
 
 
 def _taktschutz(inp: PlanInput, res: PlanResult, result: HeatingResult) -> None:
@@ -173,5 +248,10 @@ def _taktschutz(inp: PlanInput, res: PlanResult, result: HeatingResult) -> None:
     if pause_bis is not None and schuetzbar:
         result.modus = "aus"
         result.vlt_ziel_c = None
+        # Ohne Vorlauf-Soll gibt es nichts zu begrenzen; sonst stünde in der
+        # Anzeige eine Anhebung, die zu keinem Sollwert gehört. Der Latch läuft
+        # in den Flags weiter, damit die Grenze nach der Pause nicht von vorn
+        # anfängt.
+        result.taupunkt_begrenzt = False
         result.taktschutz = True
         result.taktschutz_bis = pause_bis

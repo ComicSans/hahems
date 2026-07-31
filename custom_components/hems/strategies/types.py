@@ -16,6 +16,7 @@ from ..const import (
     DEFAULT_BOOST_SALDO_ON_W,
     DEFAULT_BOOST_SOC_OFF,
     DEFAULT_BOOST_SOC_ON,
+    DEFAULT_DEWPOINT_MARGIN_K,
     DEFAULT_GAIN_LEVEL,
     DEFAULT_LEGIONELLA_TARGET,
     EV_VOLTAGE_PER_PHASE_V,
@@ -67,6 +68,14 @@ class HeatingState:
     # Taktschutz die Starts; ohne die Rolle bleibt der Wert None und der
     # Taktschutz ruht vollständig.
     compressor_on: bool | None = None
+    # Raumklima für die Taupunkt-Untergrenze im Kühlbetrieb (zwei optionale
+    # Rollen). Beide werden gebraucht — eine Taupunktrechnung ohne Temperatur
+    # oder ohne Feuchte gibt es nicht. Fehlt eine, bleibt die Grenze aus und
+    # der Kühl-Sollwert gilt unverändert.
+    room_temp_c: float | None = None
+    room_humidity_pct: float | None = None
+    # Sicherheitsabstand des Vorlaufs zum Taupunkt, siehe _taupunkt_grenze.
+    dewpoint_margin_k: float = DEFAULT_DEWPOINT_MARGIN_K
     # Taktschutz-Parameter, siehe _taktschutz. starts = 0 schaltet ihn ab.
     antitakt_starts: int = DEFAULT_ANTITAKT_STARTS
     antitakt_window_min: int = DEFAULT_ANTITAKT_WINDOW_MIN
@@ -269,6 +278,14 @@ class HeatingResult:
     taktschutz: bool = False
     taktschutz_bis: datetime | None = None
     verdichterstarts: int = 0  # Starts im laufenden Beobachtungsfenster
+    # Taupunkt der Raumluft, sobald beide Raumklima-Rollen antworten — sonst
+    # None. Rein informativ, auch wenn gerade nicht gekühlt wird.
+    taupunkt_c: float | None = None
+    # Untergrenze, die der Kühl-Vorlauf nicht unterschreiten soll (Taupunkt
+    # plus Sicherheitsabstand), und ob sie den Sollwert gerade anhebt. Liegt
+    # `taupunkt_grenze_c` unter dem Kühl-Sollwert, wacht die Grenze nur.
+    taupunkt_grenze_c: float | None = None
+    taupunkt_begrenzt: bool = False
 
 
 @dataclass
@@ -301,6 +318,10 @@ class PlanFlags:
     waermepumpe_leise: bool = False
     # Frostschutz-Trigger: eigener Latch, unabhängig vom Heiz-/Sperr-Zustand.
     waermepumpe_frost: bool = False
+    # Taupunkt-Untergrenze hebt den Kühl-Vorlauf gerade an. Eigener Latch, weil
+    # die Untergrenze mit der Raumfeuchte wandert und sonst um den Sollwert
+    # herum ein- und ausschalten würde.
+    waermepumpe_taupunkt: bool = False
     # Taktschutz: Verdichterzustand des letzten Laufs (für die Flankenerkennung),
     # die Startzeitpunkte im rollierenden Fenster, das Ende der Zwangspause und
     # der Zeitpunkt, seit dem der Heizkreis nach einer Pause wieder frei läuft.

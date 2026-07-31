@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import pytest
 from factories import NOON, heating, plan_input
 from hems import planner as P
 from hems.strategies.types import HeatingResult, PlanFlags
@@ -116,6 +117,144 @@ def test_ww_bereitung_auch_ohne_aussentemperatur():
     r = _hz(heating_state=heating(outdoor_temp_c=None, dhw_active=True))
     assert r.modus == "unbekannt"
     assert r.ww_bereitung is True
+
+
+# --- Taupunkt-Untergrenze im Kühlbetrieb --------------------------------------
+#
+# Referenzfall ist die Messung vom 30.07.2026: Wohnzimmer 23,3 °C / 53,3 % rF
+# ergibt einen Taupunkt von 13,3 °C. Mit dem Standard-Sicherheitsabstand von
+# 2 K liegt die Untergrenze bei aufgerundet 16 °C.
+
+
+def _kuehlen(**kw):
+    kw.setdefault("outdoor_temp_c", 28.0)
+    return _hz(heating_state=heating(**kw))
+
+
+def test_ohne_raumklima_bleibt_der_kuehlvorlauf_wie_konfiguriert():
+    # Rückwärtskompatibilität: ohne die beiden Rollen ändert sich nichts.
+    r = _kuehlen(cool_vlt_c=12.0)
+    assert r.modus == "kuehlen"
+    assert r.vlt_ziel_c == 12.0
+    assert r.taupunkt_c is None
+    assert r.taupunkt_grenze_c is None
+    assert r.taupunkt_begrenzt is False
+
+
+def test_taupunkt_wird_aus_temperatur_und_feuchte_gerechnet():
+    r = _kuehlen(room_temp_c=23.3, room_humidity_pct=53.3)
+    assert r.taupunkt_c == 13.3
+
+
+def test_taupunkt_hebt_den_kuehlvorlauf_an():
+    # Genau der gemessene Fall: 12 °C Vorlauf lägen unter dem Taupunkt.
+    r = _kuehlen(cool_vlt_c=12.0, room_temp_c=23.3, room_humidity_pct=53.3)
+    assert r.modus == "kuehlen"
+    assert r.taupunkt_grenze_c == 16.0
+    assert r.vlt_ziel_c == 16.0
+    assert r.taupunkt_begrenzt is True
+
+
+def test_taupunkt_senkt_den_kuehlvorlauf_nie():
+    # Liegt der Sollwert über der Grenze, wacht sie nur.
+    r = _kuehlen(cool_vlt_c=21.0, room_temp_c=23.3, room_humidity_pct=53.3)
+    assert r.vlt_ziel_c == 21.0
+    assert r.taupunkt_grenze_c == 16.0
+    assert r.taupunkt_begrenzt is False
+
+
+def test_sicherheitsabstand_wirkt_auf_die_grenze():
+    # Ohne Abstand liegt die Grenze auf dem aufgerundeten Taupunkt selbst.
+    r = _kuehlen(
+        cool_vlt_c=12.0,
+        room_temp_c=23.3,
+        room_humidity_pct=53.3,
+        dewpoint_margin_k=0.0,
+    )
+    assert r.taupunkt_grenze_c == 14.0
+    assert r.vlt_ziel_c == 14.0
+
+
+def test_grenze_bleibt_ohne_feuchte_aus():
+    r = _kuehlen(cool_vlt_c=12.0, room_temp_c=23.3)
+    assert r.taupunkt_c is None
+    assert r.vlt_ziel_c == 12.0
+
+
+def test_grenze_bleibt_ohne_raumtemperatur_aus():
+    r = _kuehlen(cool_vlt_c=12.0, room_humidity_pct=53.3)
+    assert r.taupunkt_c is None
+    assert r.vlt_ziel_c == 12.0
+
+
+@pytest.mark.parametrize("feuchte", [0.0, -5.0, 120.0])
+def test_unsinnige_feuchtewerte_schalten_die_grenze_ab(feuchte: float):
+    # 0 % ist der Pol des Logarithmus, alles außerhalb 0–100 % ein Messfehler.
+    r = _kuehlen(cool_vlt_c=12.0, room_temp_c=23.3, room_humidity_pct=feuchte)
+    assert r.taupunkt_c is None
+    assert r.vlt_ziel_c == 12.0
+
+
+def test_grenze_greift_nicht_im_heizbetrieb():
+    # Beim Heizen wird der Vorlauf nach oben geführt; ein Taupunkt-Deckel wäre
+    # dort sinnlos. Gemeldet wird der Taupunkt trotzdem.
+    r = _hz(
+        heating_state=heating(
+            outdoor_temp_c=5.0, demand_pct=50.0, room_temp_c=23.3,
+            room_humidity_pct=53.3,
+        )
+    )
+    assert r.modus == "heizen"
+    assert r.vlt_ziel_c == 38.0
+    assert r.taupunkt_c == 13.3
+    assert r.taupunkt_begrenzt is False
+
+
+def test_grenze_haelt_die_anhebung_bis_zur_freigabeschwelle():
+    # Zweite Schwelle: bei 50 % rF liegt die Grenze genau auf dem Sollwert.
+    # Aus dem Ruhezustand greift sie dann nicht — einmal angehoben, hält sie.
+    ruhe = _kuehlen(cool_vlt_c=15.0, room_temp_c=23.3, room_humidity_pct=50.0)
+    assert ruhe.taupunkt_grenze_c == 15.0
+    inp = plan_input(
+        thermal_present=False,
+        flags=PlanFlags(waermepumpe_kuehlen=True, waermepumpe_taupunkt=True),
+        heating_state=heating(
+            outdoor_temp_c=28.0, cool_vlt_c=15.0, room_temp_c=23.3,
+            room_humidity_pct=50.0,
+        ),
+    )
+    res = P.compute_plan(inp)
+    assert res.flags.waermepumpe_taupunkt is True
+    assert res.heizung.vlt_ziel_c == 15.0
+
+
+def test_grenze_laesst_los_wenn_die_luft_deutlich_trockener_wird():
+    # 40 % rF bei 23,3 °C: Taupunkt 8,9 °C, Grenze 11 °C — vier Kelvin unter
+    # dem Sollwert, das reißt die Freigabeschwelle.
+    inp = plan_input(
+        thermal_present=False,
+        flags=PlanFlags(waermepumpe_kuehlen=True, waermepumpe_taupunkt=True),
+        heating_state=heating(
+            outdoor_temp_c=28.0, cool_vlt_c=15.0, room_temp_c=23.3,
+            room_humidity_pct=40.0,
+        ),
+    )
+    res = P.compute_plan(inp)
+    assert res.flags.waermepumpe_taupunkt is False
+    assert res.heizung.vlt_ziel_c == 15.0
+
+
+def test_grenze_ruht_ausserhalb_des_kuehlbetriebs():
+    inp = plan_input(
+        thermal_present=False,
+        flags=PlanFlags(waermepumpe_taupunkt=True),
+        heating_state=heating(
+            outdoor_temp_c=20.0, room_temp_c=23.3, room_humidity_pct=53.3
+        ),
+    )
+    res = P.compute_plan(inp)
+    assert res.heizung.modus == "aus"
+    assert res.flags.waermepumpe_taupunkt is False
 
 
 # --- Taktschutz: Zwangspause gegen zu viele Verdichterstarts ------------------
@@ -267,6 +406,19 @@ def test_taktschutz_veraendert_die_eingabe_flags_nicht():
     _takte(flags, ab=0, anzahl=4)
     assert flags.takt_start_zeiten == ()
     assert flags.takt_pause_bis is None
+
+
+def test_taktschutz_nimmt_die_taupunkt_anhebung_aus_der_anzeige():
+    # Ohne Vorlauf-Soll gibt es nichts zu begrenzen. Der Latch laeuft in den
+    # Flags weiter, damit die Grenze nach der Pause nicht von vorn anfaengt.
+    r, flags = _takte(
+        PlanFlags(), ab=0, anzahl=4, cool_vlt_c=12.0, room_temp_c=23.3,
+        room_humidity_pct=53.3,
+    )
+    assert r.taktschutz is True
+    assert r.vlt_ziel_c is None
+    assert r.taupunkt_begrenzt is False
+    assert flags.waermepumpe_taupunkt is True
 
 
 def test_taktschutz_erfindet_bei_signalluecke_keine_flanke():
