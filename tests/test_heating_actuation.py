@@ -170,3 +170,16 @@ def test_nach_der_pause_wird_der_kuehl_sollwert_neu_geschrieben():
         current_setpoint=55.0,
     )
     assert hp == HeatingPlan("kuehlen", 21.0)
+
+
+def test_taupunkt_anhebung_wird_als_kuehl_sollwert_geschrieben():
+    # Ende der Kette: Die Strategie hebt den Kuehl-Sollwert von 12 auf die
+    # Taupunkt-Untergrenze 16, und genau die muss auch geschrieben werden -
+    # sonst rechnet HEMS eine Grenze aus, die nie ein Register erreicht.
+    hp = _hp(
+        modus="kuehlen",
+        vlt_ziel_c=16.0,
+        current_mode="kuehlen",
+        current_setpoint=12.0,
+    )
+    assert hp == HeatingPlan(None, 16.0)
