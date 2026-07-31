@@ -122,10 +122,9 @@ dafür aus der Langzeitstatistik zurückliest.
 ## Workspace standards
 
 Generated from `standards.json` (mcp-server) - change it there and reinstall,
-never inside the markers. Each line is the binding form. Two things come from
-`project_standards`: the incident behind a rule via `rule: "<id>"` - ask before
-weakening one - and the setup rules not printed here, on linting, local CI and
-store assets. They bind the same; they just are not needed to do the work.
+never inside the markers. `project_standards` serves the incident behind a rule
+(`rule: "<id>"`, ask before weakening one) and the setup rules not printed here;
+they bind the same.
 
 ### Working with the user
 
@@ -142,13 +141,11 @@ store assets. They bind the same; they just are not needed to do the work.
 
 ### Tooling
 
-- **Code exploration goes through tokensave** - Its MCP tools, not file reads and not Explore agents. `tokensave init && tokensave install` in every repository. A PreToolUse hook enforces this. `tooling.tokensave`
-- **iOS builds, tests, simulators and devices go through `simulator-broker`** - Never `xcodebuild`, `simctl` or `devicectl` directly. Shell scripts wrap their command in `simulator-broker/src/cli.mjs run --project <name> -- <command>`; screenshot and preview-video scripts are the usual offenders. `tooling.builds`
-- **Throwaway work goes in the session scratchpad, named so housekeeping finds it** - Working copies, build output and coverage runs go in the session scratchpad, never in a repository or loose in `/tmp`. Name build output `build/`, `Build/` or `DerivedData/` - housekeeping finds it by name and never clears a directory called `dd` or `out`. `tooling.scratch`
+- **Code exploration goes through tokensave** - Its MCP tools, not file reads and not Explore agents; a PreToolUse hook enforces this. `tooling.tokensave`
+- **iOS builds, tests, simulators and devices go through `simulator-broker`** - Never `xcodebuild`, `simctl` or `devicectl` directly - scripts and physical devices go through `simulator-broker/src/cli.mjs run --project <name> -- <command>`. `tooling.builds`
+- **Throwaway work goes in the session scratchpad, named so housekeeping finds it** - Working copies, build output and coverage runs go in the session scratchpad, never in a repository or loose in `/tmp`; name build output `build/`, `Build/` or `DerivedData/`. `tooling.scratch`
 - **Task state lives in agent-memory** - Never in `todo.md` or another markdown file. Writing a read-only export is fine; reading state back out of it is not. `tooling.state`
-- **One active queue per project** - Everything a project has to do goes in that one queue. `order` only sorts within a priority band; `dependsOn` is the only hard gate and resolves inside its own queue. Fold extra queues back in with `memory_queue_move` and retitle the target. `tooling.one-queue-per-project`
-- **Questions for Tobias go to the queue `entscheidungen-tobias`** - Anything blocked on a decision by Tobias goes to the queue `entscheidungen-tobias` (project `tobias`), never into the project backlog. Three lines only: what to decide, the options with consequences, what stands still - plus a pointer back. `tooling.decisions-queue`
-- **CLAUDE.md is the only instruction file** - No AGENTS.md, no `.cursorrules`, no `.cursor/`, no `.opencode/`. Claude Code does not read them, so anything put there is invisible. `tooling.one-instruction-file`
-- **The local CI escape hatch is logged, not locked** - `LOCAL_CI_SKIP="reason" git push` passes and is logged as `ci:bypass`; a reason is mandatory. A silent `--no-verify` commit still surfaces as `ci:unverified`. `ci.escape-hatch`
+- **One active queue per project** - Everything a project has to do goes in that one queue; `dependsOn` is the only hard gate and resolves inside its own queue. `tooling.one-queue-per-project`
+- **Questions for Tobias go to the queue `entscheidungen-tobias`** - Anything blocked on a decision by Tobias goes to the queue `entscheidungen-tobias` (project `tobias`), never into the project backlog - three lines: the decision, the options with consequences, what stands still. `tooling.decisions-queue`
 
 <!-- msc:standards:end -->
