@@ -713,8 +713,23 @@ class HemsPanel extends HTMLElement {
 
   _fieldControl(f, value) {
     const id = `f_${f.key}`;
-    const req = f.required ? " <span class='req'>*</span>" : "";
-    const lbl = `<label for="${id}">${escapeHtml(f.label || f.key)}${req}</label>`;
+    const helpId = `${id}_help`;
+    const unitId = `${id}_unit`;
+    // Hilfetext und Einheit gehören ans Eingabefeld, nicht nur daneben: ohne
+    // aria-describedby liest eine Sprachausgabe die Beschriftung vor und
+    // unterschlägt Erklärung und Einheit.
+    const beschreibung = [
+      f.description ? helpId : "",
+      f.type === "number" && f.unit ? unitId : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const desc = beschreibung ? ` aria-describedby="${beschreibung}"` : "";
+    const reqAttr = f.required ? ` required aria-required="true"` : "";
+    const req = f.required ? " <span class='req' aria-hidden='true'>*</span>" : "";
+    const lbl = `<label for="${id}">${escapeHtml(
+      f.label || humanizeKey(f.key),
+    )}${req}</label>`;
     let input;
     if (f.type === "entity") {
       // Platzhalter; nach dem Rendern mit einem echten HA-Entity-Picker
@@ -730,17 +745,23 @@ class HemsPanel extends HTMLElement {
         f.max != null ? `max="${f.max}"` : "",
         f.step != null ? `step="${f.step}"` : "",
       ].join(" ");
-      input = `<input id="${id}" type="number" ${a} data-key="${f.key}" data-type="number"
+      // Ganzzahlige Schrittweite heißt Zifferntastatur; alles andere darf
+      // Nachkommastellen haben.
+      const modus = f.step == null || Number.isInteger(f.step) ? "numeric" : "decimal";
+      input = `<input id="${id}" type="number" ${a} inputmode="${modus}"${reqAttr}${desc}
+                 data-key="${f.key}" data-type="number"
                  value="${value != null ? value : ""}">${
-                   f.unit ? `<span class="unit">${escapeHtml(f.unit)}</span>` : ""
+                   f.unit
+                     ? `<span class="unit" id="${unitId}">${escapeHtml(f.unit)}</span>`
+                     : ""
                  }`;
     } else if (f.type === "boolean") {
-      input = `<input id="${id}" type="checkbox" data-key="${f.key}" data-type="boolean" ${
+      input = `<input id="${id}" type="checkbox"${desc} data-key="${f.key}" data-type="boolean" ${
         value ? "checked" : ""
       }>`;
     } else if (f.type === "time") {
       const v = value ? String(value).slice(0, 5) : "";
-      input = `<input id="${id}" type="time" data-key="${f.key}" data-type="time" value="${v}">`;
+      input = `<input id="${id}" type="time"${reqAttr}${desc} data-key="${f.key}" data-type="time" value="${v}">`;
     } else if (f.type === "select") {
       const labels = f.option_labels || {};
       const opts = (f.options || [])
@@ -751,13 +772,13 @@ class HemsPanel extends HTMLElement {
             }>${escapeHtml(labels[o] || o)}</option>`,
         )
         .join("");
-      input = `<select id="${id}" data-key="${f.key}" data-type="select">${opts}</select>`;
+      input = `<select id="${id}"${reqAttr}${desc} data-key="${f.key}" data-type="select">${opts}</select>`;
     } else {
-      input = `<input id="${id}" type="text" data-key="${f.key}" data-type="text"
+      input = `<input id="${id}" type="text"${reqAttr}${desc} data-key="${f.key}" data-type="text"
                  value="${value != null ? escapeHtml(String(value)) : ""}">`;
     }
     const help = f.description
-      ? `<div class="field-help">${escapeHtml(f.description)}</div>`
+      ? `<div class="field-help" id="${helpId}">${escapeHtml(f.description)}</div>`
       : "";
     return `<div class="field">${lbl}<div class="field-input">${input}</div>${help}</div>`;
   }
@@ -953,6 +974,15 @@ function entityOptions(hass, domains, deviceClass) {
       name: s.attributes.friendly_name || s.entity_id,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Notnagel für Felder ohne Übersetzung: aus „antitakt_starts“ wird
+// „Antitakt starts“. Die richtigen Beschriftungen kommen mit dem Schema aus
+// dem Backend (das sie aus den Übersetzungsdateien zieht); hier steht bewusst
+// kein zweiter Label-Katalog, der davon abdriften könnte.
+function humanizeKey(key) {
+  const wort = String(key ?? "").replace(/_/g, " ").trim();
+  return wort ? wort.charAt(0).toUpperCase() + wort.slice(1) : String(key ?? "");
 }
 
 function escapeHtml(s) {

@@ -19,7 +19,7 @@ from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 
-from .config_flow import GENERAL_SCHEMA, ROLE_LABELS, ROLE_SCHEMAS
+from .config_flow import EDIT_STEPS, GENERAL_SCHEMA, ROLE_LABELS, ROLE_SCHEMAS
 from .const import CONF_DEVICES, DOMAIN
 from .partners import KONTRAKT_VERSION, entdecke
 
@@ -144,6 +144,41 @@ def _step_descriptions(tr: dict, top: str, step: str) -> dict:
     )
 
 
+def _role_steps(role: str) -> tuple[str, ...]:
+    """Übersetzungs-Schritte einer Rolle, vollständigster zuerst.
+
+    Der Rollen-Slug ist nicht der Schrittname: `heating_circuit` steht in den
+    Übersetzungen unter `edit_heating`/`add_heating`. Ohne diese Ableitung
+    findet das Panel keine Beschriftung und zeigt den rohen Schlüssel —
+    „antitakt_starts“ statt „Taktschutz: Verdichterstarts je Fenster“, und der
+    Hilfetext fehlt ganz.
+    """
+    step = EDIT_STEPS.get(role)
+    if step is None:
+        return (f"add_{role}", f"edit_{role}")
+    # `add_` zuerst: ein neues Feld wird zuerst dort übersetzt, weil es der
+    # Schritt beim Anlegen ist. Würde `edit_` gewinnen, fände das Panel für das
+    # neue Feld wieder keine Beschriftung.
+    rumpf = step.removeprefix("edit_")
+    return (f"add_{rumpf}", step)
+
+
+def _role_labels(tr: dict, role: str) -> dict:
+    for step in _role_steps(role):
+        labels = _step_labels(tr, "options", step)
+        if labels:
+            return labels
+    return {}
+
+
+def _role_descriptions(tr: dict, role: str) -> dict:
+    for step in _role_steps(role):
+        descriptions = _step_descriptions(tr, "options", step)
+        if descriptions:
+            return descriptions
+    return {}
+
+
 def _entry(hass: HomeAssistant, entry_id: str | None) -> ConfigEntry | None:
     entries = hass.config_entries.async_entries(DOMAIN)
     if entry_id:
@@ -191,9 +226,9 @@ async def ws_get(hass, connection, msg):
             "schema": {
                 r: _schema_to_fields(
                     ROLE_SCHEMAS[r],
-                    _step_labels(tr, "options", f"add_{r}"),
+                    _role_labels(tr, r),
                     selectors,
-                    _step_descriptions(tr, "options", f"add_{r}"),
+                    _role_descriptions(tr, r),
                 )
                 for r in ROLE_SCHEMAS
             },
