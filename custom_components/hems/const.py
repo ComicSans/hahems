@@ -195,6 +195,10 @@ DEFAULT_ANTITAKT_PAUSE_MIN = 30
 # nächste Pause unmittelbar folgen und HEMS würde den Kühlbetrieb dauerhaft
 # aussperren. Starts werden in dieser Zeit weitergezählt, nur das Auslösen ruht.
 ANTITAKT_RELEASE_MIN = 15
+# Wie viele Startzeitpunkte der Taktschutz höchstens mitführt. Das rollierende
+# Fenster wirft alte Einträge ohnehin weg; die Grenze fängt nur den Fall ab,
+# dass eine Anlage im Minutentakt startet und die Liste mitwächst.
+ANTITAKT_ZEITEN_MAX = 64
 
 # E-Auto: Die "E-Auto laden"-Empfehlung setzt voraus, dass der Überschuss die
 # physikalische Mindestladeleistung der Wallbox erreicht (min_a × Phasen ×

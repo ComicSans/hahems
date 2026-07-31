@@ -160,12 +160,17 @@ der Frostschutz greift. Bei niedrigem Vorlauf-Soll meldet das Attribut
 ### Taktschutz: Zwangspause bei zu vielen Verdichterstarts
 
 Ist die optionale Rückmeldung „Verdichter läuft“ konfiguriert, zählt HEMS deren
-Einschaltflanken in einem Fenster fester Länge. Reißt die Zahl die Schwelle,
-empfiehlt HEMS im **Kühlbetrieb** für die eingestellte Pausendauer „aus“; die
-Attribute `taktschutz`, `taktschutz_bis` und `verdichterstarts` von
+Einschaltflanken in einem **rollierenden** Fenster: gespeichert werden die
+Startzeitpunkte, gezählt wird, wie viele davon jünger als die Fensterlänge sind.
+Reißt die Zahl die Schwelle, empfiehlt HEMS für die eingestellte Pausendauer
+„aus“; die Attribute `taktschutz`, `taktschutz_bis` und `verdichterstarts` von
 `sensor.hems_heizkreis` machen das sichtbar. Danach läuft der Heizkreis
 mindestens eine Viertelstunde frei, bevor die nächste Pause greifen darf — sonst
-sperrt HEMS den Kühlbetrieb dauerhaft aus.
+sperrt HEMS den Betrieb dauerhaft aus.
+
+Das Fenster rolliert, weil ein Fenster fester Lage die Pause zu spät einlegt:
+Häufungen links und rechts seiner Grenze zählen nie zusammen. Am 31.07.2026
+liefen so 44 Minuten mit fünf Starts, bevor die Pause griff.
 
 Was das leistet und was nicht: Es begrenzt die **Startrate**, nicht die Länge
 des einzelnen Takts. Aus den drei bis vier Minuten Pause, die sich eine Anlage
@@ -174,10 +179,10 @@ entstehen, wenn die kleinste Leistung der Anlage über der Restlast liegt — da
 ändert keine Regel in HEMS, dagegen helfen mehr Durchfluss, mehr Wasserinhalt
 oder ein anderer Sollwert.
 
-Nur Kühlen: Für den Heizbetrieb fehlt die Messung, ob und wie er taktet, und
-eine halbe Stunde Zwangspause im Winter ist eine Komfortentscheidung, die
-niemand belegt hat. Gezählt wird trotzdem in beiden Betriebsarten. Die Starts
-einer Warmwasserladung zählen nicht mit: die gehören dem Speicher.
+Heizen und Kühlen: Beide takten, in beiden greift die Pause. Ausgenommen ist der
+Frostschutz — dort geht es um Umwälzung gegen einfrierende Leitungen, und dafür
+ist eine halbe Stunde Zwangspause der falsche Preis. Die Starts einer
+Warmwasserladung zählen nicht mit: die gehören dem Speicher.
 
 Zwei Grenzen: Läuft gerade eine Warmwasserladung, stellt HEMS am Heizkreis
 nichts (siehe unten) — die Pause wird dann erst nach der Ladung geschrieben und,
@@ -185,6 +190,11 @@ wenn sie noch währenddessen abläuft, gar nicht. Der Heizkreis taktet in diesem
 Fenster ohnehin nicht. Und der Zählerstand lebt nur im Speicher: Nach einem
 Neustart von Home Assistant beginnt das Fenster bei null, eine laufende Pause
 ist weg.
+
+Warum sich das lohnt: Auf einer Anlage, deren kleinste Leistung über der
+Restlast liegt, kostet jeder Kurztakt Effizienz. Gemessen am 30.07.2026 lagen
+Takte von drei bis fünf Minuten bei etwa der Hälfte der Arbeitszahl langer
+Läufe.
 
 ### Während der Warmwasserbereitung stellt HEMS nichts
 

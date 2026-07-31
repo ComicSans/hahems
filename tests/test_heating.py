@@ -203,12 +203,37 @@ def test_taktschutz_ruht_ohne_rolle():
     assert r.modus == "kuehlen"
 
 
-def test_taktschutz_nur_im_kuehlbetrieb():
-    # Fuer den Heizbetrieb fehlt die Messung, ob er ueberhaupt taktet.
+def test_taktschutz_greift_auch_im_heizbetrieb():
+    # Heizen taktet genauso wie Kuehlen, die Pause gilt fuer beides.
     r, _ = _takte(PlanFlags(), ab=0, anzahl=4, outdoor_temp_c=5.0)
+    assert r.verdichterstarts == 4
+    assert r.taktschutz is True
+    assert r.modus == "aus"
+    assert r.vlt_ziel_c is None
+
+
+def test_taktschutz_pausiert_nicht_im_frostschutz():
+    # Im Frostschutz geht es um Umwaelzung gegen einfrierende Leitungen -
+    # dafuer ist eine halbe Stunde Zwangspause der falsche Preis.
+    r, _ = _takte(
+        PlanFlags(), ab=0, anzahl=4, outdoor_temp_c=1.0, heat_locked=True
+    )
+    assert r.frostschutz is True
     assert r.verdichterstarts == 4
     assert r.taktschutz is False
     assert r.modus == "heizen"
+
+
+def test_taktschutz_meldet_keine_pause_die_gerade_nichts_unterdrueckt():
+    # Pause laeuft, dann kommt Frost: der Frostschutz gewinnt, die Empfehlung
+    # bleibt "heizen" - und der Taktschutz meldet sich nicht als aktiv, sonst
+    # widerspraeche die Anzeige der Empfehlung. In den Flags laeuft er weiter.
+    _, flags = _takte(PlanFlags(), ab=0, anzahl=4)
+    r, flags = _lauf(flags, 30, an=False, outdoor_temp_c=1.0, heat_locked=True)
+    assert r.frostschutz is True
+    assert r.modus == "heizen"
+    assert r.taktschutz is False
+    assert flags.takt_pause_bis is not None
 
 
 def test_taktschutz_zaehlt_nur_im_fenster():
@@ -216,6 +241,17 @@ def test_taktschutz_zaehlt_nur_im_fenster():
     r, _ = _takte(PlanFlags(), ab=0, anzahl=4, abstand=25)
     assert r.taktschutz is False
     assert r.modus == "kuehlen"
+
+
+def test_taktschutz_zaehlt_ueber_die_alte_fenstergrenze_hinweg():
+    # Rollierendes Fenster: drei Starts vor Minute 60, zwei danach. Ein Fenster
+    # fester Lage haette bei 60 auf null zurueckgesetzt und nie ausgeloest.
+    _, flags = _lauf(PlanFlags(), 0, an=False)
+    _, flags = _takte(flags, ab=45, anzahl=3, abstand=5)
+    r, _ = _takte(flags, ab=62, anzahl=2, abstand=2)
+    assert r.verdichterstarts == 5
+    assert r.taktschutz is True
+    assert r.modus == "aus"
 
 
 def test_taktschutz_laesst_den_kuehl_latch_stehen():
@@ -229,7 +265,7 @@ def test_taktschutz_laesst_den_kuehl_latch_stehen():
 def test_taktschutz_veraendert_die_eingabe_flags_nicht():
     flags = PlanFlags()
     _takte(flags, ab=0, anzahl=4)
-    assert flags.takt_starts == 0
+    assert flags.takt_start_zeiten == ()
     assert flags.takt_pause_bis is None
 
 

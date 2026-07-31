@@ -302,14 +302,14 @@ class PlanFlags:
     # Frostschutz-Trigger: eigener Latch, unabhängig vom Heiz-/Sperr-Zustand.
     waermepumpe_frost: bool = False
     # Taktschutz: Verdichterzustand des letzten Laufs (für die Flankenerkennung),
-    # Starts im laufenden Fenster samt Fensteranfang, Ende der Zwangspause und
+    # die Startzeitpunkte im rollierenden Fenster, das Ende der Zwangspause und
     # der Zeitpunkt, seit dem der Heizkreis nach einer Pause wieder frei läuft.
-    # Bewusst nur Skalare: `compute_plan` schreibt die Flags mit
-    # `dataclasses.replace` fort, das Referenzen kopiert — eine Liste hier wäre
-    # zwischen Ein- und Ausgabe geteilt und würde die Eingabe mitverändern.
+    # Die Startzeiten sind ein Tupel, keine Liste: `compute_plan` schreibt die
+    # Flags mit `dataclasses.replace` fort, das Referenzen kopiert — eine Liste
+    # wäre zwischen Ein- und Ausgabe geteilt und würde die Eingabe
+    # mitverändern, sobald jemand sie anhängt statt sie zu ersetzen.
     takt_verdichter_an: bool = False
-    takt_starts: int = 0
-    takt_fenster_start: datetime | None = None
+    takt_start_zeiten: tuple[datetime, ...] = ()
     takt_pause_bis: datetime | None = None
     takt_frei_seit: datetime | None = None
     # E-Auto: Überschuss reicht (mit Marge) für die Wallbox-Mindestleistung.
