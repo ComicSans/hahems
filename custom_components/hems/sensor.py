@@ -243,6 +243,11 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             ],
             "boost_speicher_ok": d.plan.flags.warmwasser_boost_soc,
             "boost_einspeisung_ok": d.plan.flags.warmwasser_boost_saldo,
+            # Steht das an, hat HEMS die Freigabe gestellt und das Gerät zeigt
+            # sie danach immer noch nicht — der Befehl kommt nicht an. HEMS
+            # schreibt weiter dagegen; ohne dieses Attribut sähe man nur eine
+            # Empfehlung, die scheinbar gilt.
+            "freigabe_nicht_uebernommen": d.plan.warmwasser_nicht_uebernommen,
         },
     ),
     HemsSensorDescription(

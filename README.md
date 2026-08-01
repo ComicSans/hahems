@@ -69,6 +69,11 @@ Steuer-Entitäten, nur bei Wertänderung, nie auf eine fehlende Empfehlung, und
 isoliert Fehler je Gerät. Rollen ohne Steuer-Entität bleiben auch im Auto-Modus
 reine Beobachtung.
 
+**Warmwasser schaltet höchstens alle 30 Minuten.** Zwischen zwei Ein-/Aus-Kanten
+liegt immer mindestens diese Zeit — in beide Richtungen, denn Takten entsteht
+aus dem Wechsel. Der Sollwert folgt dem Überschuss unabhängig davon weiter im
+Minutentakt.
+
 Eine Einschränkung: **Warmwasser bleibt ohne Sperrfenster rund um die Uhr an.**
 HEMS meldet Warmwasser nur während des konfigurierten Fensters als „aus“.
 

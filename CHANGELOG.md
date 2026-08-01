@@ -41,6 +41,28 @@ bleibt in der Langzeitstatistik erhalten.
 
 Wer den Heizkreis weiter über HEMS fahren will, bleibt auf 1.6.x.
 
+### Warmwasser schaltet höchstens alle 30 Minuten
+
+Bisher galt eine Mindestlaufzeit von 15 Minuten — und nur vor dem
+*Abschalten*. Einschalten war ungebremst, ein Gerät konnte also unmittelbar
+nach dem Abschalten wieder anlaufen; gegen Takten half die Regel damit genau
+zur Hälfte. Jetzt braucht jede Ein-/Aus-Kante 30 Minuten Abstand zur vorigen.
+
+Der Sollwert hängt ausdrücklich nicht daran: Ein laufendes Gerät folgt dem
+Überschuss weiter im Minutentakt, der Wechsel zwischen Basis- und
+Komfort-Sollwert ist ungebremst. Gemessen wird über `last_changed` des
+Steuer-Entitys, also die letzte echte Schaltkante — gleich, wer sie ausgelöst
+hat. Nach einem Neustart von Home Assistant ist der erste Schaltvorgang frei,
+weil `last_changed` dann frisch gesetzt ist und ein kalter Speicher sonst eine
+halbe Stunde kalt bliebe.
+
+Auch Sperrzeit und Legionellenschutz warten auf den Abstand. Beide sind
+kalendergesteuert und laufen über Stunden; eine Verzögerung von höchstens 30
+Minuten fällt dort nicht ins Gewicht, und eine Ausnahme wäre ein zweiter
+Regelpfad für einen Fall, der kein Takten verursachen kann.
+
+**Zu tun:** nichts.
+
 ## 1.6.7 — Optionale Entity-Felder lassen sich im Panel wieder leeren
 
 Eine einmal gesetzte optionale Rolle — etwa **Betriebsart** unter

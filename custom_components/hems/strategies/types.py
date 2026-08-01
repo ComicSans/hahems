@@ -384,6 +384,11 @@ class PlanResult:
     warmwasser_legionellen_fenster: list[tuple[datetime, datetime]] = field(
         default_factory=list
     )
+    # Das Gerät hat die geschriebene Freigabe nicht übernommen: HEMS hat sie
+    # gestellt, und ein danach gelesener Ist-Zustand zeigt sie immer noch nicht.
+    # Wird nicht geplant, sondern vom Actuator eingetragen — die Planung kennt
+    # den Ist-Zustand der Steuer-Entität nicht.
+    warmwasser_nicht_uebernommen: bool = False
     # Empfehlung der Saldo-Regelung über alle Speicher (None ohne Daten).
     regelung: ControlResult | None = None
     # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).

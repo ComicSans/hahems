@@ -16,7 +16,7 @@ Prinzipien (wie die Referenz-Automationen):
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -27,15 +27,33 @@ from .strategies.types import PlanResult
 
 _LOGGER = logging.getLogger(__name__)
 
-# HEMS-Modus (deutsch) → Home-Assistant climate hvac_mode und zurück.
-
-# Warmwasser: Mindestlaufzeit vor dem Abschalten (gegen Takten), wie in der
-# abgelösten WW-Automation. Der Warmup nach dem Einschalten ergibt sich von
-# selbst — der Sollwert wird erst im Folgezyklus (~60 s später) gesetzt.
-WARMWASSER_MIN_RUNTIME = timedelta(minutes=15)
+# Warmwasser: Mindestabstand zwischen zwei Schaltvorgängen. Gilt in BEIDE
+# Richtungen — die Sperre schützt vor Takten, und Takten entsteht aus dem
+# Wechsel, nicht aus einer Richtung. Bis dahin galt eine Mindestlaufzeit von 15
+# Minuten allein vor dem Abschalten; Einschalten war ungebremst, ein Gerät
+# konnte also unmittelbar nach dem Abschalten wieder anlaufen.
+#
+# Gemessen wird über `last_changed` des Steuer-Entitys, also die letzte echte
+# Schaltkante, gleich wer sie ausgelöst hat: Verschleiß entsteht am Gerät, nicht
+# am Urheber. Sollwert-Schreibvorgänge setzen die Uhr nicht zurück — ein
+# `set_temperature` berührt nur Attribute, und der Sollwert soll dem Überschuss
+# weiter im Minutentakt folgen dürfen.
+WARMWASSER_MIN_SCHALTABSTAND = timedelta(minutes=30)
 
 # Toleranz, ab der ein Zahl-Sollwert als "geändert" gilt (W bzw. A/°C: <1).
 _EPS = 1.0
+
+# Frist, nach der eine geschriebene Warmwasser-Freigabe im Ist-Zustand
+# angekommen sein muss. Gemessen am 01.08.2026 an einer LG Therma V: Der Coil
+# fiel 4 bis 30 s nach jedem Schreibversuch wieder auf "aus" zurück, während die
+# Anlage stand. Zwei Minuten liegen weit über dem 30-s-Abfragetakt des Geräts,
+# melden also keinen regulären Schaltvorgang als Nicht-Übernahme.
+#
+# Die Frist und nicht "es gab seit dem Schreiben einen neuen Ist-Wert": Ein
+# Entity, das den Befehl ignoriert, ändert seinen Zustand nicht, und ein
+# unveränderter Zustand wird nicht neu veröffentlicht. Genau im Fehlerfall wäre
+# diese Bedingung nie erfüllt.
+WARMWASSER_QUITTUNG_FRIST = timedelta(minutes=2)
 
 # Throttle für identische, wiederholte Service-Aufrufe. Alle Aufrufer prüfen
 # den Ist-Zustand vor jedem Aufruf (siehe Klassendoc) — _call wird also nur
@@ -50,6 +68,10 @@ class Actuator:
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
         self._last_call: dict[tuple, object] = {}
+        # Steuer-Entity → (zuletzt geschriebene Warmwasser-Freigabe, Zeitpunkt).
+        # Nur was tatsächlich rausging, siehe _apply_ww. Nach einem Neustart
+        # leer: dann verhält sich die Aktuierung wie vor dieser Buchführung.
+        self._last_ww: dict[str, tuple[bool, datetime]] = {}
 
     async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Reihenfolge WW → Akku → modulierbare Lasten. Jedes Gerät
@@ -141,6 +163,21 @@ class Actuator:
 
     # --- Warmwasser ---------------------------------------------------------
 
+    def _quittierte_ww(self, entity: str) -> bool | None:
+        """Zuletzt geschriebene Freigabe, sobald sie angekommen sein müsste.
+
+        ``None`` heißt „noch nichts zu sagen": entweder wurde nie geschrieben,
+        oder die Frist läuft noch. Die Begründung für die Frist steht bei
+        ``WARMWASSER_QUITTUNG_FRIST``.
+        """
+        letzte = self._last_ww.get(entity)
+        if letzte is None:
+            return None
+        zustand, geschrieben_am = letzte
+        if dt_util.utcnow() - geschrieben_am < WARMWASSER_QUITTUNG_FRIST:
+            return None
+        return zustand
+
     async def _apply_ww(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Ist-Zustand lesen, Entscheidung an die HA-freie ``plan_ww_action``
         delegieren, das Ergebnis domain-abhängig schalten. water_heater trägt
@@ -161,24 +198,48 @@ class Actuator:
         else:
             current_setpoint = self._num_state(t.setpoint_entity)
         s = self.hass.states.get(ent)
-        min_runtime_elapsed = (
-            s is None or self._age(s) >= WARMWASSER_MIN_RUNTIME
+        # `last_changed` ist nach einem HA-Neustart frisch gesetzt, obwohl die
+        # Anlage seit Stunden unverändert läuft. Die Sperre allein daran zu
+        # hängen, hieße: ein kalter Speicher bleibt nach jedem Neustart eine
+        # halbe Stunde kalt. Solange HEMS in dieser Laufzeit noch gar nicht
+        # geschaltet hat, ist der erste Schaltvorgang deshalb frei — danach
+        # greift der Abstand wie beschrieben.
+        schaltabstand_erreicht = (
+            s is None
+            or ent not in self._last_ww
+            or self._age(s) >= WARMWASSER_MIN_SCHALTABSTAND
         )
-        action = plan_ww_action(
+        wp = plan_ww_action(
             status=plan.warmwasser_status,
             soll_c=plan.warmwasser_soll_c,
             domain=domain,
             state=state,
-            min_runtime_elapsed=min_runtime_elapsed,
+            schaltabstand_erreicht=schaltabstand_erreicht,
             current_setpoint=current_setpoint,
             has_setpoint_entity=bool(t.setpoint_entity),
+            last_written_on=self._quittierte_ww(ent),
         )
+        # Beobachtung aus der Aktuierung zurück in die Empfehlung: Sensor und
+        # Entscheidungs-Log hängen am Plan, und der Coordinator liest ihn erst
+        # nach diesem Aufruf.
+        plan.warmwasser_nicht_uebernommen = wp.nicht_uebernommen
+        if wp.nicht_uebernommen:
+            _LOGGER.warning(
+                "HEMS-Actuator: %s hat die Warmwasser-Freigabe nicht übernommen "
+                "(zeigt weiter '%s') — HEMS schreibt erneut",
+                ent,
+                state,
+            )
+        action = wp.action
         if action is None:
             return
-        if action.kind == "turn_off":
-            await self._call(domain, "turn_off", ent)
-        elif action.kind == "turn_on":
-            await self._call(domain, "turn_on", ent)
+        if action.kind in ("turn_on", "turn_off"):
+            an = action.kind == "turn_on"
+            # Nur buchen, was tatsächlich rausging: ein gedrosselter Aufruf darf
+            # weder den einmaligen Rückweg verbrauchen noch eine
+            # Nicht-Übernahme melden, die niemand geschrieben hat.
+            if await self._call(domain, action.kind, ent):
+                self._last_ww[ent] = (an, dt_util.utcnow())
         elif action.kind == "set_temperature":
             await self._call(
                 "water_heater", "set_temperature", ent, temperature=int(action.value)
