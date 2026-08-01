@@ -86,6 +86,24 @@ Leistung, kein COP, keine Wärmemenge. Dafür gibt es das Feld
 gerechnet aus einem bekannten Betriebspunkt:
 `Wärmeleistung [W] ÷ (Spreizung [K] × 1,163)`.
 
+**Bei einer modulierenden Umwälzpumpe hilft der Nennwert nicht.** Regelt sie
+etwa zwischen 10 und 40 l/min, ist jeder feste Wert bis zu Faktor vier daneben,
+und der COP hängt linear daran — herauskäme eine Zahl mit zwei
+Nachkommastellen, die nichts bedeutet. Dann ist es richtig, das Feld leer zu
+lassen und auf den COP zu verzichten: eine Messung, die es nicht gibt, ist
+ehrlicher als eine erfundene.
+
+Was ohne Volumenstrom trotzdem rechnet: **Spreizung, Taktung, die Zielwerte zum
+Volumenstrom und alle Hinweise** — die hängen an Temperaturen und Zeiten, nicht
+an einer Menge. Und die **Heizkurvenempfehlung**, denn sie regressiert Vorlauf
+gegen Außentemperatur. Leer bleiben COP, Wärmeleistung, Wärmemenge und der
+Wärmeverlustkoeffizient.
+
+Wer den COP wirklich will, kommt an einem Volumenstromzähler nicht vorbei. Dass
+etwas fehlt, sagt HEMS von sich aus: Beim Start meldet die Rolle einen Befund
+in `binary_sensor.hems_konfiguration`, statt still auf `kein_durchfluss` stehen
+zu bleiben.
+
 **Einheiten werden gelesen, nie geraten.** Maßgeblich ist
 `unit_of_measurement` der verdrahteten Entity. Fehlt sie oder ist sie
 unbekannt, ist das ein Konfigurationsfehler, der angezeigt wird — keine

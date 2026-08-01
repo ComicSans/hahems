@@ -58,7 +58,12 @@ class AnalyseLauf:
         self.hass = hass
         self.rolle = rolle
         self.analyse: Analyse | None = None
-        self.konfigfehler: list[str] = []
+        # Zwei Sorten Befund, bewusst getrennt gehalten: `_dauerhaft` steht
+        # beim Start fest und ändert sich bis zum nächsten Reload nicht,
+        # `_je_abfrage` entsteht bei jedem Lauf neu. Ohne die Trennung würde
+        # der erste Tick den Startbefund wieder wegräumen.
+        self._dauerhaft: list[str] = []
+        self._je_abfrage: list[str] = []
 
         self._store = Store(hass, 1, f"hems.{entry_id}.{rolle.id}.wp_zaehler")
         self._takt = TaktZustand()
@@ -78,6 +83,17 @@ class AnalyseLauf:
         self.steuerung_aktiv = False
         self.steuerung_grund = GRUND_NORMAL
 
+    @property
+    def konfigfehler(self) -> list[str]:
+        """Alles, was der Nutzende über seine Verdrahtung wissen muss.
+
+        Wird vom Koordinator in den Config-Check gehängt und landet damit in
+        `binary_sensor.hems_konfiguration`. Als Warnung, nicht als Fehler:
+        eine kaputte Messkette macht die Kennzahlen wertlos, darf den Planer
+        aber nicht am Schalten hindern.
+        """
+        return [*self._dauerhaft, *self._je_abfrage]
+
     # --- Start und Ende -------------------------------------------------
 
     async def async_start(self) -> None:
@@ -87,7 +103,7 @@ class AnalyseLauf:
         )
         self._preset = alle.get(self.rolle.preset)
         if self._preset is None:
-            self.konfigfehler.append(
+            self._dauerhaft.append(
                 f"Preset {self.rolle.preset!r} unbekannt — Analyse bleibt aus"
             )
             _LOGGER.warning("Preset %r nicht gefunden", self.rolle.preset)
@@ -99,6 +115,20 @@ class AnalyseLauf:
             self._preset = replace(
                 self._preset,
                 durchfluss_nominal_lh=self.rolle.durchfluss_nominal_lh,
+            )
+
+        # Ohne Volumenstrom gibt es keine thermische Leistung und damit keinen
+        # COP, keine Wärmemenge und keinen Wärmeverlustkoeffizient. Die
+        # Analyse verwirft dann jede Messung mit `kein_durchfluss` — dauerhaft
+        # und ohne dass Datenbasis oder Hinweis darauf zeigen. Sechs der zehn
+        # Presets führen keinen Nennwert, das trifft also keinen Sonderfall.
+        if not self.rolle.durchfluss and not self._preset.durchfluss_nominal_lh:
+            self._dauerhaft.append(
+                "kein Volumenstrom: weder ein Durchfluss-Sensor verdrahtet "
+                "noch ein Nennvolumenstrom eingetragen, und das gewählte "
+                "Preset bringt keinen mit. COP, Wärmeleistung, Wärmemenge und "
+                "Wärmeverlustkoeffizient bleiben deshalb leer; Spreizung, "
+                "Taktung und die Hinweise rechnen weiter."
             )
 
         # Ein Zähler, der bei jedem Neustart auf null fällt, ist als
@@ -134,7 +164,7 @@ class AnalyseLauf:
     async def _auswerten(self) -> None:
         if self._preset is None:
             return
-        self.konfigfehler = []
+        self._je_abfrage = []
         messwert = self._messwert()
 
         jetzt = dt_util.utcnow()
@@ -195,7 +225,7 @@ class AnalyseLauf:
         einheit = (state.attributes.get("unit_of_measurement") or "").strip().lower()
         faktor = umrechnung.get(einheit)
         if faktor is None:
-            self.konfigfehler.append(
+            self._je_abfrage.append(
                 f"{eid}: Einheit {einheit or 'fehlt'!r} nicht verwertbar"
             )
             return None

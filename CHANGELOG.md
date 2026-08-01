@@ -4,6 +4,18 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 1.6.4 — Die Analyse sagt jetzt, wenn ihr der Volumenstrom fehlt
+
+Ohne Durchfluss-Sensor und ohne Nennvolumenstrom verwarf die Analyse jede
+Messung mit `kein_durchfluss` — dauerhaft, und weder Datenbasis noch ein
+Hinweis zeigten darauf. Jetzt steht der Grund beim Start als Warnung in
+`binary_sensor.hems_konfiguration`, samt dem, was trotzdem weiterrechnet.
+
+**Zu tun:** nichts. Wer die Warnung sieht, entscheidet: Zähler verdrahten,
+Nennvolumenstrom eintragen — oder bewusst auf den COP verzichten. Bei einer
+modulierenden Umwälzpumpe ist Letzteres die richtige Wahl: ein fester Nennwert
+wäre dort um ein Vielfaches daneben, und der COP hängt linear daran.
+
 ## 1.6.3 — Nennvolumenstrom für Anlagen ohne Zähler
 
 Ohne Volumenstromzähler sollte die Analyse auf den Nennvolumenstrom des
