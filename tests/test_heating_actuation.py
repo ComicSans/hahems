@@ -172,6 +172,82 @@ def test_nach_der_pause_wird_der_kuehl_sollwert_neu_geschrieben():
     assert hp == HeatingPlan("kuehlen", 21.0)
 
 
+# --- Anlagen, die den geschriebenen Modus nicht zeigen ------------------------
+#
+# `last_written_mode` ist der Modus, den HEMS zuletzt selbst geschrieben hat —
+# vom Actuator nur dann durchgereicht, wenn seither ein frischer Ist-Wert
+# vorliegt. Ohne Steuer-Entity, nach einem Neustart und bei jeder Anlage, die
+# ihren Modus sauber meldet, ist er None; dass dann alles bleibt wie vorher,
+# belegen saemtliche Tests oberhalb, die den Parameter nicht setzen.
+
+
+def test_ohne_quittung_verhaelt_sich_alles_wie_bisher():
+    # Ausdrueckliche Gegenprobe zum Default: last_written_mode=None aendert nichts.
+    hp = _hp(modus="heizen", current_mode="heizen", last_written_mode=None)
+    assert hp == HeatingPlan(None, None, False)
+
+
+def test_rueckweg_wird_geschrieben_obwohl_der_ist_modus_passt():
+    # Der Fall, um den es geht: HEMS hatte "aus" geschrieben, die Anlage meldet
+    # aber weiter "kuehlen". Beim Wiedereinschalten stimmen Ziel und Ist damit
+    # ueberein — ohne den Vergleich mit dem Geschriebenen kaeme der Befehl nie an.
+    hp = _hp(
+        modus="kuehlen",
+        vlt_ziel_c=21.0,
+        current_mode="kuehlen",
+        current_setpoint=21.0,
+        last_written_mode="aus",
+    )
+    assert hp.set_mode == "kuehlen"
+
+
+def test_rueckweg_ist_einmalig():
+    # Nach dem Schreiben stimmt der gebuchte Modus mit dem Ziel ueberein: ab
+    # da wieder Idempotenz, kein Schreiben je Zyklus.
+    hp = _hp(
+        modus="kuehlen",
+        vlt_ziel_c=21.0,
+        current_mode="kuehlen",
+        current_setpoint=21.0,
+        last_written_mode="kuehlen",
+    )
+    assert hp == HeatingPlan(None, None, False)
+
+
+def test_nicht_uebernommener_modus_wird_gemeldet_und_erneut_geschrieben():
+    hp = _hp(
+        modus="aus",
+        vlt_ziel_c=None,
+        current_mode="kuehlen",
+        current_setpoint=21.0,
+        last_written_mode="aus",
+    )
+    assert hp.modus_nicht_uebernommen is True
+    assert hp.set_mode == "aus"
+
+
+def test_keine_meldung_solange_nichts_geschrieben_wurde():
+    # Gleiche Lage, nur ohne vorherigen Schreibvorgang: das ist ein normaler
+    # Moduswechsel und keine verweigerte Uebernahme.
+    hp = _hp(modus="aus", vlt_ziel_c=None, current_mode="kuehlen", current_setpoint=21.0)
+    assert hp.modus_nicht_uebernommen is False
+    assert hp.set_mode == "aus"
+
+
+def test_keine_meldung_waehrend_der_warmwasserladung():
+    # In diesem Fenster stellt HEMS nichts — also gibt es auch nichts zu
+    # beurteilen, selbst wenn der Ist-Modus vom Ziel abweicht.
+    hp = _hp(
+        modus="aus",
+        vlt_ziel_c=None,
+        current_mode="kuehlen",
+        current_setpoint=21.0,
+        ww_bereitung=True,
+        last_written_mode="aus",
+    )
+    assert hp == HeatingPlan(None, None, False)
+
+
 def test_taupunkt_anhebung_wird_als_kuehl_sollwert_geschrieben():
     # Ende der Kette: Die Strategie hebt den Kuehl-Sollwert von 12 auf die
     # Taupunkt-Untergrenze 16, und genau die muss auch geschrieben werden -

@@ -291,6 +291,11 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             # und Ist dürfen dann auseinanderlaufen; das ist kein Fehlzustand,
             # und dieses Attribut ist der Beleg dafür.
             "warmwasserbereitung_aktiv": d.plan.heizung.ww_bereitung,
+            # Steht das an, hat HEMS den Modus gestellt und die Anlage zeigt ihn
+            # danach immer noch nicht — der Befehl kommt nicht an. HEMS schreibt
+            # weiter dagegen; ohne dieses Attribut sähe man nur eine Empfehlung,
+            # die scheinbar gilt.
+            "modus_nicht_uebernommen": d.plan.heizung.modus_nicht_uebernommen,
             # Taktschutz: Zwangspause gegen zu viele Verdichterstarts. Steht
             # "taktschutz" an, ist der Modus deshalb "aus" und nicht wegen der
             # Außentemperatur. "verdichterstarts" zählt das laufende Fenster.

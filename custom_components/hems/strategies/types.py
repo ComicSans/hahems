@@ -287,6 +287,12 @@ class HeatingResult:
     # ist die Anzeige erklärbar: Empfehlung und Ist dürfen auseinanderlaufen,
     # ohne dass etwas kaputt ist.
     ww_bereitung: bool = False
+    # Die Anlage hat den geschriebenen Modus nicht übernommen: HEMS hat ihn
+    # gestellt, und ein danach gelesener Ist-Wert zeigt ihn immer noch nicht.
+    # Kein Planungsergebnis — die Aktuierung trägt es nach dem Planlauf ein
+    # (siehe actuator._apply_wp), damit Sensor und Log es zeigen können. Ohne
+    # Steuer-Entity bleibt es False, weil dann nichts geschrieben wird.
+    modus_nicht_uebernommen: bool = False
     # Taktschutz: Zwangspause gegen zu viele Verdichterstarts. `modus` steht
     # dann auf "aus", obwohl die Außentemperatur Kühlen hergäbe — beides
     # zusammen macht die Anzeige erklärbar.

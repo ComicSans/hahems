@@ -4,6 +4,29 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 1.6.6 — HEMS sagt jetzt, wenn die Anlage den Modus nicht übernimmt
+
+Gemessen am 01.08.2026 an einer LG Therma V: HEMS empfahl Kühlen, schrieb den
+Betriebsmodus, und die Anlage blieb auf „Aus". Zu sehen war davon nichts —
+Sensor und Log zeigten weiter nur die Empfehlung, und die Drossel gegen
+Bus-Spam wiederholte den Aufruf still alle fünf Minuten. Ein Befehl, der nicht
+ankommt, sah damit genauso aus wie einer, der wirkt.
+
+HEMS merkt sich jetzt, welchen Modus es zuletzt selbst geschrieben hat — nur
+bei einem Aufruf, der die Drossel passiert hat —, und prüft nach zwei Minuten,
+ob der Ist-Modus ihn zeigt. Wenn nicht: Attribut `modus_nicht_uebernommen` auf
+`sensor.hems_heizkreis`, eine Zeile im Entscheidungs-Log und eine Warnung im
+HA-Log.
+
+Dieselbe Buchführung schließt eine zweite Lücke, die bisher niemand sehen
+konnte: Meldet eine Anlage nach einem HEMS-„aus" weiter den alten Modus, stimmen
+Ziel und Ist beim Wiedereinschalten überein — der Befehl wäre nie gestellt
+worden. Weicht der zuletzt geschriebene Modus vom neuen Ziel ab, wird deshalb
+einmal aktiv geschrieben.
+
+**Zu tun:** nichts. Wer die Meldung sieht, sucht die Ursache an der Anlage —
+HEMS schreibt weiter dagegen, kann den Befehl aber nicht erzwingen.
+
 ## 1.6.5 — Warmwasserladung schlägt den Heizkreis-Modus
 
 Die Rolle Wärmepumpen-Analyse kannte nur **eine** Betriebsart-Entität. Viele

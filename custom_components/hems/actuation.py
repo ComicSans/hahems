@@ -109,10 +109,15 @@ class HeatingPlan:
     stellende Vorlauf-Soll in °C oder ``None``. Wie der Actuator das umsetzt
     (climate: ``set_hvac_mode``/``set_temperature``; Select: ``select_option`` +
     Number) hängt an der Domain des Steuer-Entitys und ist dessen Sache.
+
+    ``modus_nicht_uebernommen`` meldet, dass HEMS diesen Modus bereits
+    geschrieben hat und die Anlage ihn danach immer noch nicht zeigt — siehe
+    ``plan_heating_control``.
     """
 
     set_mode: str | None = None
     set_setpoint: float | None = None
+    modus_nicht_uebernommen: bool = False
 
 
 def plan_heating_control(
@@ -122,6 +127,7 @@ def plan_heating_control(
     current_mode: str | None,
     current_setpoint: float | None,
     ww_bereitung: bool = False,
+    last_written_mode: str | None = None,
 ) -> HeatingPlan:
     """Modus + Vorlauf-Soll für den Heizkreis, idempotent.
 
@@ -137,6 +143,25 @@ def plan_heating_control(
     - ``ww_bereitung``: die Anlage bereitet gerade Warmwasser (optionale Rolle).
       Dann wird nichts gestellt, siehe unten. Ohne konfigurierte Rolle ist der
       Wert ``False`` und alles bleibt wie bisher.
+    - ``last_written_mode``: der Modus, den HEMS zuletzt selbst geschrieben hat —
+      und zwar nur dann gesetzt, wenn seither ein **frischer** Ist-Wert vorliegt
+      (das prüft der Actuator, weil es Zeitstempel braucht). ``None`` heißt
+      „nichts bekannt": dann verhält sich die Funktion exakt wie vorher.
+
+    Zwei Dinge hängen an ``last_written_mode``, beide für Anlagen, deren
+    Ist-Zustand nicht zeigt, was HEMS geschrieben hat:
+
+    - Der **Rückweg**. Ohne diesen Vergleich schreibt HEMS nur bei Abweichung
+      vom Ist-Modus. Meldet eine Anlage dauerhaft „kühlen", während sie nach
+      einem HEMS-„aus" tatsächlich steht, käme das Einschalten nie an: Ziel und
+      Ist stimmen ja überein. Weicht der zuletzt geschriebene Modus vom Ziel ab,
+      wird deshalb einmal geschrieben — danach stimmen beide überein und es
+      bleibt bei der Idempotenz, kein Schreiben je Zyklus.
+    - Die **Meldung**. Stimmt der zuletzt geschriebene Modus mit dem Ziel
+      überein, der Ist-Modus aber nicht, hat die Anlage den Befehl nicht
+      übernommen. HEMS schreibt weiter dagegen (wie bisher), sagt es jetzt aber:
+      sonst verliert es diesen Kampf lautlos und die Anzeige behauptet weiter,
+      alles sei gestellt.
     """
     if modus not in HEATING_MODES:
         return HeatingPlan()
@@ -149,7 +174,14 @@ def plan_heating_control(
     if ww_bereitung:
         return HeatingPlan()
 
-    set_mode = modus if current_mode != modus else None
+    # Die Anlage zeigt nicht, was HEMS zuletzt geschrieben hat: erneut schreiben
+    # und melden. Der Rückweg (zuletzt „aus", jetzt „kühlen") schreibt selbst
+    # dann, wenn der Ist-Modus das Ziel bereits anzeigt.
+    nicht_uebernommen = last_written_mode == modus and current_mode != modus
+    stellen = current_mode != modus or (
+        last_written_mode is not None and last_written_mode != modus
+    )
+    set_mode = modus if stellen else None
 
     set_setpoint = None
     if modus in ("heizen", "kuehlen") and vlt_ziel_c is not None:
@@ -157,4 +189,4 @@ def plan_heating_control(
         if current_setpoint is None or int(current_setpoint) != soll:
             set_setpoint = float(soll)
 
-    return HeatingPlan(set_mode, set_setpoint)
+    return HeatingPlan(set_mode, set_setpoint, nicht_uebernommen)

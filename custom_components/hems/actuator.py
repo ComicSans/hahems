@@ -16,7 +16,7 @@ Prinzipien (wie die Referenz-Automationen):
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -46,6 +46,12 @@ _EPS = 1.0
 # Drossel spammt das jede Minute dieselbe Fehlermeldung ins HA-Log.
 _CALL_THROTTLE = timedelta(minutes=5)
 
+# Frist, nach der ein geschriebener Heizkreis-Modus im Ist-Zustand angekommen
+# sein muss. Zwei Planläufe (60 s) plus Abfragezyklus des Geräts — kürzer wäre
+# jeder reguläre Moduswechsel kurz eine „Nicht-Übernahme", denn die
+# Service-Aufrufe laufen unblockierend und der Ist-Wert hängt am Gerätetakt.
+MODUS_QUITTUNG_FRIST = timedelta(minutes=2)
+
 
 class Actuator:
     """Schaltet die Empfehlung im Auto-Modus auf die konfigurierten Geräte."""
@@ -53,6 +59,10 @@ class Actuator:
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
         self._last_call: dict[tuple, object] = {}
+        # Steuer-Entity → (zuletzt geschriebener Heizkreis-Modus, Zeitpunkt).
+        # Nur was tatsächlich rausging, siehe _apply_wp. Nach einem Neustart
+        # leer: dann verhält sich die Aktuierung wie vor dieser Buchführung.
+        self._last_mode: dict[str, tuple[str, datetime]] = {}
 
     async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Reihenfolge WW → WP → Akku → modulierbare Lasten. Jedes Gerät
@@ -102,16 +112,23 @@ class Actuator:
         except (TypeError, ValueError):
             return None
 
-    async def _call(self, domain: str, service: str, entity: str, **data) -> None:
+    async def _call(self, domain: str, service: str, entity: str, **data) -> bool:
+        """Service aufrufen; ``False``, wenn die Drossel den Aufruf verworfen hat.
+
+        Der Rückgabewert zählt dort, wo HEMS sich merkt, was es geschrieben hat
+        (Heizkreis-Modus): ein gedrosselter Aufruf ging nicht raus und darf
+        nicht als geschrieben gebucht werden.
+        """
         key = (domain, service, entity, tuple(sorted(data.items())))
         now = dt_util.utcnow()
         last = self._last_call.get(key)
         if last is not None and now - last < _CALL_THROTTLE:
-            return
+            return False
         self._last_call[key] = now
         await self.hass.services.async_call(
             domain, service, {"entity_id": entity, **data}, blocking=False
         )
+        return True
 
     async def _turn(self, entity: str, on: bool) -> None:
         """turn_on/turn_off auf der Domain des Entitys (switch/input_boolean …),
@@ -205,6 +222,24 @@ class Actuator:
             if opt
         }
 
+    def _quittierter_modus(self, entity: str) -> str | None:
+        """Zuletzt geschriebener Modus, sobald er angekommen sein müsste.
+
+        Die Frist und nicht „ein Messwert, der nach dem Schreiben aufgenommen
+        wurde": Ein Steuer-Entity, das den Befehl schlicht ignoriert, ändert
+        seinen Zustand nicht — und ein unveränderter Zustand wird auch nicht neu
+        veröffentlicht. Die Bedingung „es gab seither ein Update" wäre also genau
+        in dem Fall nie erfüllt, den sie sichtbar machen soll. Die Frist deckt
+        beide Lagen ab: den zurückfallenden Wert und den, der nie kommt.
+        """
+        letzter = self._last_mode.get(entity)
+        if letzter is None:
+            return None
+        modus, geschrieben_am = letzter
+        if dt_util.utcnow() - geschrieben_am < MODUS_QUITTUNG_FRIST:
+            return None
+        return modus
+
     async def _apply_wp(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Ist-Modus/-Sollwert lesen, Entscheidung an die HA-freie
         ``plan_heating_control`` delegieren, domain-abhängig stellen. climate
@@ -239,18 +274,40 @@ class Actuator:
             current_mode=current_mode,
             current_setpoint=current_setpoint,
             ww_bereitung=plan.heizung.ww_bereitung,
+            last_written_mode=self._quittierter_modus(ent),
         )
+        # Beobachtung aus der Aktuierung zurück in die Empfehlung: Sensor und
+        # Entscheidungs-Log hängen an `plan.heizung`, und der Coordinator liest
+        # beides erst nach diesem Aufruf. Das ist derselbe Weg, den die
+        # Rückmeldung an die Wärmepumpen-Analyse nimmt.
+        plan.heizung.modus_nicht_uebernommen = hp.modus_nicht_uebernommen
+        if hp.modus_nicht_uebernommen:
+            _LOGGER.warning(
+                "HEMS-Actuator: %s hat den Modus '%s' nicht übernommen "
+                "(zeigt weiter '%s') — HEMS schreibt erneut",
+                ent,
+                plan.heizung.modus,
+                current_mode,
+            )
 
         if hp.set_mode is not None:
+            geschrieben = False
             if domain == "climate":
-                await self._call(
+                geschrieben = await self._call(
                     "climate", "set_hvac_mode", ent, hvac_mode=_HVAC[hp.set_mode]
                 )
             else:
                 # Ohne konfigurierte Option lässt sich der Modus nicht stellen.
                 option = mode_options.get(hp.set_mode)
                 if option:
-                    await self._call(domain, "select_option", ent, option=option)
+                    geschrieben = await self._call(
+                        domain, "select_option", ent, option=option
+                    )
+            # Nur buchen, was tatsächlich rausging: ein gedrosselter oder mangels
+            # Option unterbliebener Aufruf darf weder den einmaligen Rückweg
+            # verbrauchen noch eine Nicht-Übernahme melden, die niemand geschrieben hat.
+            if geschrieben:
+                self._last_mode[ent] = (hp.set_mode, dt_util.utcnow())
 
         if hp.set_setpoint is not None:
             if domain == "climate":
