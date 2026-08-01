@@ -1,0 +1,19 @@
+{
+  "schluessel": "generisch-luft-wasser-mittel",
+  "anzeigename": "Generisch Luft/Wasser, mittlere Effizienz",
+  "quelle": "hplib-generisch",
+  "cop_polynom": {
+    "p1": 66.83835,
+    "p2": -0.093488,
+    "p3": 7.388143,
+    "p4": -66.686444
+  },
+  "cop_modellfehler_prozent": 25.0,
+  "generisch": true,
+  "spreizung_min_gueltig_k": 2.0,
+  "waermetraeger_faktor": 1.163,
+  "gueltig_ab_c": -20.0,
+  "gueltig_bis_c": 20.0,
+  "standby_w": 220.0,
+  "spreizung_ziel_k": 5.0
+}

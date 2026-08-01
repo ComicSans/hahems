@@ -1,0 +1,14 @@
+{
+  "domain": "wp_optimization",
+  "name": "WP-Optimierung",
+  "after_dependencies": ["recorder"],
+  "codeowners": ["@ComicSans"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/ComicSans/wp-optimization",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/ComicSans/wp-optimization/issues",
+  "requirements": [],
+  "version": "0.2.0"
+}

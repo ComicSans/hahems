@@ -1,0 +1,19 @@
+{
+  "schluessel": "generisch-sole-wasser-gut",
+  "anzeigename": "Generisch Sole/Wasser, gute Effizienz",
+  "quelle": "hplib-generisch",
+  "cop_polynom": {
+    "p1": 0.113383,
+    "p2": -0.113383,
+    "p3": 9.147982,
+    "p4": -0.000482
+  },
+  "cop_modellfehler_prozent": 25.0,
+  "generisch": true,
+  "spreizung_min_gueltig_k": 2.0,
+  "waermetraeger_faktor": 1.163,
+  "gueltig_ab_c": -20.0,
+  "gueltig_bis_c": 20.0,
+  "standby_w": 220.0,
+  "spreizung_ziel_k": 5.0
+}

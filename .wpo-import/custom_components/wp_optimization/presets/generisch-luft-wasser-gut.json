@@ -1,0 +1,19 @@
+{
+  "schluessel": "generisch-luft-wasser-gut",
+  "anzeigename": "Generisch Luft/Wasser, gute Effizienz",
+  "quelle": "hplib-generisch",
+  "cop_polynom": {
+    "p1": 49.10742,
+    "p2": -0.102364,
+    "p3": 7.949629,
+    "p4": -48.950671
+  },
+  "cop_modellfehler_prozent": 25.0,
+  "generisch": true,
+  "spreizung_min_gueltig_k": 2.0,
+  "waermetraeger_faktor": 1.163,
+  "gueltig_ab_c": -20.0,
+  "gueltig_bis_c": 20.0,
+  "standby_w": 220.0,
+  "spreizung_ziel_k": 5.0
+}
