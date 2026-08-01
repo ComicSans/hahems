@@ -4,6 +4,33 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 1.6.0 — WP-Optimierung ist in HEMS aufgegangen
+
+Die eigenständige Integration `wp-optimization` gibt es nicht mehr. Ihre
+Effizienzanalyse ist jetzt die HEMS-Rolle **Wärmepumpen-Analyse**
+(Konfigurieren → Wärmepumpen-Analyse hinzufügen).
+
+**Zu tun:**
+
+1. `wp-optimization` in Home Assistant entfernen (Einstellungen → Geräte &
+   Dienste) und in HACS deinstallieren.
+2. In HEMS die Rolle Wärmepumpen-Analyse anlegen und dieselben fünf Entitäten
+   verdrahten: Vorlauf, Rücklauf, Durchfluss, elektrische Leistung,
+   Außentemperatur. Preset wie zuvor.
+3. Automationen und Karten auf die neuen `entity_id`s umstellen. Aus
+   `sensor.wp_optimierung_cop_momentan` wird `sensor.hems_<name>_cop_momentan`
+   mit dem Namen, den die Rolle bekommt.
+
+**Die Zählerstände beginnen neu.** `takte`, `laufzeit_summe` und `waermemenge`
+sind neue Entitäten und starten bei null. Die alten Werte bleiben in der
+Langzeitstatistik der alten Entitäten erhalten, solange die nicht gelöscht
+werden — zusammenführen lassen sie sich nicht.
+
+Was sich fachlich geändert hat: Die Analyse läuft jetzt im eigenen 30-s-Takt
+statt im Minutentakt des Planers, und HEMS meldet ihr die eigene
+Taktschutz-Pause. Der Reiter **Effizienz** im Panel erscheint wie bisher, sobald
+eine Analyse konfiguriert ist.
+
 ## 1.0.5 — Sensor-Attribute ausgeschrieben
 
 Attribute mit den Präfixen `wp_` und `ww_` heißen jetzt ausgeschrieben

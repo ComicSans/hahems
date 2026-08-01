@@ -1,14 +1,25 @@
 {
   "domain": "hems",
   "name": "HEMS",
-  "after_dependencies": ["recorder"],
-  "codeowners": ["@ComicSans"],
+  "after_dependencies": [
+    "recorder"
+  ],
+  "codeowners": [
+    "@ComicSans"
+  ],
   "config_flow": true,
-  "dependencies": ["sun", "http", "frontend", "panel_custom", "websocket_api", "persistent_notification"],
+  "dependencies": [
+    "sun",
+    "http",
+    "frontend",
+    "panel_custom",
+    "websocket_api",
+    "persistent_notification"
+  ],
   "documentation": "https://github.com/ComicSans/hahems",
   "integration_type": "hub",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/ComicSans/hahems/issues",
   "requirements": [],
-  "version": "1.5.0"
+  "version": "1.6.0"
 }

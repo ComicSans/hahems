@@ -44,8 +44,8 @@ hinzufügen, dann installieren und Home Assistant neu starten.
 4. `binary_sensor.hems_konfiguration` prüfen — er sagt dir, ob die
    Konfiguration für den Auto-Modus taugt.
 
-Jedes Feld ist im Formular selbst erklärt. Als Nachschlagewerk gibt es
-[docs/konfiguration.md](https://github.com/ComicSans/hahems/blob/main/docs/konfiguration.md).
+Jedes Feld ist im Formular selbst erklärt — Label und Hilfetext stehen direkt
+am Eingabefeld, im Options-Flow wie im HEMS-Panel.
 
 ## Betriebsmodi
 
@@ -84,21 +84,24 @@ mit folgenden Ansichten:
 Der native Options-Flow (Einstellungen → Geräte & Dienste → HEMS →
 Konfigurieren) bleibt als gleichwertiger Weg erhalten.
 
-### Effizienz — erscheint automatisch
+### Effizienz — sobald eine Wärmepumpen-Analyse konfiguriert ist
 
-Ist die eigenständige Integration
-[wp-optimization](https://github.com/ComicSans/wp-optimization) installiert,
-kommt ein weiterer Reiter **Effizienz** hinzu: COP gegen Datenblatt,
-Spreizung, Taktung, Wärmeverlustkoeffizient und ein Vorschlag für die
-Heizkurve. Ohne sie bleibt der Reiter aus, und HEMS ist unverändert
-vollständig.
+Ist die Rolle **Wärmepumpen-Analyse** angelegt, kommt ein weiterer Reiter
+**Effizienz** hinzu: COP gegen Datenblatt, Spreizung, Taktung,
+Wärmeverlustkoeffizient und ein Vorschlag für die Heizkurve. Ohne sie bleibt
+der Reiter aus, und HEMS ist unverändert vollständig.
 
-Es ist nichts zu verdrahten. HEMS erkennt die Integration über die Kennungen
-der Entity-Registry, nicht über `entity_id` — umbenannte Entities brechen die
-Erkennung deshalb nicht.
+Die Rolle braucht fünf Messwerte — Vorlauf, Rücklauf, Durchfluss, elektrische
+Leistung, Außentemperatur — und eine Gerätekennlinie aus der mitgelieferten
+Liste. Sie kennt weder Protokolle noch Register: woher die Werte kommen, ist
+ihr gleich. Betriebsart und Verdichterfrequenz verbessern das Ergebnis, sind
+aber nicht Pflicht.
 
-Die Werte dort sind **beratend**. Geschaltet wird nichts: Steuerung passiert
-am Gerät oder über die Steuerung in HEMS.
+Die Werte dort sind **beratend**. Die Analyse hat keinen Schreibpfad;
+geschaltet wird über die Rolle Heizkreis. Zwei Stellen, die denselben Sollwert
+schreiben, sind der Fehler, den diese Trennung verhindert.
+
+Details: [docs/waermepumpen-analyse.md](docs/waermepumpen-analyse.md).
 
 ## Lovelace-Karten
 
@@ -168,17 +171,30 @@ funktioniert unabhängig davon.
 - `binary_sensor.hems_konfiguration` — Config-Check für den Auto-Modus
 - `binary_sensor.hems_warmepumpen_storung` — Quelle für einen Handy-Push
 
+**Wärmepumpen-Analyse** (nur bei konfigurierter Rolle, Präfix aus ihrem Namen)
+
+- COP momentan / Soll / Abweichung, Wärmeleistung, Wärmemenge, Spreizung
+- Verdichterstarts, Verdichterlaufzeit, mittlere Taktlänge
+- Wärmeverlustkoeffizient und Heizkurvenvorschlag (Fußpunkt, Steilheit,
+  Vorlauf-Minimum)
+- Datenbasis und Datenbasis Empfehlung — getrennt geführt: die eine sagt, wie
+  sauber gerade gemessen wird, die andere, wie lange schon beobachtet wurde
+- sieben Hinweise als eigene Binärsensoren, jeder mit zwei Schwellen
+
 ## Weiterlesen
 
-- [docs/konfiguration.md](https://github.com/ComicSans/hahems/blob/main/docs/konfiguration.md) — jedes Feld im Detail, plus
-  die Steuer-Entitäten je Rolle
-- [docs/regelverhalten.md](https://github.com/ComicSans/hahems/blob/main/docs/regelverhalten.md) — wie Speicher-Regelung,
-  Ladedeckel, Lastensteuerung und Bedarfsprognose rechnen
-- [docs/diagnose.md](https://github.com/ComicSans/hahems/blob/main/docs/diagnose.md) — Config-Check, Störungsmeldungen,
-  Push-Automation
-- [CONCEPT.md](https://github.com/ComicSans/hahems/blob/main/CONCEPT.md) — Konzept und Phasenplan
-- [CHANGELOG.md](https://github.com/ComicSans/hahems/blob/main/CHANGELOG.md) — Änderungen, die nach einem Update eine manuelle
-  Anpassung erfordern
+- [docs/waermepumpen-analyse.md](docs/waermepumpen-analyse.md) — was die
+  Effizienzanalyse misst, unter welchen Namen sie es veröffentlicht, und
+  welche Regeln dabei bindend sind
+- [CONCEPT.md](CONCEPT.md) — Konzept und Phasenplan
+- [CHANGELOG.md](CHANGELOG.md) — Änderungen, die nach einem Update eine
+  manuelle Anpassung erfordern
+- [ATTRIBUTION.md](ATTRIBUTION.md) — Herkunft und Lizenz der Gerätekennlinien
 - [lg-therma-v-esphome-modbus](https://github.com/ComicSans/lg-therma-v-esphome-modbus)
   — Wärmepumpe per Modbus RTU anbinden, ohne Cloud und ohne Gateway; die
-  Entitäten passen direkt auf die HEMS-Rollen Heizkreis und Warmwasser
+  Entitäten passen direkt auf die HEMS-Rollen Heizkreis, Warmwasser und
+  Wärmepumpen-Analyse
+
+Jedes Konfigurationsfeld ist im Formular selbst erklärt — Label und Hilfetext
+stehen in den Übersetzungsdateien und werden von `test_config_ws_labels.py`
+auf Vollständigkeit geprüft.
