@@ -649,6 +649,7 @@ class HemsPanel extends HTMLElement {
         .filter(Boolean);
       const dc = slot.dataset.deviceClass || "";
       const current = slot.dataset.value || "";
+      const pflicht = slot.dataset.required === "1";
       this._entityValues[key] = current;
 
       const mount = () => {
@@ -669,6 +670,25 @@ class HemsPanel extends HTMLElement {
         });
         slot.innerHTML = "";
         slot.appendChild(picker);
+        // Eigener Knopf zum Leeren optionaler Felder. Der Entity-Picker des
+        // Frontends stellt den vorigen Wert wieder her, wenn man nur seinen
+        // Text loescht und wegklickt — eine einmal gesetzte optionale Rolle
+        // liess sich damit nicht mehr entfernen. Das Backend kann es laengst:
+        // fehlt der Schluessel, wird das Geraet ohne ihn gespeichert
+        // (config_ws.ws_upsert ersetzt vollstaendig). Es fehlte nur der Weg,
+        // "kein Wert" ueberhaupt auszudruecken.
+        if (pflicht) return;
+        const leeren = document.createElement("button");
+        leeren.type = "button";
+        leeren.className = "entity-clear";
+        leeren.textContent = "✕";
+        leeren.title = "Feld leeren";
+        leeren.setAttribute("aria-label", "Feld leeren");
+        leeren.addEventListener("click", () => {
+          this._entityValues[key] = "";
+          picker.value = undefined;
+        });
+        slot.appendChild(leeren);
       };
 
       if (window.customElements.get("ha-selector")) {
@@ -738,6 +758,7 @@ class HemsPanel extends HTMLElement {
       input = `<div class="entity-slot" data-key="${f.key}"
                  data-domain="${(f.domain || []).join(",")}"
                  data-device-class="${f.device_class || ""}"
+                 data-required="${f.required ? "1" : ""}"
                  data-value="${value != null ? escapeHtml(String(value)) : ""}"></div>`;
     } else if (f.type === "number") {
       const a = [
@@ -1080,8 +1101,15 @@ const STYLE = `
     background: var(--card-background-color); color: var(--primary-text-color);
   }
   .field-input .unit { color: var(--secondary-text-color); font-size: 13px; }
-  .entity-slot { flex: 1; min-width: 0; }
-  .entity-slot ha-selector, .entity-slot ha-entity-picker { display: block; width: 100%; }
+  .entity-slot { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+  .entity-slot ha-selector, .entity-slot ha-entity-picker { display: block; flex: 1; min-width: 0; }
+  .entity-slot input { flex: 1; min-width: 0; }
+  .entity-clear {
+    flex: 0 0 auto; border: none; background: transparent; cursor: pointer;
+    color: var(--secondary-text-color); font-size: 15px; line-height: 1;
+    padding: 6px; border-radius: 6px;
+  }
+  .entity-clear:hover { background: var(--divider-color); }
   .form-actions { display: flex; gap: 8px; margin-top: 8px; }
   .err { color: var(--error-color, #f44336); font-size: 13px; }
   .logs-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

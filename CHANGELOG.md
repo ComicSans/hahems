@@ -4,6 +4,22 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 1.6.7 — Optionale Entity-Felder lassen sich im Panel wieder leeren
+
+Eine einmal gesetzte optionale Rolle — etwa **Betriebsart** unter
+Wärmepumpen-Analyse — ließ sich im Panel nicht mehr entfernen: Der
+Entity-Picker des Frontends stellt den vorigen Wert wieder her, sobald man
+seinen Text löscht und wegklickt. „Kein Wert" war damit gar nicht
+ausdrückbar.
+
+Optionale Entity-Felder haben jetzt einen eigenen Knopf zum Leeren. Am
+Speichern ändert sich nichts: Fehlt der Schlüssel, wird das Gerät ohne ihn
+gespeichert — das konnte das Backend die ganze Zeit, es kam nur nichts an.
+
+**Zu tun:** nichts. Im Konfigurationsdialog von Home Assistant (Einstellungen →
+Geräte & Dienste) gilt das Frontend-Verhalten weiterhin; dort ist das Panel
+der verlässliche Weg.
+
 ## 1.6.6 — HEMS sagt jetzt, wenn die Anlage den Modus nicht übernimmt
 
 Gemessen am 01.08.2026 an einer LG Therma V: HEMS empfahl Kühlen, schrieb den
