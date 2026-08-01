@@ -28,7 +28,8 @@ Rolleninstanz statt eines Codepfads.
 **Fachlogik ohne Home Assistant.** Alles unter `strategies/` und
 `waermepumpe/analysis/` kommt mit der Standardbibliothek aus. Das ist der
 Grund, warum die Testsuite ohne HA-Installation in gut einer Sekunde
-durchläuft — und warum sie über 340 Fälle abdeckt statt einer Handvoll.
+durchläuft — und deshalb jede Regel einzeln prüft, statt sich auf eine
+Handvoll Rauchtests zu beschränken.
 
 **Denken, messen und schalten sind getrennt.** `select.hems_modus` trennt
 beobachten (rechnen und anzeigen), auto (zusätzlich schreiben) und aus
