@@ -1,138 +1,176 @@
-# HEMS - Konzept (v0.3, Stand 2026-07-19)
+# HEMS — Konzept
 
-Home Energy Management System als Home-Assistant-Custom-Integration.
-Ziel: Autarkie zuerst. Netz ist Rückfallebene, nie Optimierungsziel.
+Warum HEMS so gebaut ist, wie es gebaut ist. Was es tut, steht im
+[README](README.md); wie man es einstellt, steht im Formular selbst.
 
-## Ausgangslage
-
-- **PV**: 3 Prognose-Flächen (Ost, Süd, West) via Forecast-Integration, stündlich + 7 Tage voraus
-- **Speicher**: 3x Zendure Hyper 2000 (je Phase, gesamt 11,52 kWh), Manager-Integration
-- **Wärmepumpe**: LG Luft-Wasser, climate-Entität + Power-Switch, getrennte Sensorik Heizen/Warmwasser
-- **Wallbox**: nur Ampere-Steuerung, fix 3-phasig (min. ~4,1 kW), kein SoC-Zugriff aufs Auto
-- **Zähler**: Hauptzähler-Leistung (OBIS 16.7.0) als einzige Regelgröße.
-  Ein separater Einspeise-Fehlleistungssensor wird bewusst komplett ignoriert.
-- **Strompreis**: fest (input_number), kein dynamischer Tarif geplant
+**Ziel: Autarkie zuerst.** Das Netz ist Rückfallebene, nie Optimierungsziel.
 
 ## Entscheidungen
 
-1. **Eigenes Plugin** (Custom Integration, HACS-fähig), kein EMHASS
-2. **Heuristik-Planner** statt Linearprogrammierung: bei festem Preis ist die Zielfunktion
-   simpel (Netzbezug minimieren), eine Heuristik bleibt erklärbar und debugbar
-3. **Dynamische Priorisierung nach Prognose**, Warmwasser immer Priorität 1
-4. **WP-Steuerung über vorhandene HA-Entitäten** (kein SG-Ready)
-5. **Alles variabel**: geräte-agnostisches Rollenmodell, keine Entity-IDs im Code,
-   Geräte jederzeit über die UI hinzufügbar/entfernbar
+**Eigene Integration statt EMHASS.** Eine Custom Integration läuft im selben
+Prozess wie Home Assistant, kennt dessen Entities direkt und braucht keinen
+zweiten Dienst, keinen zweiten Konfigurationsort und keine zweite
+Fehlerquelle.
+
+**Heuristik statt Linearprogrammierung.** Bei festem Strompreis ist die
+Zielfunktion einfach: Netzbezug minimieren. Eine Heuristik bleibt dabei
+erklärbar — jede Empfehlung hat eine Begründung, die im Panel steht, und
+lässt sich Zeile für Zeile nachvollziehen. Ein Optimierer liefert eine Zahl
+und kein Argument. Bei dynamischen Tarifen kippt diese Abwägung; dann wäre die
+Entscheidung neu zu treffen.
+
+**Rollen statt Geräte.** Im Code steht keine einzige Entity-ID. Konfiguriert
+werden Rollen — Speicher, Heizkreis, modulierbare Last — und ihnen werden
+Entities zugewiesen. Damit funktioniert HEMS mit jedem Fabrikat, dessen Werte
+in Home Assistant ankommen, und ein weiteres Gerät ist eine weitere
+Rolleninstanz statt eines Codepfads.
+
+**Fachlogik ohne Home Assistant.** Alles unter `strategies/` und
+`waermepumpe/analysis/` kommt mit der Standardbibliothek aus. Das ist der
+Grund, warum die Testsuite ohne HA-Installation in gut einer Sekunde
+durchläuft — und warum sie über 340 Fälle abdeckt statt einer Handvoll.
+
+**Denken, messen und schalten sind getrennt.** `select.hems_modus` trennt
+beobachten (rechnen und anzeigen), auto (zusätzlich schreiben) und aus
+(Kill-Switch). Wer HEMS ausprobieren will, sieht wochenlang zu, bevor
+irgendetwas geschaltet wird.
+
+**Nie zwei Schreiber auf einem Sollwert.** Der Actuator schreibt nur auf
+konfigurierte Steuer-Entities, nur bei Wertänderung, nie auf eine fehlende
+Empfehlung, und isoliert Fehler je Gerät. Die Wärmepumpen-Analyse hat gar
+keinen Schreibpfad — geprüft von `tests/waermepumpe/test_architektur.py`,
+nicht nur zugesagt.
+
+**Jede Ja-Nein-Entscheidung hat zwei Schwellen.** Eine einzelne Schwelle lässt
+die Entscheidung um sich herum flattern; an einer Wärmepumpe hieße das Ein und
+Aus in jedem Abfragetakt. `_latch` in `strategies/types.py` ist ein
+Schmitt-Trigger, und die Konstanten kommen paarweise.
 
 ## Rollenmodell
 
-Der Planner kennt keine Hersteller, nur abstrakte Rollen:
+Der Planner kennt keine Hersteller, nur diese Rollen. Pflicht ist genau eine:
+der Zähler.
 
-| Rolle | Beispiel | Parameter |
+| Rolle | Anzahl | Wofür |
 |---|---|---|
-| Meter (genau 1) | Zähler 16.7.0 | Entity, Vorzeichen-Invertierung |
-| ForecastSource (0..n) | PV-Fläche Ost/Süd/West | Energie heute/Rest/morgen, Leistung jetzt |
-| Storage (0..n) | Hyper 2000 | SoC, Kapazität, Reserve-SoC, max. Lade-/Entladeleistung, Sollwert-Entitäten für Laden/Einspeisen |
-| ThermalStore (0..n) | Warmwasserspeicher | Temperatur, Basis-Soll, Komfort-Soll |
-| SwitchableLoad (0..n) | Wärmepumpe | Switch, Taktschutz (min. Lauf/Pause, max. Sperre/Tag) |
-| ModulatedLoad (0..n) | Wallbox | Ampere-Entity, min/max A, Phasen, optionaler Schalter, min. Laufzeit |
+| Zähler | genau 1 | Momentanleistung am Netzanschluss. Die zentrale Regelgröße. |
+| PV-Prognose | 0..n | je eine Dachfläche oder Ausrichtung |
+| Speicher | 0..n | SoC, Kapazität, Reserve, Lade- und Entladegrenzen, Sollwert-Entities |
+| Warmwasser | 0..n | Temperatur, Basis- und Komfort-Soll, Sperrzeiten, Legionellenschutz |
+| Heizkreis | 0..n | witterungsgeführte Modus- und Vorlaufempfehlung |
+| Schaltbare Last | 0..n | An/Aus mit Taktschutz |
+| Modulierbare Last | 0..n | stufenlos regelbar, etwa eine Wallbox |
+| Wärmepumpen-Analyse | 0..n | misst Effizienz, schreibt nie |
 
-Storages werden zu einem virtuellen Gesamtspeicher aggregiert; Sollwerte werden
-proportional zu freier Kapazität/Leistung verteilt. Reserven (z.B. L3) bleiben
-Parameter des einzelnen Geräts. Ein vierter Akku = neue Storage-Instanz, fertig.
+Mehrere Speicher werden zu einem virtuellen Gesamtspeicher aggregiert;
+Sollwerte verteilt der Regler proportional zu freier Kapazität und Leistung.
+Reserven bleiben Parameter des einzelnen Geräts.
 
-## Architektur (vier Module)
+## Aufbau
 
-1. **Forecast-Fusion**: aggregiert alle ForecastSources, rechnet gegen ein
-   gelerntes Lastprofil. Primärquelle ist der rekonstruierte Hausverbrauch
-   (`lastfluss` = PV + Netzsaldo + Akku, PV- und akkukompensiert), aus dem ein
-   volles 24-h-Profil je Wochentagstyp (Werktag/Wochenende, UTC-Stunde, 28 Tage
-   Langzeitstatistik) gebildet wird. Fällt die Historie noch aus, greift das
-   Nacht-Profil aus dem rohen Zähler (14 Tage, nur Nachtstunden), zuletzt die
-   konfigurierte Grundlast. Liefert u.a. PV-Rest heute, PV morgen,
-   Überschuss-Prognose, Nachtdefizit, Sonnenfenster.
-2. **Planner**: rollierender Plan in 15-min-Slots (24-48 h), prognosebasierte
-   Heuristik. Pro Slot: WW-Basis → Hausverbrauch → (WW-Komfort | Akku | Auto in
-   prognoseabhängiger Reihenfolge) → Einspeisung als Rest.
-3. **Executor + Safety** (ab Phase 2): Service-Calls für Zendure/WP/Wallbox.
-   Safety-Layer ist nicht überstimmbar (siehe unten).
-4. **Simulation/Sizing** (Phase 4): Service `hems.simulate` rechnet die
-   Vergangenheit mit virtuellen Akkugrößen durch (Autarkiegrad,
-   Eigenverbrauchsquote, vermiedener Netzbezug in kWh/€).
+```
+custom_components/hems/
+  coordinator.py    liest Entities, ruft den Planner, ruft den Actuator
+  planner.py        rollierender Plan, reine Funktion
+  strategies/       die Fachlogik, frei von Home Assistant
+  waermepumpe/      Effizienzanalyse
+    analysis/       ebenfalls HA-frei, ohne jeden Schreibpfad
+    presets/        Gerätekennlinien als JSON
+  actuator.py       der einzige Ort, an dem geschrieben wird
+  frontend/         Panel und zwei Lovelace-Karten
+```
 
-## Regeln im Detail
+Die Trennlinie, auf die es ankommt, verläuft zwischen HA-Schicht und
+Fachlogik. Der Planner ist eine reine Funktion: Der Koordinator reicht den
+Zustand des letzten Laufs hinein und übernimmt den neuen. Deshalb lässt sich
+jede Regel gegen einen konstruierten Zustand prüfen, ohne eine Anlage.
 
-### Warmwasser (Priorität 1, Zwei-Sollwert-Strategie)
-- Basis-Soll 48 °C: wird immer gehalten, notfalls mit Netzstrom (Safety-Layer)
-- Komfort-Soll 60 °C: nur bei vorhandenem oder prognostiziertem Überschuss.
-  Der WW-Speicher ist damit der billigste "Akku" im System (~12 °C Hub thermisch)
-- Legionellenprogramm bleibt unangetastet
+**Prognose.** Fremde PV-Prognosen werden aggregiert und gegen ein gelerntes
+Lastprofil gerechnet. Primärquelle ist der rekonstruierte Hausverbrauch, aus
+dem ein 24-Stunden-Profil je Wochentagstyp entsteht; fällt die Historie noch
+aus, greift das Nachtprofil aus dem rohen Zähler, zuletzt die konfigurierte
+Grundlast. HEMS rechnet **keine eigene PV-Prognose** — dafür gibt es
+Integrationen, die es besser können.
 
-### Zendure-Akkus
-- Normalbetrieb: Laden ausschließlich aus PV-Überschuss
-- Ziel-SoC = Nachtdefizit-Prognose (gedeckelt auf 100 %)
-- Netzladen nur als Notreserve-Ausnahme: SoC unter Reserve-Schwelle und keine
-  nennenswerte PV in Sicht (konfigurierbar, standardmäßig konservativ niedrig)
+**Plan.** Rollierend in 15-Minuten-Schritten über 24 bis 48 Stunden. Je Slot:
+Warmwasser-Basis, dann Hausverbrauch, dann in prognoseabhängiger Reihenfolge
+Warmwasser-Komfort, Speicher und modulierbare Lasten, Einspeisung als Rest.
 
-### Wallbox
-- Modus **PV-Überschuss** (Standard): HEMS besitzt den Ladestrom selbst. Der
-  Sollstrom folgt dem Überschuss **vor dem Akku** (aus dem Saldo werden aktuelle
-  Wallbox-Last und Akkuleistung herausgerechnet). Dadurch weicht die Wallbox als
-  modulierbare Last **vor** der Akku-Entladung: lässt der Ertrag nach, wird zuerst
-  der Ladestrom bis zum Minimum heruntergeregelt, erst danach hilft der Akku;
-  reicht es nicht mehr für die Mindestleistung, schaltet die Wallbox ab. Freigabe
-  erst ab stabil ~4,3 kW Überschuss (3-phasig, 6 A Minimum), symmetrisches
-  Hysterese-Band + Mindestlaufzeit gegen Schützflattern
-- Modus **Sofortladen** (Notfall-Override): volle Ampere, Netz egal. Die
-  Wallbox-Last wird dabei aus dem Speicher-Saldo herausgerechnet (Akku schonen).
-  Setzt sich nach Ladeende selbst auf Standard zurück
-- **Mehrere modulierbare Lasten:** Der Überschuss wird über alle Lasten verteilt.
-  Reicht er für alle Minima, laufen alle und der Rest wird proportional zum
-  Schwankungsbereich aufgeteilt (alle anteilig gedrosselt statt eine ganz).
-  Reicht er nicht, entscheidet Priorität grob (höhere zuerst) und darunter
-  Energie-Fairness: die heute am wenigsten geladene Last kommt zuerst, mit
-  Rotation im Takt der Mindestlaufzeit. Eine angesteckt-lose Wallbox (an, zieht
-  ~0) wird erkannt und tritt zurück, damit sie keine ladende verdrängt; sie wird
-  nur einmal je Cooldown (`EV_EMPTY_COOLDOWN_S`, Standard 30 min) kurz geprüft,
-  um ein zwischenzeitlich angestecktes Auto zu entdecken. Wer eine dauerhaft
-  leere Zweitbox hat, gibt dem Auto besser eine höhere Priorität (dann keine
-  Prüf-Pausen)
-- **Wichtig:** Die bisherige externe Überschuss-Ladeautomation muss deaktiviert
-  werden — sonst regeln beide gegeneinander (HEMS drosselt, Automation rampt hoch)
+## Regeln, deren Begründung nicht offensichtlich ist
 
-### Wärmepumpe (Winterlogik)
-- Pausenfenster um den PV-Peak nur an ertragsschwachen Tagen, wenn der Überschuss
-  sonst nicht in die Akkus passt
-- Ehrliche COP-Abwägung als transparente Kennzahl (tagsüber ist der COP besser als
-  nachts; die Pause lohnt nur, wenn das Gebäude die Tageswärme nicht speichern kann)
-- Taktschutz: Mindestlaufzeit, Mindestpause, max. Sperrdauer/Tag, Untergrenze Innentemperatur
+**Warmwasser hat Priorität 1.** Der Speicher ist der billigste Puffer im
+System: ein Kelvin Speicherhub kostet nichts an Zyklenfestigkeit, ein
+Batteriezyklus schon. Zwei Sollwerte — Basis wird immer gehalten, notfalls aus
+dem Netz; Komfort nur bei Überschuss.
 
-### Safety-Layer (nicht überstimmbar)
-- WW-Mindesttemperatur, Legionellenprogramm
-- WP-Taktschutz und Komfortgrenzen
-- Akku-Mindest-/Reserve-SoC pro Gerät
-- Watchdog: bei Planner-Ausfall Rückfall in den heutigen Zustand; die bestehende
-  Zendure-Saldo-Automation bleibt als Fallback erhalten und wird nur bei aktivem
-  HEMS pausiert
+**Der Ladedeckel über den Tag.** Kalendarische Alterung ist bei hohem SoC am
+größten. Tagsüber wird deshalb nur bis zu einem Zwischenstand geladen; erst
+vor Sonnenuntergang steigt der Deckel, sodass der Speicher zur Nacht voll ist
+und möglichst wenig Zeit bei 100 % verbringt.
 
-## Phasenplan
+**Modulierbare Lasten weichen vor dem Speicher.** Lässt der Ertrag nach, wird
+zuerst der Ladestrom heruntergeregelt, erst danach hilft der Akku. Sonst
+finanzierte der Speicher das Laden.
 
-1. **Beobachten** (dieses Repo, jetzt): Forecast-Fusion + Prognose-Sensoren,
-   Planner loggt nur, fasst nichts an. 2-3 Wochen Validierung.
-   Dazu der Sensor **Einspeiseplan**: verteilt das Akku-Budget (verfügbar minus
-   Reserve) als stündliche Einspeise-Obergrenzen über die Nacht ("gleichmäßig
-   strecken", damit der Akku bis Sonnenaufgang reicht); live soll die
-   Einspeisung später saldo-geführt darunter bleiben. Die Stundenwerte kommen
-   aus dem gelernten Lastprofil (24 h je Wochentagstyp aus dem rekonstruierten
-   Hausverbrauch, Nacht-Zählerprofil als Fallback bis genug Historie da ist),
-   die zugehörige **hems-plan-card** zeigt Plan, SoC-Verlauf und die
-   PV-Stundenkurve für heute und morgen.
-   Nebenbei: Vorzeichenverhalten der 16.7.0 gegen Historie klären
-   (Verdacht: bei 0 gedeckelt, dann Saldo-Rekonstruktion über Einspeise-Sensor).
-2. **WW + Akku steuern**: Zwei-Sollwert-WW, Zendure-Zielladung
-3. **Wallbox + WP-Winterlogik**: Überschussladen, Sofort-Override, Pausenfenster
-4. **Simulation**: `hems.simulate` für Akku-Sizing und What-if-Reports
+**Der Taktschutz senkt die Startrate, nicht die Taktlänge.** Reißt die
+Startzahl im rollierenden Fenster die Schwelle, empfiehlt HEMS eine
+Zwangspause — die Anlage bekommt eine echte Ruhephase statt der vier Minuten
+ihrer eigenen Wiederanlaufsperre. Der einzelne Takt wird davon nicht länger.
 
-## Offene Punkte
+**Die Taupunkt-Untergrenze im Kühlbetrieb hebt an, sie senkt nie.** An einer
+Flächenkühlung schlägt sich Wasser nieder, sobald die Oberfläche den Taupunkt
+unterschreitet. Die Vorlauftemperatur ist dabei nicht die
+Oberflächentemperatur — deshalb ein konfigurierbarer Sicherheitsabstand und
+keine Grenze exakt auf dem Taupunkt.
 
-- Lizenz wählen (Repo ist inzwischen öffentlich)
-- 16.7.0-Vorzeichenfrage (wird in Phase 1 mit echten Daten beantwortet)
+**Die Kurvenübernahme ist dreifach gebremst.** Siehe
+[docs/waermepumpen-analyse.md](docs/waermepumpen-analyse.md): Die Empfehlung
+entsteht aus Betrieb, den HEMS mit der vorigen Empfehlung selbst erzeugt hat.
+
+## Was bewusst fehlt
+
+- **Eigene PV-Prognose.** Siehe oben.
+- **Dynamische Stromtarife.** Die Heuristik setzt einen festen Preis voraus.
+  Mit variablem Preis ist „Netzbezug minimieren" nicht mehr dasselbe wie
+  „Kosten minimieren", und die Zielfunktion wäre neu zu denken.
+- **Ein eigener Langzeitspeicher.** Die Statistik von Home Assistant trägt
+  das; eine Kopie davon wäre eine zweite Wahrheit.
+- **Automatische Erkennung von Geräten.** Welche Entity welche Rolle spielt,
+  weiß nur, wer die Anlage kennt. Geraten wäre schlimmer als gefragt.
+
+## Standortannahmen
+
+HEMS rechnet mit Sonnenauf- und -untergang aus Home Assistant und ist damit
+vom Standort unabhängig. Eine Ausnahme gibt es: Die **Vorbelegung** der
+Sommersperre im Formular ist die Nordhalbkugel (Mai bis September). Liegt die
+konfigurierte Breite südlich des Äquators, schlägt das Formular November bis
+März vor. Die Regel selbst überspannt den Jahreswechsel in beide Richtungen,
+und ändern lässt sie sich immer.
+
+## Stand
+
+Beobachten, Warmwasser, Speicher, Lasten, Heizkreis und die
+Wärmepumpen-Analyse sind gebaut und laufen. Offen ist ein Simulationsdienst,
+der die Vergangenheit mit virtuellen Speichergrößen durchrechnet
+(Autarkiegrad, Eigenverbrauchsquote, vermiedener Netzbezug) — die Rechenkerne
+dafür stehen in `tests/simulate.py`, ein Dienst darum herum nicht.
+
+## Referenzinstallation
+
+Kein Teil des Konzepts, sondern die Anlage, an der HEMS entwickelt und
+gemessen wird. Sie sagt, welche Kombination wirklich erprobt ist — und dass
+alles andere aus dem Rollenmodell folgt, nicht aus Erfahrung.
+
+- PV mit drei Prognoseflächen (Ost, Süd, West)
+- drei Speicher, einer je Phase, zusammen 11,52 kWh
+- LG Therma V R290 Monobloc, über
+  [Modbus RTU](https://github.com/ComicSans/lg-therma-v-esphome-modbus)
+  angebunden, mit getrennter Sensorik für Heizen und Warmwasser
+- Wallbox mit Ampere-Steuerung, dreiphasig, ohne Zugriff auf den Auto-SoC
+- Hauptzähler-Leistung nach OBIS 16.7.0 als einzige Regelgröße
+- fester Strompreis
+
+Was daran nicht repräsentativ ist: Der Wasserdurchfluss der Wärmepumpe ist
+über Modbus nicht erreichbar, ein COP lässt sich an dieser Anlage also nicht
+rechnen. Die Wärmepumpen-Analyse braucht dafür einen eigenen
+Volumenstromsensor.

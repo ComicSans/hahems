@@ -355,6 +355,37 @@ ANALYSIS_SCHEMA = vol.Schema(
 )
 
 
+
+def _halbjahr_versetzt(monat: int) -> int:
+    """Denselben Monat auf der anderen Halbkugel: plus sechs, mit Umlauf."""
+    return (monat + 5) % 12 + 1
+
+
+def _rollen_vorgaben(hass, role: str) -> dict:
+    """Vorbelegung eines Rollen-Formulars, die vom Standort abhängt.
+
+    Bisher genau eine: die Sommersperre des Heizkreises. Die Vorgaben Mai bis
+    September sind die Nordhalbkugel — auf der Südhalbkugel wären sie genau
+    die Heizmonate, und HEMS empfähle im Winter nie Heizen. Die Sperre selbst
+    kann den Jahreswechsel längst überspannen (`heat_lock_from_month` größer
+    als `..._to_month`); es war nur die Vorbelegung, die eine Halbkugel
+    unterstellte.
+
+    Vorbelegung und nicht Automatik: Wer auf der Südhalbkugel wohnt, sieht im
+    Formular November bis März stehen und kann es ändern. Ein Wert, den HEMS
+    hinter dem Formular still umrechnet, wäre nicht mehr nachvollziehbar.
+    """
+    if role != ROLE_HEATING:
+        return {}
+    breite = getattr(hass.config, "latitude", None)
+    if breite is None or breite >= 0:
+        return {}
+    return {
+        "heat_lock_from_month": _halbjahr_versetzt(DEFAULT_HEAT_LOCK_FROM),
+        "heat_lock_to_month": _halbjahr_versetzt(DEFAULT_HEAT_LOCK_TO),
+    }
+
+
 ROLE_SCHEMAS = {
     ROLE_FORECAST: FORECAST_SCHEMA,
     ROLE_STORAGE: STORAGE_SCHEMA,
@@ -462,7 +493,12 @@ class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._devices.append({"id": uuid4().hex, "role": role, **user_input})
             return self._wizard_menu(role)
-        return self.async_show_form(step_id=step_id, data_schema=ROLE_SCHEMAS[role])
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(
+                ROLE_SCHEMAS[role], _rollen_vorgaben(self.hass, role)
+            ),
+        )
 
     async def async_step_add_forecast(self, user_input=None):
         return await self._async_add_step(ROLE_FORECAST, "add_forecast", user_input)
@@ -552,7 +588,12 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
             devices = self._devices()
             devices.append({"id": uuid4().hex, "role": role, **user_input})
             return self._save_devices(devices)
-        return self.async_show_form(step_id=step_id, data_schema=ROLE_SCHEMAS[role])
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(
+                ROLE_SCHEMAS[role], _rollen_vorgaben(self.hass, role)
+            ),
+        )
 
     async def async_step_add_forecast(self, user_input=None):
         return await self._async_add_step(ROLE_FORECAST, "add_forecast", user_input)
