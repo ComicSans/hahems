@@ -343,11 +343,15 @@ ANALYSIS_SCHEMA = vol.Schema(
         ),
         vol.Required("vorlauf_temp"): _entity(device_class="temperature"),
         vol.Required("ruecklauf_temp"): _entity(device_class="temperature"),
-        # Ohne device_class: ein Volumenstrom trägt in HA keine, und die
-        # Einheit wird ohnehin aus `unit_of_measurement` gelesen, nie geraten.
-        vol.Required("durchfluss"): _entity(["sensor", "input_number"]),
         vol.Required("leistung_elektrisch"): _entity(device_class="power"),
         vol.Required("aussentemperatur"): _entity(device_class="temperature"),
+        # Optional, und das ist kein Zugeständnis: an vielen Anlagen ist der
+        # Volumenstrom schlicht nicht auslesbar. Ohne ihn tritt der
+        # Nennvolumenstrom des Presets ein, der COP ist geschätzt statt
+        # gemessen, und die Datenbasis wird entsprechend gedeckelt.
+        # Ohne device_class, weil ein Volumenstrom in HA keine trägt — die
+        # Einheit wird aus `unit_of_measurement` gelesen, nie geraten.
+        vol.Optional("durchfluss"): _entity(["sensor", "input_number"]),
         vol.Optional("verdichter_frequenz"): _entity(["sensor"]),
         vol.Optional("betriebsart"): _entity(["sensor", "climate", "select"]),
         vol.Required("standby_w", default=0): _number(0, 1000, "W", 1),

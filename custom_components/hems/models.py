@@ -274,9 +274,13 @@ class HeatPumpAnalysis:
     preset: str
     vorlauf_temp: str
     ruecklauf_temp: str
-    durchfluss: str
     leistung_elektrisch: str
     aussentemperatur: str
+    # Ohne Volumenstromzähler tritt der Nennvolumenstrom des Presets ein. Der
+    # COP ist dann geschätzt statt gemessen, `durchfluss_geschaetzt` steht an
+    # und die Datenbasis wird gedeckelt. Das ist keine Notlösung, sondern der
+    # Normalfall: an vielen Anlagen ist der Volumenstrom nicht auslesbar.
+    durchfluss: str | None = None
     # Ohne Verdichterfrequenz wird die Taktung aus der Leistung geschätzt.
     verdichter_frequenz: str | None = None
     # Ohne Betriebsart vermischen sich Heizen und Warmwasser in einer

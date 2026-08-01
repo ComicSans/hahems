@@ -4,6 +4,19 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 1.6.1 — Der Durchfluss ist wieder optional
+
+In 1.6.0 war das Feld **Durchfluss** der Rolle Wärmepumpen-Analyse Pflicht.
+Wer keinen Volumenstromzähler hat — an vielen Anlagen ist er über die
+Anbindung gar nicht erreichbar — kam am Formular nicht vorbei.
+
+Er ist jetzt wieder optional, wie in `wp-optimization`. Fehlt er, rechnet die
+Analyse mit dem Nennvolumenstrom aus der Gerätekennlinie, meldet „Durchfluss
+geschätzt" und weist den COP nie als belastbar aus.
+
+**Zu tun:** nichts, außer aktualisieren. Wer 1.6.0 bereits eingerichtet hat,
+behält seine Konfiguration.
+
 ## 1.6.0 — WP-Optimierung ist in HEMS aufgegangen
 
 Die eigenständige Integration `wp-optimization` gibt es nicht mehr. Ihre

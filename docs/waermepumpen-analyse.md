@@ -57,7 +57,7 @@ eigene Zähler. Die Analyse kennt die Quelle nicht.
 |---|---|---|---|
 | `vorlauf_temp` | ja | °C | gemessen, nicht aus dem Rücklauf gerechnet |
 | `ruecklauf_temp` | ja | °C | |
-| `durchfluss` | ja | l/h | andere Einheiten werden umgerechnet |
+| `durchfluss` | nein | l/h | fehlt er, tritt der Nennvolumenstrom des Presets ein |
 | `leistung_elektrisch` | ja | W | möglichst nur die Wärmepumpe, ohne Fremdlast |
 | `aussentemperatur` | ja | °C | |
 | `verdichter_frequenz` | nein | Hz | ohne sie wird die Taktung aus der Leistung geschätzt |
@@ -67,6 +67,14 @@ eigene Zähler. Die Analyse kennt die Quelle nicht.
 
 Ohne `betriebsart` vermischen sich Heizen und Warmwasser in einer Kennzahl.
 Zulässig, wertet aber die Datenbasis ab.
+
+**Ohne Volumenstromzähler rechnet die Analyse trotzdem.** Sie setzt dann den
+Nennvolumenstrom aus dem Preset ein, meldet `durchfluss_geschaetzt` und
+deckelt die Datenbasis — der COP ist dann eine Schätzung und wird nie als
+belastbar ausgewiesen. Das ist kein Notbehelf, sondern der häufige Fall: an
+vielen Anlagen ist der Volumenstrom über die Anbindung gar nicht erreichbar,
+an der Referenzinstallation zum Beispiel nicht. Ein Formular, das ihn
+erzwingt, schlösse diese Anlagen aus.
 
 **Einheiten werden gelesen, nie geraten.** Maßgeblich ist
 `unit_of_measurement` der verdrahteten Entity. Fehlt sie oder ist sie
