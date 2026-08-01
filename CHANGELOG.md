@@ -4,6 +4,24 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 1.6.2 — Kein Fehlalarm mehr nach dem Neustart
+
+Nach einem Neustart meldete `binary_sensor.hems_konfiguration` jede fremde
+Entität als „existiert nicht" — an einer Anlage einundzwanzig auf einmal, quer
+über Speicher, Wärmepumpe und Steckdosen. Keine davon fehlte wirklich: Die
+Prüfung fragt `hass.states` ab, und die füllt sich erst, während die
+Integrationen der Reihe nach laden. Wenige Sekunden später war der Sensor
+wieder grün.
+
+Geprüft wird jetzt erst, wenn Home Assistant fertig hochgefahren ist. Solange
+steht im Attribut `hinweise`, dass die Prüfung noch aussteht, und
+`bereit_fuer_auto` ist **falsch** statt wahr — ungeprüft ist nicht dasselbe wie
+fehlerfrei.
+
+**Zu tun:** nichts. Wer eine Automation auf `bereit_fuer_auto` triggern lässt,
+sollte wissen, dass es in den ersten Sekunden nach einem Neustart nun falsch
+statt wahr meldet.
+
 ## 1.6.1 — Der Durchfluss ist wieder optional
 
 In 1.6.0 war das Feld **Durchfluss** der Rolle Wärmepumpen-Analyse Pflicht.

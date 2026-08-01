@@ -98,7 +98,10 @@ class HemsConfigCheckSensor(
         if check is None:
             return {}
         return {
-            "bereit_fuer_auto": not check.errors,
+            # Ungeprüft ist nicht dasselbe wie fehlerfrei: solange Home
+            # Assistant hochfährt, ist `errors` leer, weil nichts geprüft
+            # wurde. "hinweise" sagt dann, warum.
+            "bereit_fuer_auto": check.geprueft and not check.errors,
             "auto_schaltet": check.actuated or ["(nichts – keine Steuer-Entities)"],
             "fehler": check.errors,
             "warnungen": check.warnings,

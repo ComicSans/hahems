@@ -9,12 +9,18 @@ Steuer-Entität wie HEMS (Überlappung, die im Auto-Modus zum Kampf führt)?
 Reine Prüf-Logik ohne Seiteneffekte; der Automations-Scan ist defensiv
 gekapselt (fällt bei HA-interner Änderung auf "nicht verfügbar" zurück, statt
 den Sensor zu reißen).
+
+**Während Home Assistant hochfährt wird nicht geprüft.** Die Prüfung fragt
+`hass.states` ab, und die füllt sich erst, während die Integrationen der Reihe
+nach laden. Ein Lauf zu früh meldet jede fremde Entität als "existiert nicht" —
+gemessen am 01.08.2026 einundzwanzig Fehler, von denen keiner einer war, samt
+Meldung an den Nutzer. Wer das ein paarmal sieht, liest den Sensor nicht mehr.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 
 from .const import DEFAULT_SWITCHABLE_EXPECTED_W, MODE_AUTO
 from .models import DeviceRegistry
@@ -28,6 +34,10 @@ class ConfigCheck:
     overlaps: list[str] = field(default_factory=list)  # Entity ⇄ aktive Automation
     actuated: list[str] = field(default_factory=list)  # Rollen, die auto schaltet
     scan_ok: bool = True  # Automations-Überlappungsprüfung lief
+    # Falsch, solange Home Assistant hochfährt. Ohne dieses Feld läse sich ein
+    # ungeprüfter Zustand wie ein geprüfter: `errors` ist leer, und
+    # `bereit_fuer_auto` stünde auf wahr, ohne dass irgendetwas geprüft wurde.
+    geprueft: bool = True
 
     def problem(self, mode: str) -> bool:
         """Sensor-Zustand: harte Fehler immer; Überlappung nur im Auto-Modus
@@ -42,6 +52,35 @@ class ConfigCheck:
         )
 
 
+#: Meldung, solange nicht geprüft werden kann. Als `info`, nicht als
+#: `warnings`: Es ist kein Befund, sondern seine Abwesenheit.
+START_HINWEIS = (
+    "Home Assistant startet noch — geprüft wird, sobald alle Integrationen "
+    "geladen sind."
+)
+
+
+def pruefung_moeglich(core_state) -> bool:
+    """Sind alle Integrationen geladen?
+
+    Nur im Zustand `running` steht fest, dass eine fehlende Entität wirklich
+    fehlt. Davor heißt „nicht da" bloß „noch nicht da", und die Prüfung
+    unterscheidet das nicht.
+    """
+    return core_state is CoreState.running
+
+
+def check_beim_start() -> ConfigCheck:
+    """Das Ergebnis, solange nicht geprüft werden kann.
+
+    Bewusst leer statt optimistisch oder pessimistisch: keine Fehler, keine
+    Warnungen, `scan_ok=False`. Damit meldet der Sensor kein Problem, behauptet
+    aber auch nicht, geprüft zu haben — `bereit_fuer_auto` steht auf wahr, weil
+    `errors` leer ist, und der Hinweis daneben sagt, warum das nichts wert ist.
+    """
+    return ConfigCheck(info=[START_HINWEIS], scan_ok=False, geprueft=False)
+
+
 def _domain(entity: str | None) -> str | None:
     return entity.split(".")[0] if entity else None
 
@@ -51,6 +90,9 @@ def _exists(hass: HomeAssistant, entity: str | None) -> bool:
 
 
 def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
+    if not pruefung_moeglich(hass.state):
+        return check_beim_start()
+
     c = ConfigCheck()
     control_entities: set[str] = set()
 
