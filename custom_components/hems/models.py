@@ -36,6 +36,7 @@ from .const import (
     DEFAULT_VLT_MAX_C,
     DEFAULT_VLT_MIN_C,
     DEFAULT_VLT_MIN_COLD_C,
+    ROLE_ANALYSIS,
     ROLE_FORECAST,
     ROLE_HEATING,
     ROLE_MODULATED,
@@ -244,6 +245,40 @@ class ModulatedLoad:
 
 
 @dataclass
+class HeatPumpAnalysis:
+    """Effizienzmessung einer Wärmepumpe. Beratend, ohne Steuer-Entity.
+
+    Fünf Messeingänge sind Pflicht, zwei verbessern das Ergebnis. Die Rolle
+    kennt weder Protokolle noch Register: woher die Werte kommen — Modbus,
+    Herstellerintegration, eigene Zähler — ist ihr gleich. Herstellerwissen
+    steckt allein im Preset, und das ist eine JSON-Datei.
+
+    Bewusst ohne Steuer-Entity: Die Empfehlungen werden veröffentlicht,
+    gestellt wird über die Rolle Heizkreis. Zwei Stellen, die denselben
+    Sollwert schreiben, sind der Fehler, den diese Trennung verhindert.
+    """
+
+    id: str
+    name: str
+    # Schlüssel einer Datei in `waermepumpe/presets/`. Modellscharf, nicht
+    # markenscharf: allein die Therma-V-Reihe hat vier Kennlinien.
+    preset: str
+    vorlauf_temp: str
+    ruecklauf_temp: str
+    durchfluss: str
+    leistung_elektrisch: str
+    aussentemperatur: str
+    # Ohne Verdichterfrequenz wird die Taktung aus der Leistung geschätzt.
+    verdichter_frequenz: str | None = None
+    # Ohne Betriebsart vermischen sich Heizen und Warmwasser in einer
+    # Kennzahl. Zulässig, wertet aber die Datenbasis ab.
+    betriebsart: str | None = None
+    # Anlagenspezifischer Standby-Sockel; 0 heißt: Wert aus dem Preset. Der
+    # Sockel hängt an der Umwälzpumpe der Anlage, nicht am Gerätemodell.
+    standby_w: float = 0.0
+
+
+@dataclass
 class DeviceRegistry:
     forecasts: list[ForecastSource] = field(default_factory=list)
     storages: list[Storage] = field(default_factory=list)
@@ -251,6 +286,7 @@ class DeviceRegistry:
     heatings: list[HeatingCircuit] = field(default_factory=list)
     switchables: list[SwitchableLoad] = field(default_factory=list)
     modulateds: list[ModulatedLoad] = field(default_factory=list)
+    analyses: list[HeatPumpAnalysis] = field(default_factory=list)
 
 
 _ROLE_CLASSES = {
@@ -260,6 +296,7 @@ _ROLE_CLASSES = {
     ROLE_HEATING: (HeatingCircuit, "heatings"),
     ROLE_SWITCHABLE: (SwitchableLoad, "switchables"),
     ROLE_MODULATED: (ModulatedLoad, "modulateds"),
+    ROLE_ANALYSIS: (HeatPumpAnalysis, "analyses"),
 }
 
 

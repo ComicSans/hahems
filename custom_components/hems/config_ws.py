@@ -14,14 +14,15 @@ from pathlib import Path
 from uuid import uuid4
 
 import voluptuous as vol
-
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 
 from .config_flow import EDIT_STEPS, GENERAL_SCHEMA, ROLE_LABELS, ROLE_SCHEMAS
 from .const import CONF_DEVICES, DOMAIN
-from .partners import KONTRAKT_VERSION, entdecke
+from .models import parse_devices
+from .waermepumpe.entities import ROLLEN
 
 _WS_REGISTERED = f"{DOMAIN}_ws_registered"
 _LABELS_CACHE = f"{DOMAIN}_field_labels"
@@ -352,16 +353,40 @@ def ws_logs(hass, connection, msg):
 @websocket_api.websocket_command({vol.Required("type"): "hems/partner/get"})
 @callback
 def ws_partner(hass, connection, msg):
-    """Erkannte Partner-Integrationen samt Rollenzuordnung liefern.
+    """Wärmepumpen-Analysen samt Rollenzuordnung liefern.
 
-    Nur Lesen, deshalb ohne require_admin. Eine leere Liste ist der Normalfall
-    und kein Fehler: dann ist `wp-optimization` einfach nicht installiert und
+    Der Reiter „Effizienz" im Panel hängt daran. Eine leere Liste ist der
+    Normalfall und kein Fehler: dann ist keine Analyse-Rolle konfiguriert und
     das Panel blendet den Reiter aus.
+
+    Die Zuordnung läuft über die **Kennung** aus der Entity-Registry und nicht
+    über `entity_id`: Nutzende benennen Entities um, und eine Zuordnung über
+    `entity_id` bräche beim ersten Mal. Die Kennung lautet
+    `<eintrag-id>_<rolle-id>_<rolle>`.
+
+    Bis August 2026 lag die Analyse in der eigenständigen Integration
+    `wp_optimization` und wurde hier über die Config-Entries anderer Domänen
+    gesucht. Der Name des Kommandos ist geblieben, damit ein Panel aus einem
+    Browser-Cache nicht ins Leere läuft.
     """
-    connection.send_result(
-        msg["id"],
-        {
-            "kontrakt_version": KONTRAKT_VERSION,
-            "wp_optimization": entdecke(hass),
-        },
-    )
+    entry = _entry(hass, msg.get("entry_id"))
+    if entry is None:
+        connection.send_result(msg["id"], {"waermepumpen_analyse": []})
+        return
+
+    registry = er.async_get(hass)
+    vorhanden = {
+        e.unique_id: e.entity_id
+        for e in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    gefunden = []
+    for rolle in parse_devices(entry.options.get(CONF_DEVICES, [])).analyses:
+        praefix = f"{entry.entry_id}_{rolle.id}_"
+        rollen = {
+            name: vorhanden[praefix + name]
+            for name in ROLLEN
+            if praefix + name in vorhanden
+        }
+        if rollen:
+            gefunden.append({"id": rolle.id, "titel": rolle.name, "rollen": rollen})
+    connection.send_result(msg["id"], {"waermepumpen_analyse": gefunden})

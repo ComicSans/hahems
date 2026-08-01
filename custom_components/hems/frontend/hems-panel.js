@@ -33,7 +33,7 @@ const TABS = [
   { id: "overview", label: "Übersicht" },
   { id: "control", label: "Steuerung" },
   { id: "diagnostics", label: "Diagnose" },
-  // Wird nur eingeblendet, wenn die Integration wp-optimization erkannt wird.
+  // Wird nur eingeblendet, wenn eine Wärmepumpen-Analyse konfiguriert ist.
   // HEMS bleibt ohne sie voll funktionsfähig; ein leerer Reiter wäre nur
   // Rauschen.
   { id: "effizienz", label: "Effizienz", optional: true },
@@ -201,14 +201,14 @@ class HemsPanel extends HTMLElement {
     this._detectPartner();
   }
 
-  // --- Effizienz (wp-optimization) ----------------------------------------
+  // --- Effizienz (Wärmepumpen-Analyse) -------------------------------------
 
   async _detectPartner() {
-    // Die Erkennung läuft im Backend über die Kennungen der Entity-Registry,
+    // Die Zuordnung läuft im Backend über die Kennungen der Entity-Registry,
     // nicht über entity_id — Nutzende benennen Entities um.
     try {
       const antwort = await this._hass.callWS({ type: "hems/partner/get" });
-      this._partner = (antwort && antwort.wp_optimization) || [];
+      this._partner = (antwort && antwort.waermepumpen_analyse) || [];
     } catch (err) {
       // Älteres HEMS-Backend ohne diesen Befehl: Reiter bleibt aus.
       this._partner = [];

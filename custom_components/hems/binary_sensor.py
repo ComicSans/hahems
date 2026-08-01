@@ -1,4 +1,5 @@
-"""Binärsensoren: freie Kapazität, Config-Sanity-Check und WP-Störung."""
+"""Binärsensoren: freie Kapazität, Config-Check, WP-Störung und die
+Hinweise der Wärmepumpen-Analyse."""
 from __future__ import annotations
 
 from homeassistant.components.binary_sensor import (
@@ -13,19 +14,26 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_FREE_H, CONF_FREE_KWH, DEFAULT_FREE_H, DEFAULT_FREE_KWH, DOMAIN
 from .coordinator import HemsCoordinator
+from .models import HeatPumpAnalysis
+from .waermepumpe.entities import HINWEISE as ANALYSE_HINWEISE
+from .waermepumpe.entities import AnalyseHinweisDescription
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator: HemsCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        [
-            HemsCapacityFreeSensor(coordinator),
-            HemsConfigCheckSensor(coordinator),
-            HemsFaultSensor(coordinator),
+    entities: list[BinarySensorEntity] = [
+        HemsCapacityFreeSensor(coordinator),
+        HemsConfigCheckSensor(coordinator),
+        HemsFaultSensor(coordinator),
+    ]
+    for rolle in coordinator.registry.analyses:
+        entities += [
+            AnalyseHinweisSensor(coordinator, rolle, desc)
+            for desc in ANALYSE_HINWEISE
         ]
-    )
+    async_add_entities(entities)
 
 
 class HemsCapacityFreeSensor(CoordinatorEntity[HemsCoordinator], BinarySensorEntity):
@@ -140,3 +148,46 @@ class HemsFaultSensor(CoordinatorEntity[HemsCoordinator], BinarySensorEntity):
             # Ein-Zeilen-Zusammenfassung, direkt für die Push-Nachricht nutzbar.
             "meldung": " | ".join(a.title for a in alerts),
         }
+
+
+class AnalyseHinweisSensor(CoordinatorEntity[HemsCoordinator], BinarySensorEntity):
+    """Ein Hinweis der Wärmepumpen-Analyse.
+
+    Je Hinweisart eine eigene Entity mit stabiler Kennung, nicht eine Liste in
+    einem Attribut: nur so bleiben sie in der Registry verankert und in
+    Automationen adressierbar.
+
+    Ohne Analyse ist der Zustand `None` und nicht `off`. Ein Hinweis, der
+    „alles in Ordnung" meldet, während gar nichts gemessen wird, wäre eine
+    Falschaussage.
+    """
+
+    _attr_has_entity_name = True
+    entity_description: AnalyseHinweisDescription
+
+    def __init__(
+        self,
+        coordinator: HemsCoordinator,
+        rolle: HeatPumpAnalysis,
+        description: AnalyseHinweisDescription,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._rolle = rolle
+        self._attr_unique_id = (
+            f"{coordinator.entry.entry_id}_{rolle.id}_{description.key}"
+        )
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{coordinator.entry.entry_id}_{rolle.id}")},
+            via_device=(DOMAIN, coordinator.entry.entry_id),
+            name=rolle.name,
+            manufacturer="Tobias Reithmeier",
+            model="HEMS Wärmepumpen-Analyse",
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        analyse = self.coordinator.data.analysen.get(self._rolle.id)
+        if analyse is None:
+            return None
+        return self.entity_description.wert(analyse)

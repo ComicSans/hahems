@@ -15,11 +15,15 @@ from homeassistant.const import UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import HemsCoordinator, HemsData
+from .models import HeatPumpAnalysis
+from .waermepumpe.entities import ENERGIE_KEY, AnalyseSensorDescription
+from .waermepumpe.entities import SENSOREN as ANALYSE_SENSOREN
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -359,7 +363,15 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator: HemsCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(HemsSensor(coordinator, desc) for desc in SENSORS)
+    entities: list[SensorEntity] = [
+        HemsSensor(coordinator, desc) for desc in SENSORS
+    ]
+    for rolle in coordinator.registry.analyses:
+        entities += [
+            AnalyseSensor(coordinator, rolle, desc) for desc in ANALYSE_SENSOREN
+        ]
+        entities.append(WaermemengeSensor(coordinator, rolle))
+    async_add_entities(entities)
 
 
 class HemsSensor(CoordinatorEntity[HemsCoordinator], SensorEntity):
@@ -387,3 +399,113 @@ class HemsSensor(CoordinatorEntity[HemsCoordinator], SensorEntity):
         if self.entity_description.attr_fn is None:
             return None
         return self.entity_description.attr_fn(self.coordinator.data)
+
+
+class AnalyseSensor(CoordinatorEntity[HemsCoordinator], SensorEntity):
+    """Ein Wert aus der Wärmepumpen-Analyse.
+
+    Eigene Klasse und nicht `HemsSensor`, weil die Analyse einen anderen
+    Verfügbarkeitsbegriff hat: Der Planer rechnet ab der ersten Sekunde, die
+    Analyse erst, wenn die Messkette steht. Bis dahin ist `None` der richtige
+    Zustand und kein Fehler.
+    """
+
+    _attr_has_entity_name = True
+    entity_description: AnalyseSensorDescription
+
+    def __init__(
+        self,
+        coordinator: HemsCoordinator,
+        rolle: HeatPumpAnalysis,
+        description: AnalyseSensorDescription,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._rolle = rolle
+        self._attr_unique_id = (
+            f"{coordinator.entry.entry_id}_{rolle.id}_{description.key}"
+        )
+        self._attr_device_info = _analyse_geraet(coordinator, rolle)
+
+    @property
+    def native_value(self):
+        analyse = self.coordinator.data.analysen.get(self._rolle.id)
+        if analyse is None:
+            return None
+        return self.entity_description.wert(analyse)
+
+
+class WaermemengeSensor(
+    CoordinatorEntity[HemsCoordinator], RestoreEntity, SensorEntity
+):
+    """Aufsummierte Wärmemenge.
+
+    Integriert die geprüfte thermische Leistung über die Zeit. Bewusst hier
+    und nicht in der Fachlogik: die Integration über die Zeit braucht die Uhr,
+    und `analysis/` soll ohne Uhr auskommen.
+
+    Der Stand wird über Neustarts hinweg wiederhergestellt. Ein
+    `total_increasing`-Zähler, der bei jedem Neustart auf null fällt, ist
+    schlimmer als keiner: die Langzeitstatistik deutet den Rücksprung als
+    neuen Zyklus und addiert den alten Stand dazu.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Wärmemenge"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 2
+
+    def __init__(
+        self, coordinator: HemsCoordinator, rolle: HeatPumpAnalysis
+    ) -> None:
+        super().__init__(coordinator)
+        self._rolle = rolle
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_{rolle.id}_{ENERGIE_KEY}"
+        self._attr_device_info = _analyse_geraet(coordinator, rolle)
+        self._kwh = 0.0
+        self._letzter_ts: float | None = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        alt = await self.async_get_last_state()
+        if alt is not None and alt.state not in (None, "unknown", "unavailable"):
+            try:
+                self._kwh = float(alt.state)
+            except (TypeError, ValueError):
+                self._kwh = 0.0
+
+    @property
+    def native_value(self) -> float:
+        return round(self._kwh, 3)
+
+    def _handle_coordinator_update(self) -> None:
+        analyse = self.coordinator.data.analysen.get(self._rolle.id)
+        if analyse is not None and analyse.waermeleistung_w:
+            jetzt = analyse.takt.letzter_ts
+            if jetzt is not None and self._letzter_ts is not None:
+                delta = jetzt - self._letzter_ts
+                # Lücken nach einem Neustart nicht als Dauerleistung buchen.
+                if 0 < delta <= 900:
+                    self._kwh += analyse.waermeleistung_w * delta / 3_600_000.0
+            self._letzter_ts = jetzt
+        super()._handle_coordinator_update()
+
+
+def _analyse_geraet(
+    coordinator: HemsCoordinator, rolle: HeatPumpAnalysis
+) -> DeviceInfo:
+    """Eigenes Gerät je Analyse-Rolle, unter dem HEMS-Gerät.
+
+    Nicht am HEMS-Gerät selbst: die Analyse beschreibt eine reale Wärmepumpe,
+    und bei zwei Wärmepumpen wären zwanzig gleichnamige Entities an einem
+    Gerät nicht mehr auseinanderzuhalten.
+    """
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{coordinator.entry.entry_id}_{rolle.id}")},
+        via_device=(DOMAIN, coordinator.entry.entry_id),
+        name=rolle.name,
+        manufacturer="Tobias Reithmeier",
+        model="HEMS Wärmepumpen-Analyse",
+    )

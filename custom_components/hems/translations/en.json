@@ -216,11 +216,11 @@
         }
       },
       "modulated_menu": {
-        "title": "Modulated loads (step 7 of 7)",
+        "title": "Modulated loads (step 7 of 8)",
         "description": "**Modulated loads** can adjust their power consumption continuously. The typical example is a wallbox whose charging current (in amperes) can be regulated between a minimum and maximum. HEMS continuously tracks the setpoint to the available surplus.\n\nAdded so far: {count}",
         "menu_options": {
           "add_modulated": "Add modulated load (e.g. wallbox)",
-          "finish": "Finish setup"
+          "analysis_menu": "Continue to heat pump analysis"
         }
       },
       "add_heating": {
@@ -295,6 +295,42 @@
           "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Applies to heating and cooling alike, but never during frost protection.",
           "antitakt_window_min": "Length of the window the starts are counted in. The window rolls along: what counts is every start younger than that span.",
           "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
+        }
+      },
+      "add_analysis": {
+        "title": "Heat pump analysis",
+        "description": "The **heat pump analysis** measures how well the unit actually performs: COP against the data sheet, spread, cycling, the building's heat loss and a heating curve suggestion.\n\nIt only advises and never switches — setpoints go through the heating circuit role. Five measurement inputs are required, two more improve the result.",
+        "data": {
+          "name": "Name",
+          "preset": "Device curve",
+          "vorlauf_temp": "Flow temperature",
+          "ruecklauf_temp": "Return temperature",
+          "durchfluss": "Flow rate",
+          "leistung_elektrisch": "Electrical power (W)",
+          "aussentemperatur": "Outdoor temperature",
+          "verdichter_frequenz": "Compressor frequency (Hz, optional)",
+          "betriebsart": "Operating mode (optional)",
+          "standby_w": "Standby base load (W)"
+        },
+        "data_description": {
+          "name": "A short label for this heat pump (display only).",
+          "preset": "Model-specific, not brand-specific: the Therma V range alone has four clearly different curves. If your model is missing, a generic type works — the data basis is downgraded accordingly.",
+          "vorlauf_temp": "Measured flow temperature, not reconstructed from the return.",
+          "ruecklauf_temp": "Measured return temperature.",
+          "durchfluss": "Heating water flow rate. The unit is read from the entity and never guessed: l/min instead of l/h skews every COP by a factor of 60.",
+          "leistung_elektrisch": "Ideally the heat pump only, without other loads on the same meter.",
+          "aussentemperatur": "An independent sensor beats the built-in one: that often sits in a sunlit enclosure and reads far too high when the unit is idle.",
+          "verdichter_frequenz": "Without it, cycling is estimated from the electrical power.",
+          "betriebsart": "Separates heating, hot water and defrost. Without it, heating and hot water blend into one figure — allowed, but it downgrades the data basis.",
+          "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve."
+        }
+      },
+      "analysis_menu": {
+        "title": "Heat pump analysis (step 8 of 8)",
+        "description": "The **heat pump analysis** measures how well the unit actually performs: COP against the data sheet, spread, cycling, the building's heat loss and a heating curve suggestion.\n\nIt only advises and never switches — setpoints go through the heating circuit role. Five measurement inputs are required, two more improve the result.\n\nAdded so far: {count}",
+        "menu_options": {
+          "add_analysis": "Add heat pump analysis",
+          "finish": "Finish setup"
         }
       }
     },
@@ -803,6 +839,62 @@
           "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Applies to heating and cooling alike, but never during frost protection.",
           "antitakt_window_min": "Length of the window the starts are counted in. The window rolls along: what counts is every start younger than that span.",
           "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
+        }
+      },
+      "add_analysis": {
+        "title": "Heat pump analysis",
+        "description": "The **heat pump analysis** measures how well the unit actually performs: COP against the data sheet, spread, cycling, the building's heat loss and a heating curve suggestion.\n\nIt only advises and never switches — setpoints go through the heating circuit role. Five measurement inputs are required, two more improve the result.",
+        "data": {
+          "name": "Name",
+          "preset": "Device curve",
+          "vorlauf_temp": "Flow temperature",
+          "ruecklauf_temp": "Return temperature",
+          "durchfluss": "Flow rate",
+          "leistung_elektrisch": "Electrical power (W)",
+          "aussentemperatur": "Outdoor temperature",
+          "verdichter_frequenz": "Compressor frequency (Hz, optional)",
+          "betriebsart": "Operating mode (optional)",
+          "standby_w": "Standby base load (W)"
+        },
+        "data_description": {
+          "name": "A short label for this heat pump (display only).",
+          "preset": "Model-specific, not brand-specific: the Therma V range alone has four clearly different curves. If your model is missing, a generic type works — the data basis is downgraded accordingly.",
+          "vorlauf_temp": "Measured flow temperature, not reconstructed from the return.",
+          "ruecklauf_temp": "Measured return temperature.",
+          "durchfluss": "Heating water flow rate. The unit is read from the entity and never guessed: l/min instead of l/h skews every COP by a factor of 60.",
+          "leistung_elektrisch": "Ideally the heat pump only, without other loads on the same meter.",
+          "aussentemperatur": "An independent sensor beats the built-in one: that often sits in a sunlit enclosure and reads far too high when the unit is idle.",
+          "verdichter_frequenz": "Without it, cycling is estimated from the electrical power.",
+          "betriebsart": "Separates heating, hot water and defrost. Without it, heating and hot water blend into one figure — allowed, but it downgrades the data basis.",
+          "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve."
+        }
+      },
+      "edit_analysis": {
+        "title": "Edit heat pump analysis",
+        "description": "Adjust settings for \"{name}\".",
+        "data": {
+          "name": "Name",
+          "preset": "Device curve",
+          "vorlauf_temp": "Flow temperature",
+          "ruecklauf_temp": "Return temperature",
+          "durchfluss": "Flow rate",
+          "leistung_elektrisch": "Electrical power (W)",
+          "aussentemperatur": "Outdoor temperature",
+          "verdichter_frequenz": "Compressor frequency (Hz, optional)",
+          "betriebsart": "Operating mode (optional)",
+          "standby_w": "Standby base load (W)"
+        },
+        "data_description": {
+          "name": "A short label for this heat pump (display only).",
+          "preset": "Model-specific, not brand-specific: the Therma V range alone has four clearly different curves. If your model is missing, a generic type works — the data basis is downgraded accordingly.",
+          "vorlauf_temp": "Measured flow temperature, not reconstructed from the return.",
+          "ruecklauf_temp": "Measured return temperature.",
+          "durchfluss": "Heating water flow rate. The unit is read from the entity and never guessed: l/min instead of l/h skews every COP by a factor of 60.",
+          "leistung_elektrisch": "Ideally the heat pump only, without other loads on the same meter.",
+          "aussentemperatur": "An independent sensor beats the built-in one: that often sits in a sunlit enclosure and reads far too high when the unit is idle.",
+          "verdichter_frequenz": "Without it, cycling is estimated from the electrical power.",
+          "betriebsart": "Separates heating, hot water and defrost. Without it, heating and hot water blend into one figure — allowed, but it downgrades the data basis.",
+          "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve."
         }
       }
     },

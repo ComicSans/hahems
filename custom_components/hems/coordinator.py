@@ -78,6 +78,9 @@ from .strategies.types import (
     SwitchableState,
     WaermepumpeModel,
 )
+from .waermepumpe.analysis.types import Analyse
+from .waermepumpe.const import GRUND_NORMAL, GRUND_SPERRE
+from .waermepumpe.runner import AnalyseLauf
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -523,6 +526,9 @@ class HemsData:
         # Pro-Schaltlast-Momentaufnahme für die Lastfluss-Karte (Name,
         # Priorität, An/Aus, Ist- und erwartete Leistung, Begründung).
         self.schaltlasten: list[dict] = []
+        # Ergebnis der Wärmepumpen-Analyse je Rolle. Leer, solange keine
+        # Analyse-Rolle konfiguriert ist — der Reiter bleibt dann aus.
+        self.analysen: dict[str, Analyse] = {}
 
 
 class HemsCoordinator(DataUpdateCoordinator[HemsData]):
@@ -550,6 +556,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Optimierungsziel und E-Auto-Zwangsladung (von Select bzw. Switch
         # gesetzt, in RestoreEntity persistiert).
         self.goal: str = GOAL_SELF_CONSUMPTION
+        # Wärmepumpen-Analysen, je Rolle einer. Eigener 30-s-Takt, siehe
+        # waermepumpe/runner.py.
+        self.analyse_laeufe: dict[str, AnalyseLauf] = {}
         self.ev_force: bool = False
         # Regel-Aggressivität (min/normal/max), vom Select gesetzt und in
         # RestoreEntity persistiert. Default aggressiv, damit Ladelücken zügig
@@ -1362,9 +1371,50 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 await self._actuator.release_battery(reg)
         self._prev_mode = self.mode
 
+        # Wärmepumpen-Analyse: Ergebnisse einsammeln und der Analyse sagen, ob
+        # HEMS gerade selbst eingreift. Der Auswertelauf hat einen eigenen,
+        # feineren Takt; hier wird nur der letzte Stand übernommen.
+        self._analysen_koppeln(data)
+
         # Entscheidungsänderungen für den Logs-Reiter fortschreiben.
         self._record_decisions(data)
         return data
+
+    # --- Wärmepumpen-Analyse ---------------------------------------------
+
+    async def async_start_analysen(self) -> None:
+        """Für jede Analyse-Rolle einen Auswertelauf starten."""
+        for rolle in self.registry.analyses:
+            lauf = AnalyseLauf(self.hass, self.entry.entry_id, rolle)
+            self.analyse_laeufe[rolle.id] = lauf
+            await lauf.async_start()
+
+    def async_stop_analysen(self) -> None:
+        for lauf in self.analyse_laeufe.values():
+            lauf.async_stop()
+        self.analyse_laeufe.clear()
+
+    def _analysen_koppeln(self, data: HemsData) -> None:
+        """Ergebnisse übernehmen und die eigene Übersteuerung melden.
+
+        Warum das überhaupt gemeldet wird: Wirft HEMS die Wärmepumpe wegen
+        PV-Überschuss an oder hält sie aus einer Lastspitze heraus, ist das
+        kein normaler Betrieb und darf die Erwartungsbasis nicht prägen.
+
+        Gemeldet wird derzeit nur die Taktschutz-Pause. Alles andere läuft als
+        `normal` durch — HEMS stellt am Heizkreis Modus und Vorlauf, hält aber
+        keine Historie darüber, ob eine Stellung gerade vom PV-Überschuss
+        getrieben war. Die Meldung ist damit vollständig für den Fall, in dem
+        HEMS die Anlage aktiv anhält, und unvollständig für den Fall, in dem
+        es sie anders fährt als sie selbst gefahren wäre.
+        """
+        heizung = data.plan.heizung
+        taktschutz = bool(heizung and heizung.taktschutz)
+        for rolle_id, lauf in self.analyse_laeufe.items():
+            lauf.steuerung_aktiv = self.mode == MODE_AUTO and taktschutz
+            lauf.steuerung_grund = GRUND_SPERRE if taktschutz else GRUND_NORMAL
+            if lauf.analyse is not None:
+                data.analysen[rolle_id] = lauf.analyse
 
     def _record_decisions(self, data: HemsData) -> None:
         """Aktuelle Entscheidungen gegen den Vorlauf diffen und Änderungen loggen.

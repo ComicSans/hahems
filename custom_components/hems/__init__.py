@@ -139,6 +139,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Bei einem sprunghaften Netzsaldo (Wolkenkante, Lastsprung) sofort statt
     # erst zum nächsten 60-s-Poll neu rechnen (Aktuierungs-Totzeit verkürzen).
     coordinator.async_setup_saldo_jump_tracking()
+    # Die Wärmepumpen-Analyse läuft in ihrem eigenen, feineren Takt: der
+    # Planer rechnet minütlich, eine Verdichter-Startzählung braucht 30 s.
+    await coordinator.async_start_analysen()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -154,6 +157,7 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator.async_stop_analysen()
         # Ausstehende Log-Einträge und gelernte Leistungen vor dem
         # Reload/Entladen sichern.
         if coordinator.changelog is not None:

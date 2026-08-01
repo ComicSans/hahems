@@ -216,11 +216,11 @@
         }
       },
       "modulated_menu": {
-        "title": "Modulierbare Lasten (Schritt 7 von 7)",
+        "title": "Modulierbare Lasten (Schritt 7 von 8)",
         "description": "**Modulierbare Lasten** können ihre Leistungsaufnahme stufenlos anpassen. Typisches Beispiel ist eine Wallbox, deren Ladestrom (in Ampere) sich zwischen Minimum und Maximum regeln lässt. HEMS führt den Sollwert laufend dem verfügbaren Überschuss nach.\n\nBisher angelegt: {count}",
         "menu_options": {
           "add_modulated": "Modulierbare Last hinzufügen (z.B. Wallbox)",
-          "finish": "Einrichtung abschließen"
+          "analysis_menu": "Weiter zur Wärmepumpen-Analyse"
         }
       },
       "add_heating": {
@@ -295,6 +295,42 @@
           "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift im Heiz- und im Kühlbetrieb, nicht im Frostschutz.",
           "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden. Das Fenster rolliert mit: gezählt wird, was jünger als diese Spanne ist.",
           "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
+        }
+      },
+      "add_analysis": {
+        "title": "Wärmepumpen-Analyse",
+        "description": "Die **Wärmepumpen-Analyse** misst, wie gut die Anlage wirklich arbeitet: COP gegen Datenblatt, Spreizung, Taktung, Wärmeverlust des Hauses und ein Vorschlag für die Heizkurve.\n\nSie ist beratend und schaltet nichts — gestellt wird über die Rolle Heizkreis. Fünf Messeingänge sind Pflicht, zwei verbessern das Ergebnis.",
+        "data": {
+          "name": "Name",
+          "preset": "Gerätekennlinie",
+          "vorlauf_temp": "Vorlauftemperatur",
+          "ruecklauf_temp": "Rücklauftemperatur",
+          "durchfluss": "Durchfluss",
+          "leistung_elektrisch": "Elektrische Leistung (W)",
+          "aussentemperatur": "Außentemperatur",
+          "verdichter_frequenz": "Verdichterfrequenz (Hz, optional)",
+          "betriebsart": "Betriebsart (optional)",
+          "standby_w": "Standby-Sockel (W)"
+        },
+        "data_description": {
+          "name": "Kurze Bezeichnung dieser Wärmepumpe (nur zur Anzeige).",
+          "preset": "Modellscharf, nicht markenscharf: allein die Therma-V-Reihe hat vier deutlich verschiedene Kennlinien. Ist das eigene Modell nicht dabei, passt ein generischer Typ — die Datenbasis wird dann abgewertet.",
+          "vorlauf_temp": "Gemessene Vorlauftemperatur, nicht aus dem Rücklauf gerechnet.",
+          "ruecklauf_temp": "Gemessene Rücklauftemperatur.",
+          "durchfluss": "Volumenstrom des Heizwassers. Die Einheit wird aus der Entität gelesen und nie geraten: l/min statt l/h verfälscht jeden COP um den Faktor 60.",
+          "leistung_elektrisch": "Möglichst nur die Wärmepumpe, ohne Fremdlast auf demselben Zähler.",
+          "aussentemperatur": "Ein unabhängiger Fühler ist einem Gerätefühler vorzuziehen: der sitzt oft im besonnten Gehäuse und liegt im Stillstand deutlich zu hoch.",
+          "verdichter_frequenz": "Ohne sie wird die Taktung aus der elektrischen Leistung geschätzt.",
+          "betriebsart": "Trennt Heizen, Warmwasser und Abtauen. Ohne sie vermischen sich Heizen und Warmwasser in einer Kennzahl — zulässig, wertet aber die Datenbasis ab.",
+          "standby_w": "Leistung, die ohne Verdichterbetrieb anliegt (Umwälzpumpe, Elektronik). 0 heißt: Wert aus der Gerätekennlinie nehmen."
+        }
+      },
+      "analysis_menu": {
+        "title": "Wärmepumpen-Analyse (Schritt 8 von 8)",
+        "description": "Die **Wärmepumpen-Analyse** misst, wie gut die Anlage wirklich arbeitet: COP gegen Datenblatt, Spreizung, Taktung, Wärmeverlust des Hauses und ein Vorschlag für die Heizkurve.\n\nSie ist beratend und schaltet nichts — gestellt wird über die Rolle Heizkreis. Fünf Messeingänge sind Pflicht, zwei verbessern das Ergebnis.\n\nBisher angelegt: {count}",
+        "menu_options": {
+          "add_analysis": "Wärmepumpen-Analyse hinzufügen",
+          "finish": "Einrichtung abschließen"
         }
       }
     },
@@ -803,6 +839,62 @@
           "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift im Heiz- und im Kühlbetrieb, nicht im Frostschutz.",
           "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden. Das Fenster rolliert mit: gezählt wird, was jünger als diese Spanne ist.",
           "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
+        }
+      },
+      "add_analysis": {
+        "title": "Wärmepumpen-Analyse",
+        "description": "Die **Wärmepumpen-Analyse** misst, wie gut die Anlage wirklich arbeitet: COP gegen Datenblatt, Spreizung, Taktung, Wärmeverlust des Hauses und ein Vorschlag für die Heizkurve.\n\nSie ist beratend und schaltet nichts — gestellt wird über die Rolle Heizkreis. Fünf Messeingänge sind Pflicht, zwei verbessern das Ergebnis.",
+        "data": {
+          "name": "Name",
+          "preset": "Gerätekennlinie",
+          "vorlauf_temp": "Vorlauftemperatur",
+          "ruecklauf_temp": "Rücklauftemperatur",
+          "durchfluss": "Durchfluss",
+          "leistung_elektrisch": "Elektrische Leistung (W)",
+          "aussentemperatur": "Außentemperatur",
+          "verdichter_frequenz": "Verdichterfrequenz (Hz, optional)",
+          "betriebsart": "Betriebsart (optional)",
+          "standby_w": "Standby-Sockel (W)"
+        },
+        "data_description": {
+          "name": "Kurze Bezeichnung dieser Wärmepumpe (nur zur Anzeige).",
+          "preset": "Modellscharf, nicht markenscharf: allein die Therma-V-Reihe hat vier deutlich verschiedene Kennlinien. Ist das eigene Modell nicht dabei, passt ein generischer Typ — die Datenbasis wird dann abgewertet.",
+          "vorlauf_temp": "Gemessene Vorlauftemperatur, nicht aus dem Rücklauf gerechnet.",
+          "ruecklauf_temp": "Gemessene Rücklauftemperatur.",
+          "durchfluss": "Volumenstrom des Heizwassers. Die Einheit wird aus der Entität gelesen und nie geraten: l/min statt l/h verfälscht jeden COP um den Faktor 60.",
+          "leistung_elektrisch": "Möglichst nur die Wärmepumpe, ohne Fremdlast auf demselben Zähler.",
+          "aussentemperatur": "Ein unabhängiger Fühler ist einem Gerätefühler vorzuziehen: der sitzt oft im besonnten Gehäuse und liegt im Stillstand deutlich zu hoch.",
+          "verdichter_frequenz": "Ohne sie wird die Taktung aus der elektrischen Leistung geschätzt.",
+          "betriebsart": "Trennt Heizen, Warmwasser und Abtauen. Ohne sie vermischen sich Heizen und Warmwasser in einer Kennzahl — zulässig, wertet aber die Datenbasis ab.",
+          "standby_w": "Leistung, die ohne Verdichterbetrieb anliegt (Umwälzpumpe, Elektronik). 0 heißt: Wert aus der Gerätekennlinie nehmen."
+        }
+      },
+      "edit_analysis": {
+        "title": "Wärmepumpen-Analyse bearbeiten",
+        "description": "Einstellungen für \"{name}\" anpassen.",
+        "data": {
+          "name": "Name",
+          "preset": "Gerätekennlinie",
+          "vorlauf_temp": "Vorlauftemperatur",
+          "ruecklauf_temp": "Rücklauftemperatur",
+          "durchfluss": "Durchfluss",
+          "leistung_elektrisch": "Elektrische Leistung (W)",
+          "aussentemperatur": "Außentemperatur",
+          "verdichter_frequenz": "Verdichterfrequenz (Hz, optional)",
+          "betriebsart": "Betriebsart (optional)",
+          "standby_w": "Standby-Sockel (W)"
+        },
+        "data_description": {
+          "name": "Kurze Bezeichnung dieser Wärmepumpe (nur zur Anzeige).",
+          "preset": "Modellscharf, nicht markenscharf: allein die Therma-V-Reihe hat vier deutlich verschiedene Kennlinien. Ist das eigene Modell nicht dabei, passt ein generischer Typ — die Datenbasis wird dann abgewertet.",
+          "vorlauf_temp": "Gemessene Vorlauftemperatur, nicht aus dem Rücklauf gerechnet.",
+          "ruecklauf_temp": "Gemessene Rücklauftemperatur.",
+          "durchfluss": "Volumenstrom des Heizwassers. Die Einheit wird aus der Entität gelesen und nie geraten: l/min statt l/h verfälscht jeden COP um den Faktor 60.",
+          "leistung_elektrisch": "Möglichst nur die Wärmepumpe, ohne Fremdlast auf demselben Zähler.",
+          "aussentemperatur": "Ein unabhängiger Fühler ist einem Gerätefühler vorzuziehen: der sitzt oft im besonnten Gehäuse und liegt im Stillstand deutlich zu hoch.",
+          "verdichter_frequenz": "Ohne sie wird die Taktung aus der elektrischen Leistung geschätzt.",
+          "betriebsart": "Trennt Heizen, Warmwasser und Abtauen. Ohne sie vermischen sich Heizen und Warmwasser in einer Kennzahl — zulässig, wertet aber die Datenbasis ab.",
+          "standby_w": "Leistung, die ohne Verdichterbetrieb anliegt (Umwälzpumpe, Elektronik). 0 heißt: Wert aus der Gerätekennlinie nehmen."
         }
       }
     },

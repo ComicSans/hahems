@@ -47,6 +47,9 @@ ROLE_THERMAL = "thermal"
 ROLE_HEATING = "heating_circuit"
 ROLE_SWITCHABLE = "switchable_load"
 ROLE_MODULATED = "modulated_load"
+# Wärmepumpen-Analyse: beratend, ohne jeden Schreibpfad. Bis August 2026 die
+# eigenständige Integration `wp_optimization`.
+ROLE_ANALYSIS = "heat_pump_analysis"
 
 MODE_OBSERVE = "beobachten"  # empfehlen + loggen, nicht schalten
 MODE_AUTO = "auto"  # empfehlen + schalten (Actuator aktiv)

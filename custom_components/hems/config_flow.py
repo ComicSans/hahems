@@ -1,6 +1,8 @@
 """Config- und Options-Flow: alle Geräte werden über die UI angelegt und gepflegt."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from uuid import uuid4
 
 import voluptuous as vol
@@ -57,6 +59,7 @@ from .const import (
     PRIORITY_AUTO,
     PRIORITY_BATTERY_FIRST,
     PRIORITY_EV_FIRST,
+    ROLE_ANALYSIS,
     ROLE_FORECAST,
     ROLE_HEATING,
     ROLE_MODULATED,
@@ -73,6 +76,7 @@ ROLE_LABELS = {
     ROLE_HEATING: "Heizkreis",
     ROLE_SWITCHABLE: "Schaltbare Last",
     ROLE_MODULATED: "Modulierbare Last",
+    ROLE_ANALYSIS: "Wärmepumpen-Analyse",
 }
 
 
@@ -297,6 +301,57 @@ MODULATED_SCHEMA = vol.Schema(
     }
 )
 
+
+def _preset_optionen() -> list[selector.SelectOptionDict]:
+    """Mitgelieferte Gerätekennlinien als Auswahlliste.
+
+    Beim Import gelesen und nicht bei jedem Formularaufruf: es sind zehn
+    kleine Dateien, und ein Preset kommt nur mit einer neuen Version dazu.
+    Fällt das Lesen aus, bleibt die Liste leer statt zu raten — dann sieht
+    man im Dialog sofort, dass etwas mit der Installation nicht stimmt.
+    """
+    verzeichnis = Path(__file__).parent / "waermepumpe" / "presets"
+    optionen: list[selector.SelectOptionDict] = []
+    for datei in sorted(verzeichnis.glob("*.json")):
+        try:
+            roh = json.loads(datei.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        optionen.append(
+            selector.SelectOptionDict(
+                value=roh.get("schluessel", datei.stem),
+                label=roh.get("anzeigename", datei.stem),
+            )
+        )
+    return optionen
+
+
+# Wärmepumpen-Analyse: fünf Pflichteingänge, zwei optionale. Sie kennt weder
+# Protokolle noch Register — woher die Werte kommen, ist ihr gleich. Und sie
+# hat bewusst keine Steuer-Entity: gestellt wird über die Rolle Heizkreis.
+ANALYSIS_SCHEMA = vol.Schema(
+    {
+        vol.Required("name", default="Wärmepumpe"): selector.TextSelector(),
+        vol.Required("preset"): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=_preset_optionen(),
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        vol.Required("vorlauf_temp"): _entity(device_class="temperature"),
+        vol.Required("ruecklauf_temp"): _entity(device_class="temperature"),
+        # Ohne device_class: ein Volumenstrom trägt in HA keine, und die
+        # Einheit wird ohnehin aus `unit_of_measurement` gelesen, nie geraten.
+        vol.Required("durchfluss"): _entity(["sensor", "input_number"]),
+        vol.Required("leistung_elektrisch"): _entity(device_class="power"),
+        vol.Required("aussentemperatur"): _entity(device_class="temperature"),
+        vol.Optional("verdichter_frequenz"): _entity(["sensor"]),
+        vol.Optional("betriebsart"): _entity(["sensor", "climate", "select"]),
+        vol.Required("standby_w", default=0): _number(0, 1000, "W", 1),
+    }
+)
+
+
 ROLE_SCHEMAS = {
     ROLE_FORECAST: FORECAST_SCHEMA,
     ROLE_STORAGE: STORAGE_SCHEMA,
@@ -304,6 +359,7 @@ ROLE_SCHEMAS = {
     ROLE_HEATING: HEATING_SCHEMA,
     ROLE_SWITCHABLE: SWITCHABLE_SCHEMA,
     ROLE_MODULATED: MODULATED_SCHEMA,
+    ROLE_ANALYSIS: ANALYSIS_SCHEMA,
 }
 
 # Onboarding-Assistent: Reihenfolge der Kategorie-Schritte
@@ -313,7 +369,8 @@ WIZARD_MENUS = {
     ROLE_THERMAL: ("thermal_menu", "add_thermal", "heating_menu"),
     ROLE_HEATING: ("heating_menu", "add_heating", "switchable_menu"),
     ROLE_SWITCHABLE: ("switchable_menu", "add_switchable", "modulated_menu"),
-    ROLE_MODULATED: ("modulated_menu", "add_modulated", "finish"),
+    ROLE_MODULATED: ("modulated_menu", "add_modulated", "analysis_menu"),
+    ROLE_ANALYSIS: ("analysis_menu", "add_analysis", "finish"),
 }
 
 EDIT_STEPS = {
@@ -323,6 +380,7 @@ EDIT_STEPS = {
     ROLE_HEATING: "edit_heating",
     ROLE_SWITCHABLE: "edit_switchable",
     ROLE_MODULATED: "edit_modulated",
+    ROLE_ANALYSIS: "edit_analysis",
 }
 
 # Zähler, Grundlasten und Prioritäten: identisch bei Einrichtung und Grundwerten
@@ -394,6 +452,9 @@ class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_modulated_menu(self, user_input=None):
         return self._wizard_menu(ROLE_MODULATED)
 
+    async def async_step_analysis_menu(self, user_input=None):
+        return self._wizard_menu(ROLE_ANALYSIS)
+
     async def _async_add_step(self, role: str, step_id: str, user_input):
         if user_input is not None:
             self._devices.append({"id": uuid4().hex, "role": role, **user_input})
@@ -417,6 +478,9 @@ class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_add_modulated(self, user_input=None):
         return await self._async_add_step(ROLE_MODULATED, "add_modulated", user_input)
+
+    async def async_step_add_analysis(self, user_input=None):
+        return await self._async_add_step(ROLE_ANALYSIS, "add_analysis", user_input)
 
     async def async_step_finish(self, user_input=None):
         return self.async_create_entry(
@@ -444,6 +508,7 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
                 "add_heating",
                 "add_switchable",
                 "add_modulated",
+                "add_analysis",
                 "edit_device",
                 "remove_device",
                 "general",
@@ -504,6 +569,9 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_add_modulated(self, user_input=None):
         return await self._async_add_step(ROLE_MODULATED, "add_modulated", user_input)
 
+    async def async_step_add_analysis(self, user_input=None):
+        return await self._async_add_step(ROLE_ANALYSIS, "add_analysis", user_input)
+
     # -- Geräte bearbeiten -------------------------------------------------
 
     async def async_step_edit_device(self, user_input=None):
@@ -560,6 +628,9 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
         return await self._async_edit_step(
             ROLE_MODULATED, "edit_modulated", user_input
         )
+
+    async def async_step_edit_analysis(self, user_input=None):
+        return await self._async_edit_step(ROLE_ANALYSIS, "edit_analysis", user_input)
 
     # -- Entfernen und Grundwerte ------------------------------------------
 
