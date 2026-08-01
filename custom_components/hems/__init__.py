@@ -132,6 +132,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     power_memory = PowerMemory(hass)
     await power_memory.async_load()
     coordinator.power_memory = power_memory
+    # Zuletzt übernommene Heizkurve zurückholen, bevor der erste Planlauf
+    # rechnet: sonst sähe er eine leere Übernahme und griffe sofort wieder zu,
+    # obwohl die Tagesfrist noch läuft.
+    await coordinator.async_kurve_laden()
     await coordinator.async_config_entry_first_refresh()
     # Quellen sind nach einem Neustart evtl. noch nicht bereit: sofort neu
     # rechnen, sobald sie verfügbar werden, statt bis zum nächsten Poll zu warten.

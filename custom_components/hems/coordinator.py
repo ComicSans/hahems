@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from homeassistant.components import persistent_notification
@@ -12,6 +13,7 @@ from homeassistant.helpers.event import (
     EventStateChangedData,
     async_track_state_change_event,
 )
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.sun import get_astral_event_date, get_astral_event_next
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
@@ -582,6 +584,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._last_jump_refresh: datetime | None = None
         # Hysterese-Zustand des Planners, über die Update-Zyklen fortgeschrieben.
         self._plan_flags = PlanFlags()
+        # Die übernommene Heizkurve überlebt Neustarts und Reloads. Sie muss
+        # es: Ein Optionswechsel lädt die Integration neu, und ohne diesen
+        # Speicher wären Zeitstempel und Vorwerte weg — die Zusage "höchstens
+        # einmal in 24 Stunden" gälte dann nur zwischen zwei Reloads, und wer
+        # gerade an der Konfiguration schraubt, löst sie am häufigsten aus.
+        self._kurve_store: Store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.kurve")
         # Fairness-Akkumulator für die Lastrotation: geladene Energie je Last
         # (kWh) am laufenden lokalen Kalendertag, aus der gemessenen Leistung
         # integriert. Reset um Mitternacht. Bewusst „dumm" — jede Entscheidung
@@ -1305,6 +1313,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 flags=self._plan_flags,
             )
         )
+        await self._kurve_sichern(self._plan_flags, data.plan.flags)
         self._plan_flags = data.plan.flags
 
         # Pro-Schaltlast-Zeilen für die Lastfluss-Karte. Erst hier, weil die
@@ -1394,6 +1403,36 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         return data
 
     # --- Wärmepumpen-Analyse ---------------------------------------------
+
+    async def async_kurve_laden(self) -> None:
+        """Zuletzt übernommene Heizkurve in die Plan-Flags zurückholen."""
+        gespeichert = await self._kurve_store.async_load()
+        if not gespeichert:
+            return
+        stand = gespeichert.get("uebernommen_am")
+        self._plan_flags = replace(
+            self._plan_flags,
+            kurve_fusspunkt_c=gespeichert.get("fusspunkt_c"),
+            kurve_steilheit=gespeichert.get("steilheit"),
+            kurve_vorlauf_min_c=gespeichert.get("vorlauf_min_c"),
+            kurve_uebernommen_am=dt_util.parse_datetime(stand) if stand else None,
+        )
+
+    async def _kurve_sichern(self, vorher: PlanFlags, nachher: PlanFlags) -> None:
+        """Nur bei Änderung schreiben, nicht jeden 60-s-Zyklus."""
+        if vorher.kurve_uebernommen_am == nachher.kurve_uebernommen_am:
+            return
+        if nachher.kurve_uebernommen_am is None:
+            await self._kurve_store.async_remove()
+            return
+        await self._kurve_store.async_save(
+            {
+                "fusspunkt_c": nachher.kurve_fusspunkt_c,
+                "steilheit": nachher.kurve_steilheit,
+                "vorlauf_min_c": nachher.kurve_vorlauf_min_c,
+                "uebernommen_am": nachher.kurve_uebernommen_am.isoformat(),
+            }
+        )
 
     async def async_start_analysen(self) -> None:
         """Für jede Analyse-Rolle einen Auswertelauf starten."""

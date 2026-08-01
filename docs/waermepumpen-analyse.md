@@ -309,6 +309,15 @@ Absenkbetrieb, keine Aussage über das Wärmeabgabesystem.
 Heizkreis beschreibt, ist nicht entscheidbar, und raten wäre hier teurer als
 nichts zu tun.
 
+**Die Übernahme überlebt Neustarts und Reloads.** Sie muss es: Jede
+Optionsänderung lädt die Integration neu, und ohne eigenen Speicher wären
+Zeitstempel und Vorwerte weg — die Tagesfrist gälte dann nur zwischen zwei
+Reloads, und wer gerade an der Konfiguration schraubt, löst sie am häufigsten
+aus. Was dabei **nicht** überlebt, sind die Hinweis-Latches und der
+48-Stunden-Ringpuffer der Analyse; die Hinweise bauen sich danach neu auf. Die
+Datenbasis der Empfehlung ist davon unberührt, sie hängt an der
+Langzeitstatistik.
+
 Was gerade gilt, steht als Attribut an `sensor.hems_heizkreis`:
 `kurve_quelle` (`konfiguriert` / `empfehlung` / `wartet`), `kurve_grund` im
 Klartext, dazu `kurve_fusspunkt_c` und `kurve_steilheit`.
