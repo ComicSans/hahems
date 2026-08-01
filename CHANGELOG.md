@@ -4,6 +4,24 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 1.6.3 — Nennvolumenstrom für Anlagen ohne Zähler
+
+Ohne Volumenstromzähler sollte die Analyse auf den Nennvolumenstrom des
+Presets zurückfallen. **Die sechs generischen Presets führen aber keinen** —
+er hängt an Umwälzpumpe und Hydraulik, nicht am Gerätemodell. Wer ein
+generisches Profil gewählt hat und keinen Zähler besitzt, bekam deshalb
+dauerhaft `kein_durchfluss`: keine Wärmeleistung, kein COP, keine Wärmemenge,
+und nichts an der Anzeige sagte, woran es lag.
+
+Die Rolle Wärmepumpen-Analyse hat dafür jetzt das Feld **Nennvolumenstrom
+ohne Zähler (l/h)**, neben dem Standby-Sockel. Er ist ablesbar an der Pumpe
+(m³/h × 1000) oder aus einem bekannten Betriebspunkt zu rechnen:
+`Wärmeleistung [W] ÷ (Spreizung [K] × 1,163)`.
+
+**Zu tun:** Wer eines der vier LG-Profile nutzt oder einen Zähler verdrahtet
+hat, muss nichts tun. Alle anderen tragen den Wert nach, sonst bleibt der COP
+dauerhaft leer.
+
 ## 1.6.2 — Kein Fehlalarm mehr nach dem Neustart
 
 Nach einem Neustart meldete `binary_sensor.hems_konfiguration` jede fremde

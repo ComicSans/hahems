@@ -312,7 +312,8 @@
           "aussentemperatur": "Außentemperatur",
           "verdichter_frequenz": "Verdichterfrequenz (Hz, optional)",
           "betriebsart": "Betriebsart (optional)",
-          "standby_w": "Standby-Sockel (W)"
+          "standby_w": "Standby-Sockel (W)",
+          "durchfluss_nominal_lh": "Nennvolumenstrom ohne Zähler (l/h)"
         },
         "data_description": {
           "name": "Kurze Bezeichnung dieser Wärmepumpe (nur zur Anzeige).",
@@ -324,7 +325,8 @@
           "aussentemperatur": "Ein unabhängiger Fühler ist einem Gerätefühler vorzuziehen: der sitzt oft im besonnten Gehäuse und liegt im Stillstand deutlich zu hoch.",
           "verdichter_frequenz": "Ohne sie wird die Taktung aus der elektrischen Leistung geschätzt.",
           "betriebsart": "Trennt Heizen, Warmwasser und Abtauen. Ohne sie vermischen sich Heizen und Warmwasser in einer Kennzahl — zulässig, wertet aber die Datenbasis ab.",
-          "standby_w": "Leistung, die ohne Verdichterbetrieb anliegt (Umwälzpumpe, Elektronik). 0 heißt: Wert aus der Gerätekennlinie nehmen."
+          "standby_w": "Leistung, die ohne Verdichterbetrieb anliegt (Umwälzpumpe, Elektronik). 0 heißt: Wert aus der Gerätekennlinie nehmen.",
+          "durchfluss_nominal_lh": "Nur nötig, wenn oben kein Durchfluss-Sensor steht. Ohne beides verwirft die Analyse jede Messung: ohne Volumenstrom keine thermische Leistung und damit kein COP. Die vier LG-Profile bringen den Wert mit, die sechs generischen nicht — er hängt an Umwälzpumpe und Hydraulik, nicht am Gerätemodell. Ablesbar an der Pumpe (m³/h × 1000) oder gerechnet aus einem bekannten Betriebspunkt: Wärmeleistung [W] ÷ (Spreizung [K] × 1,163). 0 heißt: Wert aus der Gerätekennlinie nehmen."
         }
       },
       "analysis_menu": {
@@ -860,7 +862,8 @@
           "aussentemperatur": "Außentemperatur",
           "verdichter_frequenz": "Verdichterfrequenz (Hz, optional)",
           "betriebsart": "Betriebsart (optional)",
-          "standby_w": "Standby-Sockel (W)"
+          "standby_w": "Standby-Sockel (W)",
+          "durchfluss_nominal_lh": "Nennvolumenstrom ohne Zähler (l/h)"
         },
         "data_description": {
           "name": "Kurze Bezeichnung dieser Wärmepumpe (nur zur Anzeige).",
@@ -872,7 +875,8 @@
           "aussentemperatur": "Ein unabhängiger Fühler ist einem Gerätefühler vorzuziehen: der sitzt oft im besonnten Gehäuse und liegt im Stillstand deutlich zu hoch.",
           "verdichter_frequenz": "Ohne sie wird die Taktung aus der elektrischen Leistung geschätzt.",
           "betriebsart": "Trennt Heizen, Warmwasser und Abtauen. Ohne sie vermischen sich Heizen und Warmwasser in einer Kennzahl — zulässig, wertet aber die Datenbasis ab.",
-          "standby_w": "Leistung, die ohne Verdichterbetrieb anliegt (Umwälzpumpe, Elektronik). 0 heißt: Wert aus der Gerätekennlinie nehmen."
+          "standby_w": "Leistung, die ohne Verdichterbetrieb anliegt (Umwälzpumpe, Elektronik). 0 heißt: Wert aus der Gerätekennlinie nehmen.",
+          "durchfluss_nominal_lh": "Nur nötig, wenn oben kein Durchfluss-Sensor steht. Ohne beides verwirft die Analyse jede Messung: ohne Volumenstrom keine thermische Leistung und damit kein COP. Die vier LG-Profile bringen den Wert mit, die sechs generischen nicht — er hängt an Umwälzpumpe und Hydraulik, nicht am Gerätemodell. Ablesbar an der Pumpe (m³/h × 1000) oder gerechnet aus einem bekannten Betriebspunkt: Wärmeleistung [W] ÷ (Spreizung [K] × 1,163). 0 heißt: Wert aus der Gerätekennlinie nehmen."
         }
       },
       "edit_analysis": {
@@ -888,7 +892,8 @@
           "aussentemperatur": "Außentemperatur",
           "verdichter_frequenz": "Verdichterfrequenz (Hz, optional)",
           "betriebsart": "Betriebsart (optional)",
-          "standby_w": "Standby-Sockel (W)"
+          "standby_w": "Standby-Sockel (W)",
+          "durchfluss_nominal_lh": "Nennvolumenstrom ohne Zähler (l/h)"
         },
         "data_description": {
           "name": "Kurze Bezeichnung dieser Wärmepumpe (nur zur Anzeige).",
@@ -900,7 +905,8 @@
           "aussentemperatur": "Ein unabhängiger Fühler ist einem Gerätefühler vorzuziehen: der sitzt oft im besonnten Gehäuse und liegt im Stillstand deutlich zu hoch.",
           "verdichter_frequenz": "Ohne sie wird die Taktung aus der elektrischen Leistung geschätzt.",
           "betriebsart": "Trennt Heizen, Warmwasser und Abtauen. Ohne sie vermischen sich Heizen und Warmwasser in einer Kennzahl — zulässig, wertet aber die Datenbasis ab.",
-          "standby_w": "Leistung, die ohne Verdichterbetrieb anliegt (Umwälzpumpe, Elektronik). 0 heißt: Wert aus der Gerätekennlinie nehmen."
+          "standby_w": "Leistung, die ohne Verdichterbetrieb anliegt (Umwälzpumpe, Elektronik). 0 heißt: Wert aus der Gerätekennlinie nehmen.",
+          "durchfluss_nominal_lh": "Nur nötig, wenn oben kein Durchfluss-Sensor steht. Ohne beides verwirft die Analyse jede Messung: ohne Volumenstrom keine thermische Leistung und damit kein COP. Die vier LG-Profile bringen den Wert mit, die sechs generischen nicht — er hängt an Umwälzpumpe und Hydraulik, nicht am Gerätemodell. Ablesbar an der Pumpe (m³/h × 1000) oder gerechnet aus einem bekannten Betriebspunkt: Wärmeleistung [W] ÷ (Spreizung [K] × 1,163). 0 heißt: Wert aus der Gerätekennlinie nehmen."
         }
       }
     },

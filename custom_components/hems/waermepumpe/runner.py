@@ -95,6 +95,11 @@ class AnalyseLauf:
 
         if self.rolle.standby_w > 0:
             self._preset = replace(self._preset, standby_w=self.rolle.standby_w)
+        if self.rolle.durchfluss_nominal_lh > 0:
+            self._preset = replace(
+                self._preset,
+                durchfluss_nominal_lh=self.rolle.durchfluss_nominal_lh,
+            )
 
         # Ein Zähler, der bei jedem Neustart auf null fällt, ist als
         # `total_increasing` schlimmer als keiner: die Statistik deutet den

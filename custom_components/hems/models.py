@@ -289,6 +289,13 @@ class HeatPumpAnalysis:
     # Anlagenspezifischer Standby-Sockel; 0 heißt: Wert aus dem Preset. Der
     # Sockel hängt an der Umwälzpumpe der Anlage, nicht am Gerätemodell.
     standby_w: float = 0.0
+    # Nennvolumenstrom in l/h, wenn kein Zähler verdrahtet ist; 0 heißt: Wert
+    # aus dem Preset. Wie der Standby-Sockel eine Eigenschaft der Anlage —
+    # Umwälzpumpe und Hydraulik — und nicht des Gerätemodells. Die sechs
+    # generischen Presets führen ihn deshalb gar nicht, und ohne diesen Wert
+    # verwirft die Analyse dort jede Messung mit `kein_durchfluss`: ohne
+    # Volumenstrom keine thermische Leistung und damit kein COP.
+    durchfluss_nominal_lh: float = 0.0
 
 
 @dataclass

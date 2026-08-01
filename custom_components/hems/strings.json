@@ -306,7 +306,8 @@
           "aussentemperatur": "Outdoor temperature",
           "verdichter_frequenz": "Compressor frequency (Hz, optional)",
           "betriebsart": "Operating mode (optional)",
-          "standby_w": "Standby base load (W)"
+          "standby_w": "Standby base load (W)",
+          "durchfluss_nominal_lh": "Nominal flow rate without a meter (l/h)"
         },
         "data_description": {
           "name": "A short label for this heat pump (display only).",
@@ -318,7 +319,8 @@
           "aussentemperatur": "An independent sensor beats the built-in one: that often sits in a sunlit enclosure and reads far too high when the unit is idle.",
           "verdichter_frequenz": "Without it, cycling is estimated from the electrical power.",
           "betriebsart": "Separates heating, hot water and defrost. Without it, heating and hot water blend into one figure — allowed, but it downgrades the data basis.",
-          "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve."
+          "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve.",
+          "durchfluss_nominal_lh": "Only needed if no flow sensor is set above. Without either, the analysis discards every reading: no flow means no thermal output and therefore no COP. The four LG profiles carry the value, the six generic ones do not — it depends on the circulation pump and the hydraulics, not on the device model. Read it off the pump (m³/h × 1000) or compute it from a known operating point: thermal output [W] ÷ (spread [K] × 1.163). 0 means: take the value from the device curve."
         }
       },
       "analysis_menu": {
@@ -842,7 +844,8 @@
           "aussentemperatur": "Outdoor temperature",
           "verdichter_frequenz": "Compressor frequency (Hz, optional)",
           "betriebsart": "Operating mode (optional)",
-          "standby_w": "Standby base load (W)"
+          "standby_w": "Standby base load (W)",
+          "durchfluss_nominal_lh": "Nominal flow rate without a meter (l/h)"
         },
         "data_description": {
           "name": "A short label for this heat pump (display only).",
@@ -854,7 +857,8 @@
           "aussentemperatur": "An independent sensor beats the built-in one: that often sits in a sunlit enclosure and reads far too high when the unit is idle.",
           "verdichter_frequenz": "Without it, cycling is estimated from the electrical power.",
           "betriebsart": "Separates heating, hot water and defrost. Without it, heating and hot water blend into one figure — allowed, but it downgrades the data basis.",
-          "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve."
+          "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve.",
+          "durchfluss_nominal_lh": "Only needed if no flow sensor is set above. Without either, the analysis discards every reading: no flow means no thermal output and therefore no COP. The four LG profiles carry the value, the six generic ones do not — it depends on the circulation pump and the hydraulics, not on the device model. Read it off the pump (m³/h × 1000) or compute it from a known operating point: thermal output [W] ÷ (spread [K] × 1.163). 0 means: take the value from the device curve."
         }
       },
       "edit_analysis": {
@@ -870,7 +874,8 @@
           "aussentemperatur": "Outdoor temperature",
           "verdichter_frequenz": "Compressor frequency (Hz, optional)",
           "betriebsart": "Operating mode (optional)",
-          "standby_w": "Standby base load (W)"
+          "standby_w": "Standby base load (W)",
+          "durchfluss_nominal_lh": "Nominal flow rate without a meter (l/h)"
         },
         "data_description": {
           "name": "A short label for this heat pump (display only).",
@@ -882,7 +887,8 @@
           "aussentemperatur": "An independent sensor beats the built-in one: that often sits in a sunlit enclosure and reads far too high when the unit is idle.",
           "verdichter_frequenz": "Without it, cycling is estimated from the electrical power.",
           "betriebsart": "Separates heating, hot water and defrost. Without it, heating and hot water blend into one figure — allowed, but it downgrades the data basis.",
-          "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve."
+          "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve.",
+          "durchfluss_nominal_lh": "Only needed if no flow sensor is set above. Without either, the analysis discards every reading: no flow means no thermal output and therefore no COP. The four LG profiles carry the value, the six generic ones do not — it depends on the circulation pump and the hydraulics, not on the device model. Read it off the pump (m³/h × 1000) or compute it from a known operating point: thermal output [W] ÷ (spread [K] × 1.163). 0 means: take the value from the device curve."
         }
       }
     },

@@ -64,17 +64,27 @@ eigene Zähler. Die Analyse kennt die Quelle nicht.
 | `betriebsart` | nein | Text | trennt Heizen, Warmwasser und Abtauen |
 | `preset` | ja | – | Schlüssel einer Datei in `waermepumpe/presets/` |
 | `standby_w` | nein | W | 0 = Wert aus dem Preset |
+| `durchfluss_nominal_lh` | nein | l/h | Ersatz für den fehlenden Zähler; 0 = Wert aus dem Preset |
 
 Ohne `betriebsart` vermischen sich Heizen und Warmwasser in einer Kennzahl.
 Zulässig, wertet aber die Datenbasis ab.
 
-**Ohne Volumenstromzähler rechnet die Analyse trotzdem.** Sie setzt dann den
-Nennvolumenstrom aus dem Preset ein, meldet `durchfluss_geschaetzt` und
-deckelt die Datenbasis — der COP ist dann eine Schätzung und wird nie als
-belastbar ausgewiesen. Das ist kein Notbehelf, sondern der häufige Fall: an
-vielen Anlagen ist der Volumenstrom über die Anbindung gar nicht erreichbar,
-an der Referenzinstallation zum Beispiel nicht. Ein Formular, das ihn
-erzwingt, schlösse diese Anlagen aus.
+**Ohne Volumenstromzähler rechnet die Analyse trotzdem** — sofern ein
+Nennvolumenstrom bekannt ist. Sie setzt ihn dann ein, meldet
+`durchfluss_geschaetzt` und deckelt die Datenbasis: der COP ist eine Schätzung
+und wird nie als belastbar ausgewiesen. Das ist kein Notbehelf, sondern der
+häufige Fall — an vielen Anlagen ist der Volumenstrom über die Anbindung gar
+nicht erreichbar, an der Referenzinstallation zum Beispiel nicht.
+
+**Woher der Nennvolumenstrom kommt, ist die Stolperstelle.** Die vier
+LG-Profile bringen ihn mit, die **sechs generischen nicht** — er hängt an
+Umwälzpumpe und Hydraulik, nicht am Gerätemodell, und für ein generisches
+Profil gibt es ihn schlicht nicht. Fehlen Zähler *und* Nennwert, verwirft die
+Analyse jede Messung mit `kein_durchfluss`: ohne Volumenstrom keine thermische
+Leistung, kein COP, keine Wärmemenge. Dafür gibt es das Feld
+`durchfluss_nominal_lh` an der Rolle. Ablesbar an der Pumpe (m³/h × 1000) oder
+gerechnet aus einem bekannten Betriebspunkt:
+`Wärmeleistung [W] ÷ (Spreizung [K] × 1,163)`.
 
 **Einheiten werden gelesen, nie geraten.** Maßgeblich ist
 `unit_of_measurement` der verdrahteten Entity. Fehlt sie oder ist sie
