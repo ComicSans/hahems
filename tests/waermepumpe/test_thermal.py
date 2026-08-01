@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import pytest
-from analysis import thermal
-from analysis.types import (
+from hems.waermepumpe.analysis import thermal
+from hems.waermepumpe.analysis.types import (
     BETRIEB_ABTAUEN,
     BETRIEB_HEIZEN,
     BETRIEB_WARMWASSER,

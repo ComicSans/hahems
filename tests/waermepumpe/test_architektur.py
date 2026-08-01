@@ -1,15 +1,18 @@
-"""Die Architekturregeln als Test.
+"""Die Architekturregeln der Wärmepumpen-Analyse als Test.
 
-Eine Regel, die nur in der CLAUDE.md steht, wird beim ersten eiligen Commit
-gebrochen und faellt niemandem auf. Diese beiden fallen sofort auf.
+Eine Regel, die nur in einem Dokument steht, wird beim ersten eiligen Commit
+gebrochen und fällt niemandem auf. Diese drei fallen sofort auf.
+
+Die dritte trägt seit der Zusammenführung mehr Gewicht als vorher: Solange
+die Analyse ein eigenes Repository war, hielt schon die Repo-Grenze
+Schreibzugriffe fern. Jetzt liegt sie neben einem Aktuator, der wirklich
+schaltet — und nur noch dieser Test hält die Grenze.
 """
 from __future__ import annotations
 
 import ast
 
-from conftest import INTEGRATION
-
-ANALYSE = INTEGRATION / "analysis"
+from conftest import ANALYSE
 
 
 def _importierte_module(quelle: str) -> set[str]:
@@ -56,8 +59,9 @@ def test_types_importiert_aus_keinem_anderen_analysemodul():
 
 
 def test_fachlogik_schreibt_nicht_an_die_anlage():
-    # Diese Integration hat keinen Aktuierungspfad. Ein Dienstaufruf in der
-    # Fachlogik waere der erste Schritt dorthin.
+    # Die Analyse ist beratend: sie veroeffentlicht Empfehlungen, umgesetzt
+    # werden sie vom Aktuator. Ein Dienstaufruf hier waere der erste Schritt
+    # dahin, dass zwei Stellen denselben Sollwert stellen.
     for pfad in sorted(ANALYSE.glob("*.py")):
         quelle = pfad.read_text(encoding="utf-8")
         assert "async_call" not in quelle, pfad.name

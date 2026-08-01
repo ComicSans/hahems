@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import pytest
-from analysis import curve
-from analysis.types import (
+from hems.waermepumpe.analysis import curve
+from hems.waermepumpe.analysis.types import (
     DATENBASIS_BELASTBAR,
     DATENBASIS_KEINE,
     DATENBASIS_UNZUREICHEND,

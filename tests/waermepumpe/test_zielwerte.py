@@ -8,9 +8,9 @@ ist hier nicht bekannt.
 from __future__ import annotations
 
 import pytest
-from analysis import evaluate, hints, presets, thermal
-from analysis.types import BETRIEB_HEIZEN, HinweisZustand, Messwert
 from conftest import PRESET_DIR
+from hems.waermepumpe.analysis import evaluate, hints, presets, thermal
+from hems.waermepumpe.analysis.types import BETRIEB_HEIZEN, HinweisZustand, Messwert
 
 ZIEL_K = 5.0
 

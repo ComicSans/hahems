@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import pytest
-from analysis import cycling
-from analysis.types import Messwert, Preset, TaktZustand
+from hems.waermepumpe.analysis import cycling
+from hems.waermepumpe.analysis.types import Messwert, Preset, TaktZustand
 
 # Standby-Sockel von 220 W wie bei den ausgelieferten Presets: die
 # Leistungsschwellen sind Vielfache davon, keine festen Watt-Werte.

@@ -1,8 +1,8 @@
 """Hinweise: zwei Schwellen, kein Flattern."""
 from __future__ import annotations
 
-from analysis import hints
-from analysis.types import (
+from hems.waermepumpe.analysis import hints
+from hems.waermepumpe.analysis.types import (
     DATENBASIS_BELASTBAR,
     DATENBASIS_VORLAEUFIG,
     HinweisZustand,

@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import pytest
-from analysis import evaluate, hints, presets
-from analysis.types import (
+from conftest import PRESET_DIR
+from hems.waermepumpe.analysis import evaluate, hints, presets
+from hems.waermepumpe.analysis.types import (
     BETRIEB_HEIZEN,
     DATENBASIS_BELASTBAR,
     DATENBASIS_UNZUREICHEND,
@@ -13,7 +14,6 @@ from analysis.types import (
     Messwert,
     TaktZustand,
 )
-from conftest import PRESET_DIR
 
 
 def _preset(schluessel: str = "lg-therma-v-r32-split-5-7-9"):

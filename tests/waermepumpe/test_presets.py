@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 
 import pytest
-from analysis import presets
 from conftest import PRESET_DIR
+from hems.waermepumpe.analysis import presets
 
 
 def test_alle_ausgelieferten_presets_laden():

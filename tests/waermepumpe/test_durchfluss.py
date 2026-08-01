@@ -7,8 +7,9 @@ Messung aussehen.
 from __future__ import annotations
 
 import pytest
-from analysis import evaluate, presets, thermal
-from analysis.types import (
+from conftest import PRESET_DIR
+from hems.waermepumpe.analysis import evaluate, presets, thermal
+from hems.waermepumpe.analysis.types import (
     BETRIEB_HEIZEN,
     DATENBASIS_BELASTBAR,
     DATENBASIS_VORLAEUFIG,
@@ -17,7 +18,6 @@ from analysis.types import (
     GRUND_OK,
     Messwert,
 )
-from conftest import PRESET_DIR
 
 LG = "lg-therma-v-r32-split-5-7-9"
 
