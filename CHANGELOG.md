@@ -4,6 +4,22 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 1.6.5 — Warmwasserladung schlägt den Heizkreis-Modus
+
+Die Rolle Wärmepumpen-Analyse kannte nur **eine** Betriebsart-Entität. Viele
+Anlagen führen Heizkreis-Modus und Warmwasserbereitung aber unabhängig: Der
+Heizkreis steht auf Kühlen, und parallel läuft eine Speicherladung mit
+Vorrang — der Modus zeigt dabei weiter den Heizkreis.
+
+Neues optionales Feld **Warmwasserbereitung läuft**. Steht die Rückmeldung an,
+zählt die Analyse den Betrieb als Warmwasser, was auch immer der Modus meldet.
+
+**Zu tun:** Wer eine solche Rückmeldung hat, sollte sie eintragen. Ohne sie
+zählt im Winter jede Speicherladung als Heizbetrieb — hoher Vorlauf, große
+Spreizung, ganz anderer Arbeitspunkt — und verfälscht genau die Kennzahl, die
+die Betriebsart schützen soll. An einer LG Therma V über Modbus ist das
+`di09_warmwasserbereitung`.
+
 ## 1.6.4 — Die Analyse sagt jetzt, wenn ihr der Volumenstrom fehlt
 
 Ohne Durchfluss-Sensor und ohne Nennvolumenstrom verwarf die Analyse jede

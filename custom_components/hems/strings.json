@@ -307,7 +307,8 @@
           "verdichter_frequenz": "Compressor frequency (Hz, optional)",
           "betriebsart": "Operating mode (optional)",
           "standby_w": "Standby base load (W)",
-          "durchfluss_nominal_lh": "Nominal flow rate without a meter (l/h)"
+          "durchfluss_nominal_lh": "Nominal flow rate without a meter (l/h)",
+          "warmwasser_aktiv": "Hot water charge in progress (optional)"
         },
         "data_description": {
           "name": "A short label for this heat pump (display only).",
@@ -320,7 +321,8 @@
           "verdichter_frequenz": "Without it, cycling is estimated from the electrical power.",
           "betriebsart": "Separates heating, hot water and defrost. Without it, heating and hot water blend into one figure — allowed, but it downgrades the data basis.",
           "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve.",
-          "durchfluss_nominal_lh": "Only needed if no flow sensor is set above. Without either, the analysis discards every reading: no flow means no thermal output and therefore no COP. The four LG profiles carry the value, the six generic ones do not — it depends on the circulation pump and the hydraulics, not on the device model. Read it off the pump (m³/h × 1000) or compute it from a known operating point: thermal output [W] ÷ (spread [K] × 1.163). 0 means: take the value from the device curve."
+          "durchfluss_nominal_lh": "Only needed if no flow sensor is set above. Without either, the analysis discards every reading: no flow means no thermal output and therefore no COP. The four LG profiles carry the value, the six generic ones do not — it depends on the circulation pump and the hydraulics, not on the device model. Read it off the pump (m³/h × 1000) or compute it from a known operating point: thermal output [W] ÷ (spread [K] × 1.163). 0 means: take the value from the device curve.",
+          "warmwasser_aktiv": "Feedback that the unit is currently charging the tank — a binary_sensor, switch or input_boolean. Separate from the operating mode because many units track both independently: the heating circuit says cooling while a hot water charge runs in parallel with priority. While it is on, the analysis counts the operation as hot water, whatever the mode entity reports. Without it, every tank charge in winter would count as heating — high flow temperature, wide spread — skewing the very figure the operating mode is meant to protect."
         }
       },
       "analysis_menu": {
@@ -845,7 +847,8 @@
           "verdichter_frequenz": "Compressor frequency (Hz, optional)",
           "betriebsart": "Operating mode (optional)",
           "standby_w": "Standby base load (W)",
-          "durchfluss_nominal_lh": "Nominal flow rate without a meter (l/h)"
+          "durchfluss_nominal_lh": "Nominal flow rate without a meter (l/h)",
+          "warmwasser_aktiv": "Hot water charge in progress (optional)"
         },
         "data_description": {
           "name": "A short label for this heat pump (display only).",
@@ -858,7 +861,8 @@
           "verdichter_frequenz": "Without it, cycling is estimated from the electrical power.",
           "betriebsart": "Separates heating, hot water and defrost. Without it, heating and hot water blend into one figure — allowed, but it downgrades the data basis.",
           "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve.",
-          "durchfluss_nominal_lh": "Only needed if no flow sensor is set above. Without either, the analysis discards every reading: no flow means no thermal output and therefore no COP. The four LG profiles carry the value, the six generic ones do not — it depends on the circulation pump and the hydraulics, not on the device model. Read it off the pump (m³/h × 1000) or compute it from a known operating point: thermal output [W] ÷ (spread [K] × 1.163). 0 means: take the value from the device curve."
+          "durchfluss_nominal_lh": "Only needed if no flow sensor is set above. Without either, the analysis discards every reading: no flow means no thermal output and therefore no COP. The four LG profiles carry the value, the six generic ones do not — it depends on the circulation pump and the hydraulics, not on the device model. Read it off the pump (m³/h × 1000) or compute it from a known operating point: thermal output [W] ÷ (spread [K] × 1.163). 0 means: take the value from the device curve.",
+          "warmwasser_aktiv": "Feedback that the unit is currently charging the tank — a binary_sensor, switch or input_boolean. Separate from the operating mode because many units track both independently: the heating circuit says cooling while a hot water charge runs in parallel with priority. While it is on, the analysis counts the operation as hot water, whatever the mode entity reports. Without it, every tank charge in winter would count as heating — high flow temperature, wide spread — skewing the very figure the operating mode is meant to protect."
         }
       },
       "edit_analysis": {
@@ -875,7 +879,8 @@
           "verdichter_frequenz": "Compressor frequency (Hz, optional)",
           "betriebsart": "Operating mode (optional)",
           "standby_w": "Standby base load (W)",
-          "durchfluss_nominal_lh": "Nominal flow rate without a meter (l/h)"
+          "durchfluss_nominal_lh": "Nominal flow rate without a meter (l/h)",
+          "warmwasser_aktiv": "Hot water charge in progress (optional)"
         },
         "data_description": {
           "name": "A short label for this heat pump (display only).",
@@ -888,7 +893,8 @@
           "verdichter_frequenz": "Without it, cycling is estimated from the electrical power.",
           "betriebsart": "Separates heating, hot water and defrost. Without it, heating and hot water blend into one figure — allowed, but it downgrades the data basis.",
           "standby_w": "Power drawn without the compressor running (circulation pump, electronics). 0 means: take the value from the device curve.",
-          "durchfluss_nominal_lh": "Only needed if no flow sensor is set above. Without either, the analysis discards every reading: no flow means no thermal output and therefore no COP. The four LG profiles carry the value, the six generic ones do not — it depends on the circulation pump and the hydraulics, not on the device model. Read it off the pump (m³/h × 1000) or compute it from a known operating point: thermal output [W] ÷ (spread [K] × 1.163). 0 means: take the value from the device curve."
+          "durchfluss_nominal_lh": "Only needed if no flow sensor is set above. Without either, the analysis discards every reading: no flow means no thermal output and therefore no COP. The four LG profiles carry the value, the six generic ones do not — it depends on the circulation pump and the hydraulics, not on the device model. Read it off the pump (m³/h × 1000) or compute it from a known operating point: thermal output [W] ÷ (spread [K] × 1.163). 0 means: take the value from the device curve.",
+          "warmwasser_aktiv": "Feedback that the unit is currently charging the tank — a binary_sensor, switch or input_boolean. Separate from the operating mode because many units track both independently: the heating circuit says cooling while a hot water charge runs in parallel with priority. While it is on, the analysis counts the operation as hot water, whatever the mode entity reports. Without it, every tank charge in winter would count as heating — high flow temperature, wide spread — skewing the very figure the operating mode is meant to protect."
         }
       }
     },

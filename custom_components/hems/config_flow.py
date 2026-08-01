@@ -354,6 +354,9 @@ ANALYSIS_SCHEMA = vol.Schema(
         vol.Optional("durchfluss"): _entity(["sensor", "input_number"]),
         vol.Optional("verdichter_frequenz"): _entity(["sensor"]),
         vol.Optional("betriebsart"): _entity(["sensor", "climate", "select"]),
+        vol.Optional("warmwasser_aktiv"): _entity(
+            ["binary_sensor", "switch", "input_boolean"]
+        ),
         vol.Required("standby_w", default=0): _number(0, 1000, "W", 1),
         vol.Required(
             "durchfluss_nominal_lh", default=0

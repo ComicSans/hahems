@@ -90,3 +90,35 @@ def test_der_fehlende_volumenstrom_wird_ueberhaupt_gemeldet() -> None:
     quelle = ast.unparse(_funktion("async_start"))
     assert "durchfluss_nominal_lh" in quelle, quelle
     assert "kein Volumenstrom" in quelle, quelle
+
+
+def test_die_speicherladung_schlaegt_die_modus_entitaet() -> None:
+    """Warmwasser hat Vorrang vor dem gemeldeten Heizkreis-Modus.
+
+    Gemessen an einer LG Therma V am 01.08.2026: Der Modus stand auf „Kühlen",
+    während `di09_warmwasserbereitung` an war und die Anlage den Speicher auf
+    52 °C lud. Beides ist korrekt und beides gleichzeitig — Warmwasser läuft
+    dort mit Vorrang parallel zum Heizkreis.
+
+    Ohne den Vorrang zählte im Winter, wenn der Modus „Heizen" meldet, jede
+    Speicherladung als Heizbetrieb: hoher Vorlauf, große Spreizung, ganz
+    anderer Arbeitspunkt. Genau das soll die Betriebsart verhindern.
+
+    Geprüft wird die Reihenfolge: Die Abfrage muss **vor** der Auswertung der
+    Modus-Entität stehen, sonst gewinnt der Modus.
+    """
+    funktion = _funktion("_betriebsart")
+    zeilen = {}
+    for knoten in ast.walk(funktion):
+        if isinstance(knoten, ast.Attribute) and knoten.attr in (
+            "warmwasser_aktiv",
+            "betriebsart",
+        ):
+            zeilen.setdefault(knoten.attr, knoten.lineno)
+    assert "warmwasser_aktiv" in zeilen, "die Speicherladung wird nicht gelesen"
+    assert "betriebsart" in zeilen, "die Modus-Entität wird nicht gelesen"
+    assert zeilen["warmwasser_aktiv"] < zeilen["betriebsart"], (
+        "die Modus-Entität wird vor der Speicherladung ausgewertet — dann "
+        "gewinnt sie, und eine Ladung im Heizbetrieb zählt als Heizen"
+    )
+    assert "BETRIEB_WARMWASSER" in ast.unparse(funktion)

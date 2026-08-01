@@ -26,7 +26,14 @@ from homeassistant.util import dt as dt_util
 
 from ..models import HeatPumpAnalysis
 from .analysis import evaluate, hints, presets, thermal
-from .analysis.types import Analyse, HinweisZustand, Messwert, Preset, TaktZustand
+from .analysis.types import (
+    BETRIEB_WARMWASSER,
+    Analyse,
+    HinweisZustand,
+    Messwert,
+    Preset,
+    TaktZustand,
+)
 from .const import (
     ABFRAGE_SEKUNDEN,
     BETRIEBSART_SCHLUESSEL,
@@ -247,6 +254,15 @@ class AnalyseLauf:
         return wert
 
     def _betriebsart(self) -> str | None:
+        # Eine laufende Speicherladung schlägt jede Modus-Meldung: Auf vielen
+        # Anlagen läuft sie mit Vorrang parallel zu Heizen oder Kühlen, und
+        # der Modus zeigt dabei weiter den Heizkreis. Ohne diesen Vorrang
+        # zählte jede Ladung im Winter als Heizbetrieb.
+        if self.rolle.warmwasser_aktiv:
+            zustand = self.hass.states.get(self.rolle.warmwasser_aktiv)
+            if zustand is not None and zustand.state == "on":
+                return BETRIEB_WARMWASSER
+
         eid = self.rolle.betriebsart
         if not eid:
             return None

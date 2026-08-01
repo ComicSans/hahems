@@ -286,6 +286,17 @@ class HeatPumpAnalysis:
     # Ohne Betriebsart vermischen sich Heizen und Warmwasser in einer
     # Kennzahl. Zulässig, wertet aber die Datenbasis ab.
     betriebsart: str | None = None
+    # „Die Anlage lädt gerade den Warmwasserspeicher" (binary_sensor, switch
+    # oder input_boolean). Getrennt von `betriebsart`, weil viele Anlagen
+    # beides unabhängig führen: Der Heizkreis steht auf Kühlen, und parallel
+    # läuft eine Warmwasserladung mit Vorrang. Eine einzelne Modus-Entität
+    # kann das nicht ausdrücken.
+    #
+    # Steht sie an, gilt die Betriebsart als `warmwasser`, was auch immer die
+    # Modus-Entität meldet. Ohne sie zählte im Winter jede Speicherladung als
+    # Heizbetrieb — hoher Vorlauf, große Spreizung — und verfälschte genau die
+    # Kennzahl, die `betriebsart` schützen soll.
+    warmwasser_aktiv: str | None = None
     # Anlagenspezifischer Standby-Sockel; 0 heißt: Wert aus dem Preset. Der
     # Sockel hängt an der Umwälzpumpe der Anlage, nicht am Gerätemodell.
     standby_w: float = 0.0

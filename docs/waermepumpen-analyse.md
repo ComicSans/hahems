@@ -62,12 +62,24 @@ eigene Zähler. Die Analyse kennt die Quelle nicht.
 | `aussentemperatur` | ja | °C | |
 | `verdichter_frequenz` | nein | Hz | ohne sie wird die Taktung aus der Leistung geschätzt |
 | `betriebsart` | nein | Text | trennt Heizen, Warmwasser und Abtauen |
+| `warmwasser_aktiv` | nein | an/aus | Speicherladung läuft; schlägt die Betriebsart |
 | `preset` | ja | – | Schlüssel einer Datei in `waermepumpe/presets/` |
 | `standby_w` | nein | W | 0 = Wert aus dem Preset |
 | `durchfluss_nominal_lh` | nein | l/h | Ersatz für den fehlenden Zähler; 0 = Wert aus dem Preset |
 
 Ohne `betriebsart` vermischen sich Heizen und Warmwasser in einer Kennzahl.
 Zulässig, wertet aber die Datenbasis ab.
+
+**Eine Modus-Entität allein reicht oft nicht.** Viele Anlagen führen
+Heizkreis-Modus und Warmwasserbereitung unabhängig: Der Heizkreis steht auf
+Kühlen, und parallel läuft eine Speicherladung mit Vorrang — der Modus zeigt
+dabei weiter den Heizkreis. Dafür gibt es `warmwasser_aktiv`. Steht die
+Rückmeldung an, gilt die Betriebsart als `warmwasser`, was auch immer die
+Modus-Entität meldet.
+
+Ohne sie zählt im Winter jede Speicherladung als Heizbetrieb — hoher Vorlauf,
+große Spreizung, ganz anderer Arbeitspunkt — und verfälscht genau die
+Kennzahl, die `betriebsart` schützen soll.
 
 **Ohne Volumenstromzähler rechnet die Analyse trotzdem** — sofern ein
 Nennvolumenstrom bekannt ist. Sie setzt ihn dann ein, meldet
