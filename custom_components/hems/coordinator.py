@@ -1332,6 +1332,15 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Config-Sanity-Check (speist binary_sensor.hems_konfiguration). Fehler/
         # Überlappungen nur bei Änderung loggen, nicht jeden 60-s-Zyklus.
         data.config_check = check_config(self.hass, reg)
+        # Was der Analyse an ihren Eingängen auffällt, gehört in denselben
+        # Check: eine fehlende Einheit am Durchfluss verfälscht jeden COP um
+        # den Faktor 60, und ohne diese Zeile stünde das nur im Log.
+        # Warnung und nicht Fehler — eine kaputte Messkette darf den Planer
+        # nicht am Schalten hindern, sie macht nur die Kennzahlen wertlos.
+        for lauf in self.analyse_laeufe.values():
+            data.config_check.warnings.extend(
+                f"{lauf.rolle.name}: {meldung}" for meldung in lauf.konfigfehler
+            )
         self.config_check = data.config_check
         sig = data.config_check.signature()
         if sig != self._check_signature:
