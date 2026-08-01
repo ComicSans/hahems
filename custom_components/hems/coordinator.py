@@ -1039,6 +1039,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
     async def _async_update_data(self) -> HemsData:
         data = HemsData()
         reg = self.registry
+        # Vor allem anderen: die Heizkurven-Übernahme liest daraus, und der
+        # Heizkreis-Zustand wird weiter unten gebaut.
+        self._analysen_einlesen(data)
 
         # Meter (positiv = Netzbezug)
         raw = self._power_w(self._opt(CONF_METER, None))
@@ -1222,6 +1225,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 antitakt_starts=heating_cfg.antitakt_starts,
                 antitakt_window_min=heating_cfg.antitakt_window_min,
                 antitakt_pause_min=heating_cfg.antitakt_pause_min,
+                curve_from_analysis=heating_cfg.curve_from_analysis,
+                **self._kurven_empfehlung(reg, data),
             )
 
         modulateds = self._modulated_states(reg, now)
@@ -1380,10 +1385,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 await self._actuator.release_battery(reg)
         self._prev_mode = self.mode
 
-        # Wärmepumpen-Analyse: Ergebnisse einsammeln und der Analyse sagen, ob
-        # HEMS gerade selbst eingreift. Der Auswertelauf hat einen eigenen,
-        # feineren Takt; hier wird nur der letzte Stand übernommen.
-        self._analysen_koppeln(data)
+        # Der Analyse sagen, ob HEMS gerade selbst eingreift. Erst hier, weil
+        # es am Plan hängt; eingelesen wurde sie vor dem Planlauf.
+        self._analysen_rueckmelden(data)
 
         # Entscheidungsänderungen für den Logs-Reiter fortschreiben.
         self._record_decisions(data)
@@ -1403,8 +1407,41 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             lauf.async_stop()
         self.analyse_laeufe.clear()
 
-    def _analysen_koppeln(self, data: HemsData) -> None:
-        """Ergebnisse übernehmen und die eigene Übersteuerung melden.
+    def _analysen_einlesen(self, data: HemsData) -> None:
+        """Den letzten Stand jedes Auswertelaufs übernehmen.
+
+        Vor dem Planlauf, weil die Heizkurven-Übernahme daraus liest. Der
+        Auswertelauf hat einen eigenen, feineren Takt; hier wird nur abgeholt,
+        nie gerechnet.
+        """
+        for rolle_id, lauf in self.analyse_laeufe.items():
+            if lauf.analyse is not None:
+                data.analysen[rolle_id] = lauf.analyse
+
+    def _kurven_empfehlung(self, reg: DeviceRegistry, data: HemsData) -> dict:
+        """Die Heizkurvenempfehlung für den HeatingState.
+
+        Bei mehreren Analyse-Rollen wird nichts übernommen: welche davon
+        diesen Heizkreis beschreibt, ist nicht entscheidbar, und raten wäre
+        hier teurer als nichts zu tun. Der Grund steht danach als Attribut am
+        Heizkreis-Sensor.
+        """
+        if len(reg.analyses) > 1:
+            return {"empfehlung_mehrdeutig": True}
+        if not reg.analyses:
+            return {}
+        analyse = data.analysen.get(reg.analyses[0].id)
+        if analyse is None:
+            return {}
+        return {
+            "empfehlung_fusspunkt_c": analyse.kurve.fusspunkt_c,
+            "empfehlung_steilheit": analyse.kurve.steilheit,
+            "empfehlung_vorlauf_min_c": analyse.kurve.vorlauf_min_c,
+            "empfehlung_datenbasis": analyse.datenbasis_empfehlung,
+        }
+
+    def _analysen_rueckmelden(self, data: HemsData) -> None:
+        """Der Analyse melden, dass HEMS gerade selbst eingreift.
 
         Warum das überhaupt gemeldet wird: Wirft HEMS die Wärmepumpe wegen
         PV-Überschuss an oder hält sie aus einer Lastspitze heraus, ist das
@@ -1419,11 +1456,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         """
         heizung = data.plan.heizung
         taktschutz = bool(heizung and heizung.taktschutz)
-        for rolle_id, lauf in self.analyse_laeufe.items():
+        for lauf in self.analyse_laeufe.values():
             lauf.steuerung_aktiv = self.mode == MODE_AUTO and taktschutz
             lauf.steuerung_grund = GRUND_SPERRE if taktschutz else GRUND_NORMAL
-            if lauf.analyse is not None:
-                data.analysen[rolle_id] = lauf.analyse
 
     def _record_decisions(self, data: HemsData) -> None:
         """Aktuelle Entscheidungen gegen den Vorlauf diffen und Änderungen loggen.

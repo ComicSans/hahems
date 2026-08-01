@@ -193,6 +193,25 @@ SILENT_VLT_OFF_C = 37
 # auf dem Taupunkt wäre deshalb zu scharf; ganz ohne Abstand fehlt die Reserve
 # für die Trägheit des Feuchtesensors.
 DEFAULT_DEWPOINT_MARGIN_K = 2.0
+
+# Übernahme der gemessenen Heizkurve (siehe strategies/kurve.py). Die
+# Empfehlung entsteht aus Betrieb, den HEMS mit der vorigen Empfehlung selbst
+# erzeugt hat — eine echte Rückkopplung. Diese vier Werte sind die Dämpfung.
+KURVE_MIN_ABSTAND_H = 24  # frühestens so viel später wird erneut übernommen
+KURVE_SCHWELLE_FUSSPUNKT_K = 1.0  # darunter ändert sich am Sollwert nichts
+KURVE_SCHWELLE_STEILHEIT = 0.05
+# Grenzen für übernommene Werte, identisch mit denen des Konfigurationsdialogs:
+# was dort niemand eintragen könnte, soll auch die Regression nicht liefern.
+KURVE_FUSSPUNKT_MIN_C = 25.0
+KURVE_FUSSPUNKT_MAX_C = 60.0
+KURVE_STEILHEIT_MIN = 0.0
+KURVE_STEILHEIT_MAX = 3.0
+
+# Stufe der Datenbasis, ab der die Analyse für eine Kurvenübernahme taugt.
+# Wörtlich dieselbe Zeichenkette wie in waermepumpe/analysis/types.py; sie
+# steht hier noch einmal, damit `strategies/` nichts aus der Analyse
+# importieren muss. test_kurve.py hält beide zusammen.
+DATENBASIS_BELASTBAR = "belastbar"
 # Zweite Schwelle: Einmal angehoben, bleibt der Vorlauf angehoben, bis die
 # Untergrenze diesen Betrag UNTER den Kühl-Sollwert gefallen ist. Ohne sie
 # würde der geschriebene Sollwert um die Grenze herum zwischen zwei Werten

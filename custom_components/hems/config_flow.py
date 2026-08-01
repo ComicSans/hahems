@@ -258,6 +258,9 @@ HEATING_SCHEMA = vol.Schema(
         vol.Required("curve_slope", default=DEFAULT_CURVE_SLOPE): _number(
             0, 3, "K/K", 0.01
         ),
+        vol.Required(
+            "curve_from_analysis", default=False
+        ): selector.BooleanSelector(),
         vol.Required("vlt_min_c", default=DEFAULT_VLT_MIN_C): _number(
             15, 40, "°C", 0.5
         ),

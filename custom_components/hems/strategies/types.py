@@ -80,6 +80,21 @@ class HeatingState:
     antitakt_starts: int = DEFAULT_ANTITAKT_STARTS
     antitakt_window_min: int = DEFAULT_ANTITAKT_WINDOW_MIN
     antitakt_pause_min: int = DEFAULT_ANTITAKT_PAUSE_MIN
+    # Heizkurve aus der Wärmepumpen-Analyse übernehmen statt aus curve_base_c
+    # und curve_slope. Voreingestellt aus: die Empfehlung entsteht aus
+    # Betrieb, den HEMS selbst erzeugt hat, und wer das einschaltet, soll es
+    # bewusst tun. Die Dämpfung steht in strategies/kurve.py.
+    curve_from_analysis: bool = False
+    # Die Empfehlung selbst, vom Coordinator aus der Analyse abgelesen. Ohne
+    # Analyse bleiben alle drei None und `empfehlung_datenbasis` leer.
+    empfehlung_fusspunkt_c: float | None = None
+    empfehlung_steilheit: float | None = None
+    empfehlung_vorlauf_min_c: float | None = None
+    empfehlung_datenbasis: str | None = None
+    # Mehrere Analyse-Rollen konfiguriert: dann ist nicht entscheidbar, welche
+    # diesen Heizkreis beschreibt, und es wird nichts übernommen. Raten wäre
+    # hier teurer als nichts zu tun.
+    empfehlung_mehrdeutig: bool = False
 
 
 @dataclass
@@ -286,6 +301,13 @@ class HeatingResult:
     # `taupunkt_grenze_c` unter dem Kühl-Sollwert, wacht die Grenze nur.
     taupunkt_grenze_c: float | None = None
     taupunkt_begrenzt: bool = False
+    # Welche Heizkurve gerade gilt und warum. "konfiguriert" heißt: aus dem
+    # Dialog. "empfehlung": aus der Wärmepumpen-Analyse übernommen.
+    # "wartet": Übernahme ist an, die Datenbasis reicht noch nicht.
+    kurve_quelle: str = "konfiguriert"
+    kurve_grund: str = ""
+    kurve_fusspunkt_c: float | None = None
+    kurve_steilheit: float | None = None
 
 
 @dataclass
@@ -329,6 +351,14 @@ class PlanFlags:
     # Flags mit `dataclasses.replace` fort, das Referenzen kopiert — eine Liste
     # wäre zwischen Ein- und Ausgabe geteilt und würde die Eingabe
     # mitverändern, sobald jemand sie anhängt statt sie zu ersetzen.
+    # Übernommene Heizkurve: die Werte selbst und wann sie übernommen wurden.
+    # Sie gehören in die Flags und nicht in die Konfiguration — eine Übernahme
+    # ist eine laufende Entscheidung, keine Einstellung, und sie soll nicht
+    # stillschweigend das überschreiben, was jemand von Hand eingetragen hat.
+    kurve_fusspunkt_c: float | None = None
+    kurve_steilheit: float | None = None
+    kurve_vorlauf_min_c: float | None = None
+    kurve_uebernommen_am: datetime | None = None
     takt_verdichter_an: bool = False
     takt_start_zeiten: tuple[datetime, ...] = ()
     takt_pause_bis: datetime | None = None

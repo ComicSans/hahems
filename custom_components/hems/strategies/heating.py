@@ -15,6 +15,7 @@ from ..const import (
     SILENT_VLT_OFF_C,
     SILENT_VLT_ON_C,
 )
+from .kurve import kurven_wahl
 from .types import HeatingResult, PlanInput, PlanResult, _latch
 
 
@@ -37,11 +38,20 @@ def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
 
     Im Kühlbetrieb hält die Taupunkt-Untergrenze den Vorlauf über dem Taupunkt
     der Raumluft, sofern beide Raumklima-Rollen konfiguriert sind.
+
+    Welche Heizkurve dabei gilt — die konfigurierte oder die aus der
+    Wärmepumpen-Analyse übernommene — entscheidet `strategies/kurve.py`. Hier
+    wird nur mit dem Ergebnis gerechnet.
     """
     h = inp.heating
     result = HeatingResult(
         name=h.name, sommer_sperre=h.heat_locked, ww_bereitung=h.dhw_active
     )
+    kurve = kurven_wahl(inp, res)
+    result.kurve_quelle = kurve.quelle
+    result.kurve_grund = kurve.grund
+    result.kurve_fusspunkt_c = kurve.fusspunkt_c
+    result.kurve_steilheit = kurve.steilheit
     taupunkt = _taupunkt_c(h.room_temp_c, h.room_humidity_pct)
     result.taupunkt_c = None if taupunkt is None else round(taupunkt, 1)
     # Außerhalb des Kühlbetriebs wacht die Grenze nicht: dort wird der Vorlauf
@@ -76,12 +86,12 @@ def _heating_plan(inp: PlanInput, res: PlanResult) -> HeatingResult:
         result.modus = "heizen"
         result.frostschutz = frost_only
         vlt_min = (
-            h.vlt_min_cold_c if t < HEATING_COLD_THRESHOLD_C else h.vlt_min_c
+            h.vlt_min_cold_c if t < HEATING_COLD_THRESHOLD_C else kurve.vorlauf_min_c
         )
         if frost_only or (h.demand_pct is not None and h.demand_pct < 1):
             vlt = vlt_min
         else:
-            vlt = h.curve_base_c - t * h.curve_slope
+            vlt = kurve.fusspunkt_c - t * kurve.steilheit
             if h.demand_pct is not None:
                 vlt += h.demand_pct / 100 * HEATING_DEMAND_SHIFT_K
             vlt = max(vlt_min, min(vlt, h.vlt_max_c))

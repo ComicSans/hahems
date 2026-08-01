@@ -259,7 +259,8 @@
           "dewpoint_margin_k": "Sicherheitsabstand zum Taupunkt",
           "antitakt_starts": "Taktschutz: Verdichterstarts je Fenster (0 = aus)",
           "antitakt_window_min": "Taktschutz: Beobachtungsfenster",
-          "antitakt_pause_min": "Taktschutz: Zwangspause"
+          "antitakt_pause_min": "Taktschutz: Zwangspause",
+          "curve_from_analysis": "Heizkurve aus der Wärmepumpen-Analyse übernehmen"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -294,7 +295,8 @@
           "dewpoint_margin_k": "Wie weit der Kühl-Vorlauf über dem Taupunkt bleiben soll. Die Vorlauftemperatur ist nicht die Oberflächentemperatur - Estrich und Putz liegen dazwischen, die Oberfläche bleibt wärmer als das Wasser. 2 K sind ein brauchbarer Anfang; 0 legt die Grenze genau auf den Taupunkt.",
           "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift im Heiz- und im Kühlbetrieb, nicht im Frostschutz.",
           "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden. Das Fenster rolliert mit: gezählt wird, was jünger als diese Spanne ist.",
-          "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
+          "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange.",
+          "curve_from_analysis": "Statt Fußpunkt und Steilheit von oben nutzt HEMS die gemessene Empfehlung der Rolle Wärmepumpen-Analyse. Übernommen wird höchstens einmal am Tag, nur bei belastbarer Datenbasis und nur bei spürbarer Abweichung — die Empfehlung entsteht aus Betrieb, den HEMS mit der vorigen Empfehlung selbst erzeugt hat, und ohne Dämpfung würde die Kurve wandern. Die Werte oben bleiben stehen und gelten wieder, sobald der Schalter aus ist."
         }
       },
       "add_analysis": {
@@ -729,7 +731,8 @@
           "dewpoint_margin_k": "Sicherheitsabstand zum Taupunkt",
           "antitakt_starts": "Taktschutz: Verdichterstarts je Fenster (0 = aus)",
           "antitakt_window_min": "Taktschutz: Beobachtungsfenster",
-          "antitakt_pause_min": "Taktschutz: Zwangspause"
+          "antitakt_pause_min": "Taktschutz: Zwangspause",
+          "curve_from_analysis": "Heizkurve aus der Wärmepumpen-Analyse übernehmen"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -764,7 +767,8 @@
           "dewpoint_margin_k": "Wie weit der Kühl-Vorlauf über dem Taupunkt bleiben soll. Die Vorlauftemperatur ist nicht die Oberflächentemperatur - Estrich und Putz liegen dazwischen, die Oberfläche bleibt wärmer als das Wasser. 2 K sind ein brauchbarer Anfang; 0 legt die Grenze genau auf den Taupunkt.",
           "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift im Heiz- und im Kühlbetrieb, nicht im Frostschutz.",
           "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden. Das Fenster rolliert mit: gezählt wird, was jünger als diese Spanne ist.",
-          "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
+          "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange.",
+          "curve_from_analysis": "Statt Fußpunkt und Steilheit von oben nutzt HEMS die gemessene Empfehlung der Rolle Wärmepumpen-Analyse. Übernommen wird höchstens einmal am Tag, nur bei belastbarer Datenbasis und nur bei spürbarer Abweichung — die Empfehlung entsteht aus Betrieb, den HEMS mit der vorigen Empfehlung selbst erzeugt hat, und ohne Dämpfung würde die Kurve wandern. Die Werte oben bleiben stehen und gelten wieder, sobald der Schalter aus ist."
         }
       },
       "edit_heating": {
@@ -803,7 +807,8 @@
           "dewpoint_margin_k": "Sicherheitsabstand zum Taupunkt",
           "antitakt_starts": "Taktschutz: Verdichterstarts je Fenster (0 = aus)",
           "antitakt_window_min": "Taktschutz: Beobachtungsfenster",
-          "antitakt_pause_min": "Taktschutz: Zwangspause"
+          "antitakt_pause_min": "Taktschutz: Zwangspause",
+          "curve_from_analysis": "Heizkurve aus der Wärmepumpen-Analyse übernehmen"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperatursensor, der Modus-Entscheidung und Heizkurve speist.",
@@ -838,7 +843,8 @@
           "dewpoint_margin_k": "Wie weit der Kühl-Vorlauf über dem Taupunkt bleiben soll. Die Vorlauftemperatur ist nicht die Oberflächentemperatur - Estrich und Putz liegen dazwischen, die Oberfläche bleibt wärmer als das Wasser. 2 K sind ein brauchbarer Anfang; 0 legt die Grenze genau auf den Taupunkt.",
           "antitakt_starts": "Ab wie vielen Verdichterstarts im Beobachtungsfenster HEMS eine Zwangspause einlegt. 0 schaltet den Taktschutz ab. Greift im Heiz- und im Kühlbetrieb, nicht im Frostschutz.",
           "antitakt_window_min": "Länge des Fensters, in dem die Starts gezählt werden. Das Fenster rolliert mit: gezählt wird, was jünger als diese Spanne ist.",
-          "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange."
+          "antitakt_pause_min": "Wie lange HEMS nach zu vielen Starts 'aus' empfiehlt. Das begrenzt die STARTRATE, nicht die Länge des einzelnen Takts: Aus der Pause, die sich die Anlage selbst gönnt, wird eine lange.",
+          "curve_from_analysis": "Statt Fußpunkt und Steilheit von oben nutzt HEMS die gemessene Empfehlung der Rolle Wärmepumpen-Analyse. Übernommen wird höchstens einmal am Tag, nur bei belastbarer Datenbasis und nur bei spürbarer Abweichung — die Empfehlung entsteht aus Betrieb, den HEMS mit der vorigen Empfehlung selbst erzeugt hat, und ohne Dämpfung würde die Kurve wandern. Die Werte oben bleiben stehen und gelten wieder, sobald der Schalter aus ist."
         }
       },
       "add_analysis": {

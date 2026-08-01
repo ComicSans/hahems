@@ -101,6 +101,14 @@ Die Werte dort sind **beratend**. Die Analyse hat keinen Schreibpfad;
 geschaltet wird über die Rolle Heizkreis. Zwei Stellen, die denselben Sollwert
 schreiben, sind der Fehler, den diese Trennung verhindert.
 
+Eine Ausnahme lässt sich einschalten: **Heizkurve aus der Wärmepumpen-Analyse
+übernehmen** am Heizkreis. Dann fährt HEMS nach der gemessenen Empfehlung statt
+nach Fußpunkt und Steilheit aus dem Dialog — höchstens einmal am Tag, nur bei
+belastbarer Datenbasis und nur bei spürbarer Abweichung. Die Dämpfung ist
+nötig, weil die Empfehlung aus Betrieb entsteht, den HEMS mit der vorigen
+Empfehlung selbst erzeugt hat. Was gerade gilt, steht als `kurve_quelle` und
+`kurve_grund` an `sensor.hems_heizkreis`.
+
 Details: [docs/waermepumpen-analyse.md](docs/waermepumpen-analyse.md).
 
 ## Lovelace-Karten

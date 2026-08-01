@@ -110,6 +110,12 @@ def heating(
     antitakt_starts: int = 4,
     antitakt_window_min: int = 60,
     antitakt_pause_min: int = 30,
+    curve_from_analysis: bool = False,
+    empfehlung_fusspunkt_c: float | None = None,
+    empfehlung_steilheit: float | None = None,
+    empfehlung_vorlauf_min_c: float | None = None,
+    empfehlung_datenbasis: str | None = None,
+    empfehlung_mehrdeutig: bool = False,
 ) -> P.HeatingState:
     return P.HeatingState(
         name=name,
@@ -136,6 +142,12 @@ def heating(
         antitakt_starts=antitakt_starts,
         antitakt_window_min=antitakt_window_min,
         antitakt_pause_min=antitakt_pause_min,
+        curve_from_analysis=curve_from_analysis,
+        empfehlung_fusspunkt_c=empfehlung_fusspunkt_c,
+        empfehlung_steilheit=empfehlung_steilheit,
+        empfehlung_vorlauf_min_c=empfehlung_vorlauf_min_c,
+        empfehlung_datenbasis=empfehlung_datenbasis,
+        empfehlung_mehrdeutig=empfehlung_mehrdeutig,
     )
 
 

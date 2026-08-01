@@ -308,6 +308,14 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "taupunkt_c": d.plan.heizung.taupunkt_c,
             "taupunkt_grenze_c": d.plan.heizung.taupunkt_grenze_c,
             "taupunkt_begrenzt": d.plan.heizung.taupunkt_begrenzt,
+            # Welche Heizkurve gerade gilt und warum. "konfiguriert" = aus
+            # dem Dialog, "empfehlung" = aus der Wärmepumpen-Analyse
+            # übernommen, "wartet" = Übernahme ist an, die Datenbasis reicht
+            # noch nicht. "kurve_grund" sagt es im Klartext.
+            "kurve_quelle": d.plan.heizung.kurve_quelle,
+            "kurve_grund": d.plan.heizung.kurve_grund,
+            "kurve_fusspunkt_c": d.plan.heizung.kurve_fusspunkt_c,
+            "kurve_steilheit": d.plan.heizung.kurve_steilheit,
             # Gelerntes Verbrauchsmodell für die Bedarfsprognose
             "verbrauchsmodell": d.waermepumpe_modell,
         }

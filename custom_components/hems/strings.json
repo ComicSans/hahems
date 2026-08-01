@@ -256,7 +256,8 @@
           "compressor_entity": "Compressor running feedback (optional)",
           "antitakt_starts": "Anti-cycling: compressor starts per window (0 = off)",
           "antitakt_window_min": "Anti-cycling: observation window",
-          "antitakt_pause_min": "Anti-cycling: forced pause"
+          "antitakt_pause_min": "Anti-cycling: forced pause",
+          "curve_from_analysis": "Adopt heating curve from the heat pump analysis"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -288,7 +289,8 @@
           "compressor_entity": "Optional binary_sensor/switch/input_boolean that is on while the compressor runs. HEMS counts its starts and, in cooling mode, forces a pause once there are too many of them - short cycles wear the compressor out, and most units offer no setting for it. Leave empty if your device has no such feedback; anti-cycling then stays off.",
           "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Applies to heating and cooling alike, but never during frost protection.",
           "antitakt_window_min": "Length of the window the starts are counted in. The window rolls along: what counts is every start younger than that span.",
-          "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
+          "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one.",
+          "curve_from_analysis": "Instead of the base point and slope above, HEMS uses the measured recommendation from the heat pump analysis role. Adopted at most once a day, only on a reliable data basis and only for a noticeable difference — the recommendation comes from operation HEMS produced with the previous one, and without damping the curve would drift. The values above stay and apply again as soon as the switch is off."
         }
       },
       "add_analysis": {
@@ -720,7 +722,8 @@
           "compressor_entity": "Compressor running feedback (optional)",
           "antitakt_starts": "Anti-cycling: compressor starts per window (0 = off)",
           "antitakt_window_min": "Anti-cycling: observation window",
-          "antitakt_pause_min": "Anti-cycling: forced pause"
+          "antitakt_pause_min": "Anti-cycling: forced pause",
+          "curve_from_analysis": "Adopt heating curve from the heat pump analysis"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -752,7 +755,8 @@
           "compressor_entity": "Optional binary_sensor/switch/input_boolean that is on while the compressor runs. HEMS counts its starts and, in cooling mode, forces a pause once there are too many of them - short cycles wear the compressor out, and most units offer no setting for it. Leave empty if your device has no such feedback; anti-cycling then stays off.",
           "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Applies to heating and cooling alike, but never during frost protection.",
           "antitakt_window_min": "Length of the window the starts are counted in. The window rolls along: what counts is every start younger than that span.",
-          "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
+          "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one.",
+          "curve_from_analysis": "Instead of the base point and slope above, HEMS uses the measured recommendation from the heat pump analysis role. Adopted at most once a day, only on a reliable data basis and only for a noticeable difference — the recommendation comes from operation HEMS produced with the previous one, and without damping the curve would drift. The values above stay and apply again as soon as the switch is off."
         }
       },
       "edit_heating": {
@@ -788,7 +792,8 @@
           "compressor_entity": "Compressor running feedback (optional)",
           "antitakt_starts": "Anti-cycling: compressor starts per window (0 = off)",
           "antitakt_window_min": "Anti-cycling: observation window",
-          "antitakt_pause_min": "Anti-cycling: forced pause"
+          "antitakt_pause_min": "Anti-cycling: forced pause",
+          "curve_from_analysis": "Adopt heating curve from the heat pump analysis"
         },
         "data_description": {
           "outdoor_temp_entity": "Temperature sensor that drives the mode decision and the heating curve.",
@@ -820,7 +825,8 @@
           "compressor_entity": "Optional binary_sensor/switch/input_boolean that is on while the compressor runs. HEMS counts its starts and, in cooling mode, forces a pause once there are too many of them - short cycles wear the compressor out, and most units offer no setting for it. Leave empty if your device has no such feedback; anti-cycling then stays off.",
           "antitakt_starts": "Number of compressor starts within the observation window that triggers a forced pause. 0 switches anti-cycling off. Applies to heating and cooling alike, but never during frost protection.",
           "antitakt_window_min": "Length of the window the starts are counted in. The window rolls along: what counts is every start younger than that span.",
-          "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one."
+          "antitakt_pause_min": "How long HEMS recommends 'off' after too many starts. This limits the START RATE, not the length of a single cycle: the four-minute gap the unit allows itself becomes a long one.",
+          "curve_from_analysis": "Instead of the base point and slope above, HEMS uses the measured recommendation from the heat pump analysis role. Adopted at most once a day, only on a reliable data basis and only for a noticeable difference — the recommendation comes from operation HEMS produced with the previous one, and without damping the curve would drift. The values above stay and apply again as soon as the switch is off."
         }
       },
       "add_analysis": {

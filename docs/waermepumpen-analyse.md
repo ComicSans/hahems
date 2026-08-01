@@ -267,12 +267,58 @@ kein Fehler und keine leere Anzeige.
 
 ## Übernahme der Empfehlungen
 
-**Noch nicht gebaut.** Die Heizkurvenempfehlung wird veröffentlicht und im
-Reiter Effizienz angezeigt; der Vorlauf-Sollwert, den HEMS wirklich schreibt,
-kommt weiterhin aus `curve_base_c` und `curve_slope` der Rolle Heizkreis.
+Option am Heizkreis: **Heizkurve aus der Wärmepumpen-Analyse übernehmen**,
+voreingestellt aus. Ist sie an, fährt HEMS nach `empfehlung_fusspunkt`,
+`empfehlung_steilheit` und `empfehlung_vorlauf_min` statt nach den
+konfigurierten Werten. Die Logik steht in `strategies/kurve.py`.
 
-Wenn die Übernahme kommt, dann als Option je Heizkreis, voreingestellt auf
-Anzeigen, nur auf Tagesskala, mit Hysterese und nur bei belastbarer Datenbasis.
-Grund ist eine echte Rückkopplung: die Empfehlung entsteht aus Betrieb, den
-HEMS mit der vorigen Empfehlung selbst erzeugt hat. Ohne Dämpfung wandert die
-Kurve.
+**Warum das gedämpft sein muss.** Die Empfehlung entsteht aus Betrieb, den HEMS
+mit der vorigen Empfehlung selbst erzeugt hat. Das ist eine echte
+Rückkopplung: Senkt HEMS die Kurve, misst die Analyse anschließend niedrigere
+Vorläufe und schlägt wieder eine niedrigere vor. Ohne Dämpfung wandert die
+Kurve, bis das Haus kalt ist — und jeder einzelne Schritt sähe dabei begründet
+aus.
+
+Drei Bremsen, die zusammen wirken:
+
+1. **Nur bei `datenbasis_empfehlung == belastbar`.** Nicht `datenbasis` — die
+   eine sagt, wie sauber gerade gemessen wird, die andere, wie lange schon
+   beobachtet wurde. Für eine Kurve zählt die zweite.
+2. **Höchstens einmal in 24 Stunden.** Nach einer Änderung muss das Haus erst
+   in den neuen Zustand kommen, bevor die nächste Messung überhaupt etwas
+   Neues aussagt.
+3. **Erst ab 1,0 K Fußpunkt oder 0,05 Steilheit.** Darunter ändert sich am
+   geschriebenen Sollwert nichts — die Aktuierung schreibt auf ganze Grad.
+
+Dazu zwei Randfälle:
+
+- **Fällt die Datenbasis ab, bleibt die zuletzt übernommene Kurve stehen.** Sie
+  war belastbar, als sie kam; auf die konfigurierten Werte zurückzuspringen
+  wäre eine zweite Änderung ohne neue Erkenntnis, ausgerechnet dann, wenn die
+  Messkette gerade ausgefallen ist.
+- **Werte außerhalb des Konfigurationsbereichs werden begrenzt, nicht
+  verworfen.** Eine Regression über wenige Wochen kann Unsinn liefern, ohne
+  dass die Datenbasis das merkt — sie misst die Länge der Beobachtung, nicht
+  die Plausibilität des Ergebnisses.
+
+**Nicht übernommen wird `vlt_min_cold_c`**, die Untergrenze bei tiefen
+Außentemperaturen. Sie ist eine Komfort- und Sicherheitsentscheidung über den
+Absenkbetrieb, keine Aussage über das Wärmeabgabesystem.
+
+**Bei mehreren Analyse-Rollen wird nichts übernommen.** Welche davon den
+Heizkreis beschreibt, ist nicht entscheidbar, und raten wäre hier teurer als
+nichts zu tun.
+
+Was gerade gilt, steht als Attribut an `sensor.hems_heizkreis`:
+`kurve_quelle` (`konfiguriert` / `empfehlung` / `wartet`), `kurve_grund` im
+Klartext, dazu `kurve_fusspunkt_c` und `kurve_steilheit`.
+
+### Was nicht zurückfließt
+
+Der `waermeverlust_koeffizient` speist die Bedarfsprognose **nicht**. Das sieht
+nach einer Lücke aus, ist aber keine: HEMS lernt sein Wärmepumpen-Modell
+(`k_w_per_k`) direkt aus der eigenen Langzeitstatistik als **elektrische**
+Leistung je Kelvin Heizgradstunde. Der Koeffizient hier ist **thermisch**; die
+Umrechnung liefe über einen COP, der mit der Außentemperatur wandert. Eine
+direkt gemessene Größe gegen eine abgeleitete zu tauschen, würde die Prognose
+verschlechtern.

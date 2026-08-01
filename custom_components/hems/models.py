@@ -205,6 +205,15 @@ class HeatingCircuit:
     heat_lock_to_month: int = DEFAULT_HEAT_LOCK_TO
     curve_base_c: float = DEFAULT_CURVE_BASE_C
     curve_slope: float = DEFAULT_CURVE_SLOPE
+    # Heizkurve aus der Rolle Wärmepumpen-Analyse übernehmen, statt
+    # curve_base_c und curve_slope zu verwenden. Voreingestellt aus.
+    #
+    # Die Empfehlung entsteht aus Betrieb, den HEMS mit der vorigen Empfehlung
+    # selbst erzeugt hat. Wer das einschaltet, schließt eine Rückkopplung —
+    # gedämpft durch belastbare Datenbasis, Tagesabstand und eine
+    # Mindeständerung, siehe strategies/kurve.py. Die konfigurierten Werte
+    # bleiben stehen und gelten wieder, sobald der Schalter aus ist.
+    curve_from_analysis: bool = False
     vlt_min_c: float = DEFAULT_VLT_MIN_C
     vlt_min_cold_c: float = DEFAULT_VLT_MIN_COLD_C
     vlt_max_c: float = DEFAULT_VLT_MAX_C
