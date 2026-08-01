@@ -74,6 +74,12 @@ liegt immer mindestens diese Zeit — in beide Richtungen, denn Takten entsteht
 aus dem Wechsel. Der Sollwert folgt dem Überschuss unabhängig davon weiter im
 Minutentakt.
 
+**Nimmt ein Gerät die Freigabe nicht an, sagt HEMS es.** Zwei Minuten nach dem
+Schreiben wird geprüft, ob der Ist-Zustand sie zeigt; wenn nicht, steht das
+Attribut `freigabe_nicht_uebernommen` auf `sensor.hems_warmwasser_soll`, im
+Entscheidungs-Log und im HA-Log. HEMS schreibt weiter dagegen — erzwingen kann
+es den Befehl nicht.
+
 Eine Einschränkung: **Warmwasser bleibt ohne Sperrfenster rund um die Uhr an.**
 HEMS meldet Warmwasser nur während des konfigurierten Fensters als „aus“.
 

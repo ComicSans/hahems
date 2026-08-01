@@ -52,6 +52,7 @@ _DECISION_FIELDS: dict[str, tuple[str, str]] = {
     "akku_reserve": ("Akku-Kaltreserve", "akku"),
     "warmwasser_status": ("Warmwasser", "ww"),
     "warmwasser_soll": ("Warmwasser-Sollwert", "ww"),
+    "warmwasser_quittung": ("Warmwasser-Freigabe gestellt", "ww"),
 }
 
 
@@ -90,6 +91,16 @@ def decision_snapshot(mode: str, goal: str, ev_force: bool, plan: Any) -> dict:
     if getattr(plan, "warmwasser_soll_c", None) is not None:
         soll = round(plan.warmwasser_soll_c)
         snap["warmwasser_soll"] = (soll, f"{soll} °C")
+    if getattr(plan, "warmwasser_status", ""):
+        # Beide Lagen ins Snapshot, nicht nur die schlechte: `diff_snapshots`
+        # schreibt ohnehin nur Änderungen, und ohne den guten Wert gäbe es zur
+        # Meldung nie eine Entwarnung — der Log behielte einen Fehlerstand, den
+        # es längst nicht mehr gibt.
+        quittiert = not getattr(plan, "warmwasser_nicht_uebernommen", False)
+        snap["warmwasser_quittung"] = (
+            quittiert,
+            "angekommen" if quittiert else "Gerät übernimmt die Freigabe nicht",
+        )
 
     # Die Wallbox-Sofortladung wird bewusst nicht separat geführt: sie folgt
     # 1:1 dem Nutzer-Schalter „E-Auto Zwangsladung" (ev_force) und würde je

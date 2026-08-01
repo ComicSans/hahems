@@ -63,6 +63,30 @@ Regelpfad für einen Fall, der kein Takten verursachen kann.
 
 **Zu tun:** nichts.
 
+### HEMS sagt jetzt, wenn ein Gerät die Warmwasser-Freigabe nicht übernimmt
+
+Gemessen am 01.08.2026 an einer LG Therma V: HEMS schrieb die
+Warmwasser-Freigabe sechsmal ein, und die Anlage fiel jedes Mal nach 4 bis 30
+Sekunden auf „aus“ zurück — sie stand mit einer Störung am Bedienteil und nahm
+den Befehl nicht an. Kein einziger Aus-Befehl kam von HEMS. Zu sehen war davon
+trotzdem nichts: Der Sensor zeigte die Empfehlung, und die Drossel gegen
+Bus-Spam wiederholte den Aufruf still alle fünf Minuten. Ein Befehl, der nicht
+ankommt, sah damit genauso aus wie einer, der wirkt.
+
+HEMS merkt sich jetzt, welche Freigabe es zuletzt selbst geschrieben hat — nur
+bei einem Aufruf, der die Drossel passiert hat —, und prüft nach zwei Minuten,
+ob der Ist-Zustand sie zeigt. Wenn nicht: Attribut
+`freigabe_nicht_uebernommen` auf `sensor.hems_warmwasser_soll`, eine Zeile im
+Entscheidungs-Log und eine Warnung im HA-Log.
+
+Dieselbe Buchführung schließt eine zweite Lücke: Meldet ein Gerät nach einem
+HEMS-„aus“ weiter „ein“, stimmen Ziel und Ist beim Wiedereinschalten überein —
+geschaltet würde nie wieder. Weicht der zuletzt geschriebene Zustand vom Ziel
+ab, wird deshalb einmal aktiv geschrieben.
+
+**Zu tun:** nichts. Wer die Meldung sieht, sucht die Ursache am Gerät — HEMS
+schreibt weiter dagegen, kann den Befehl aber nicht erzwingen.
+
 ## 1.6.7 — Optionale Entity-Felder lassen sich im Panel wieder leeren
 
 Eine einmal gesetzte optionale Rolle — etwa **Betriebsart** unter
