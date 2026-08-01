@@ -4,6 +4,43 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 2.0.0 — HEMS konzentriert sich auf das Akku-Management
+
+Die Rollen **Heizkreis** und **Wärmepumpen-Analyse** sind entfallen. HEMS
+plant und schaltet Speicher, Warmwasser sowie schaltbare und modulierbare
+Lasten; einen witterungsgeführten Heizkreis steuert es nicht mehr, und die
+Effizienzmessung einer Wärmepumpe entfällt ersatzlos.
+
+Damit gehen: der Reiter **Effizienz** im Panel, `sensor.hems_heizkreis`,
+`binary_sensor.hems_warmepumpen_storung`, alle Analyse-Entitäten samt ihrer
+Geräte, die Heizkurvenübernahme, der Taktschutz und die Taupunkt-Untergrenze
+im Kühlbetrieb.
+
+Eine Wärmepumpe bleibt als **schaltbare Last** vollständig regelbar — mit
+Priorität, Mindestlauf- und Mindestpausenzeit und Überschussregelung. Die
+Markierung „heizungsgekoppelt" gibt es weiter: Sie weist die Last im Lastfluss
+als Wärmeerzeuger aus und hebt den Boden beim Lernen ihrer Leistungsaufnahme.
+
+**Was sich an der Bedarfsprognose ändert:** Bisher wurde die Wärmepumpe aus
+dem Lastprofil herausgerechnet und über ein Heizgradstunden-Modell gegen die
+Wettervorhersage neu aufgeschlagen. Dieses Modell ist mit der Rolle Heizkreis
+gegangen, denn es hing an deren Außentemperatur und Heizgrenze. Ihr Verbrauch
+steckt jetzt wieder implizit im gelernten Lastprofil — er zählt also weiterhin
+voll mit, folgt aber dem Mittel der letzten Wochen statt dem Wetter. Spürbar
+ist das vor allem im Winter und in den saisonalen Übergängen: Nachtdefizit und
+SoC-Prognose laufen einem Kälteeinbruch einige Tage hinterher, bis das Profil
+nachgezogen hat.
+
+**Zu tun:** nichts. Beim ersten Start nach dem Update entfernt HEMS die
+Einträge beider Rollen aus der Konfiguration (Schema-Version 3). Die dazu
+angelegten Entitäten verschwinden mit dem nächsten Neustart aus der Registry;
+Dashboards und Automationen, die auf `sensor.hems_heizkreis`,
+`binary_sensor.hems_warmepumpen_storung` oder eine Analyse-Entität verweisen,
+laufen danach ins Leere und wollen von Hand aufgeräumt werden. Ihre Historie
+bleibt in der Langzeitstatistik erhalten.
+
+Wer den Heizkreis weiter über HEMS fahren will, bleibt auf 1.6.x.
+
 ## 1.6.7 — Optionale Entity-Felder lassen sich im Panel wieder leeren
 
 Eine einmal gesetzte optionale Rolle — etwa **Betriebsart** unter

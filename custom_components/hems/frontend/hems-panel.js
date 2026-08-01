@@ -33,59 +33,8 @@ const TABS = [
   { id: "overview", label: "Übersicht" },
   { id: "control", label: "Steuerung" },
   { id: "diagnostics", label: "Diagnose" },
-  // Wird nur eingeblendet, wenn eine Wärmepumpen-Analyse konfiguriert ist.
-  // HEMS bleibt ohne sie voll funktionsfähig; ein leerer Reiter wäre nur
-  // Rauschen.
-  { id: "effizienz", label: "Effizienz", optional: true },
   { id: "config", label: "Konfiguration" },
   { id: "logs", label: "Logs" },
-];
-
-// Reihenfolge und Gruppierung der Effizienz-Anzeige. Die Beschriftungen kommen
-// aus den Entitäten selbst (friendly_name), damit es keinen zweiten
-// Label-Katalog gibt, der auseinanderläuft.
-const EFFIZIENZ_GRUPPEN = [
-  {
-    titel: "Jetzt",
-    rollen: ["cop_momentan", "cop_soll", "cop_abweichung", "spreizung", "waermeleistung"],
-  },
-  {
-    // Zielwerte für den Volumenstrom, nicht für die Pumpenstufe: eine
-    // Umwälzpumpe fördert nicht linear zu ihrer Prozentanzeige.
-    titel: "Zielwerte Volumenstrom",
-    rollen: ["durchfluss_ziel_prozent", "durchfluss_abweichung_prozent"],
-  },
-  {
-    titel: "Verdichter",
-    rollen: ["takte", "laufzeit_summe", "laufzeit_mittel"],
-  },
-  {
-    titel: "Haus und Heizkurve",
-    rollen: [
-      "waermeverlust_koeffizient",
-      "empfehlung_fusspunkt",
-      "empfehlung_steilheit",
-      "empfehlung_vorlauf_min",
-    ],
-  },
-  {
-    titel: "Belastbarkeit",
-    rollen: [
-      "datenbasis",
-      "datenbasis_empfehlung",
-      "cop_soll_unsicherheit",
-      "verwerfungsgrund",
-    ],
-  },
-];
-
-const EFFIZIENZ_HINWEISE = [
-  "hinweis_temperaturen_identisch",
-  "hinweis_spreizung_niedrig",
-  "hinweis_spreizung_hoch",
-  "hinweis_taktung_hoch",
-  "hinweis_vorlauf_zu_hoch",
-  "hinweis_effizienz_unter_erwartung",
 ];
 
 // Anzeige-Labels je Segment-Rolle. Die Optionswerte (Slugs) bleiben unberührt;
@@ -163,7 +112,6 @@ class HemsPanel extends HTMLElement {
           <section data-panel="overview" class="grid"></section>
           <section data-panel="control" hidden></section>
           <section data-panel="diagnostics" hidden></section>
-          <section data-panel="effizienz" hidden></section>
           <section data-panel="config" hidden></section>
           <section data-panel="logs" hidden></section>
         </main>
@@ -184,38 +132,13 @@ class HemsPanel extends HTMLElement {
       overview: root.querySelector('[data-panel="overview"]'),
       control: root.querySelector('[data-panel="control"]'),
       diagnostics: root.querySelector('[data-panel="diagnostics"]'),
-      effizienz: root.querySelector('[data-panel="effizienz"]'),
       config: root.querySelector('[data-panel="config"]'),
       logs: root.querySelector('[data-panel="logs"]'),
     };
 
-    // Optionale Reiter bleiben verborgen, bis ihre Quelle erkannt ist.
-    for (const t of TABS.filter((t) => t.optional)) {
-      const b = this._tabButtons.find((x) => x.dataset.tab === t.id);
-      if (b) b.hidden = true;
-    }
-
     this._buildOverview();
     this._buildControl();
     this._selectTab(this._tab);
-    this._detectPartner();
-  }
-
-  // --- Effizienz (Wärmepumpen-Analyse) -------------------------------------
-
-  async _detectPartner() {
-    // Die Zuordnung läuft im Backend über die Kennungen der Entity-Registry,
-    // nicht über entity_id — Nutzende benennen Entities um.
-    try {
-      const antwort = await this._hass.callWS({ type: "hems/partner/get" });
-      this._partner = (antwort && antwort.waermepumpen_analyse) || [];
-    } catch (err) {
-      // Älteres HEMS-Backend ohne diesen Befehl: Reiter bleibt aus.
-      this._partner = [];
-    }
-    const b = this._tabButtons.find((x) => x.dataset.tab === "effizienz");
-    if (b) b.hidden = this._partner.length === 0;
-    this._renderEffizienz();
   }
 
   /** Einen Zustand als Text darstellen.
@@ -234,84 +157,6 @@ class HemsPanel extends HTMLElement {
     }
     const einheit = (st.attributes || {}).unit_of_measurement;
     return einheit ? `${st.state} ${einheit}` : st.state;
-  }
-
-  _renderEffizienz() {
-    if (!this._partner || !this._partner.length) return;
-    const sec = this._sections.effizienz;
-    if (!sec || (sec.hidden && sec.dataset.gebaut === "ja")) return;
-
-    const teile = this._partner.map((anlage) => {
-      const wert = (rolle) => {
-        const eid = anlage.rollen[rolle];
-        return eid ? this._hass.states[eid] : undefined;
-      };
-
-      const gruppen = EFFIZIENZ_GRUPPEN.map((g) => {
-        const zeilen = g.rollen
-          .map((r) => [r, wert(r)])
-          .filter(([, st]) => st)
-          .map(([r, st]) => {
-            const a = st.attributes || {};
-            const name = a.friendly_name || r;
-            return `<dt>${escapeHtml(name)}</dt><dd>${escapeHtml(
-              this._formatWert(st),
-            )}</dd>`;
-          })
-          .join("");
-        if (!zeilen) return "";
-        return `<section class="panel-card">
-            <h3>${escapeHtml(g.titel)}</h3>
-            <dl class="eff-liste">${zeilen}</dl>
-          </section>`;
-      }).join("");
-
-      // Hinweise als Textliste. Der Zustand steht ausdrücklich als Wort da und
-      // nicht nur als Farbe — sonst ist er für einen Teil der Nutzenden nicht
-      // wahrnehmbar.
-      // Zielwert direkt am Hinweis, nicht in einer eigenen Zeile: „drosseln"
-      // allein lässt offen, um wie viel.
-      const zielText = () => {
-        const ziel = wert("durchfluss_ziel_prozent");
-        const abw = wert("durchfluss_abweichung_prozent");
-        if (!ziel || !abw) return "";
-        const z = Number(ziel.state);
-        const a = Number(abw.state);
-        if (!Number.isFinite(z) || !Number.isFinite(a)) return "";
-        const richtung = a > 0 ? "zu viel" : "zu wenig";
-        return ` — Volumenstrom auf ${Math.round(z)} % des heutigen,
-          derzeit ${Math.abs(Math.round(a))} % ${richtung}`;
-      };
-
-      const aktive = EFFIZIENZ_HINWEISE.map((r) => [r, wert(r)])
-        .filter(([, st]) => st && st.state === "on")
-        .map(([r, st]) => {
-          const name = (st.attributes || {}).friendly_name || "Hinweis";
-          const zusatz =
-            r === "hinweis_spreizung_niedrig" || r === "hinweis_spreizung_hoch"
-              ? zielText()
-              : "";
-          return `<li>${escapeHtml(name)}${escapeHtml(zusatz)}</li>`;
-        })
-        .join("");
-      const hinweise = aktive
-        ? `<section class="panel-card">
-             <h3>Offene Hinweise</h3>
-             <ul class="eff-hinweise">${aktive}</ul>
-           </section>`
-        : `<section class="panel-card">
-             <h3>Offene Hinweise</h3>
-             <p class="eff-leer">Keine offenen Hinweise.</p>
-           </section>`;
-
-      return `<h2>${escapeHtml(anlage.titel || "Wärmepumpe")}</h2>
-        <p class="eff-fuss">Beratend — diese Werte schalten nichts. Gesteuert
-        wird am Gerät oder über die Steuerung in HEMS.</p>
-        ${gruppen}${hinweise}`;
-    });
-
-    sec.innerHTML = teile.join("");
-    sec.dataset.gebaut = "ja";
   }
 
   _buildOverview() {
@@ -415,7 +260,6 @@ class HemsPanel extends HTMLElement {
   _update() {
     if (!this._built) return;
     this._ensureEntities();
-    this._renderEffizienz();
     for (const c of this._cards) c.el.hass = this._hass;
     this._renderSegmented("mode", this._modeEntity, "select");
     this._renderSegmented("goal", this._goalEntity, "select");
@@ -1120,23 +964,6 @@ const STYLE = `
   }
   .logs-filter { flex: 1; min-width: 160px; }
   .logs-status { margin-top: 8px; }
-  /* Effizienz-Reiter. Zustände werden als Text ausgewiesen, nie allein über
-     Farbe — sonst sind sie für einen Teil der Nutzenden nicht wahrnehmbar. */
-  .eff-liste {
-    display: grid; grid-template-columns: 1fr auto;
-    gap: 6px 16px; margin: 0;
-  }
-  .eff-liste dt { color: var(--secondary-text-color); }
-  .eff-liste dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-  .eff-hinweise { margin: 0; padding-left: 20px; }
-  .eff-hinweise li { padding: 3px 0; }
-  .eff-leer, .eff-fuss { color: var(--secondary-text-color); margin: 0; }
-  .eff-fuss { font-size: 13px; margin-bottom: 12px; }
-  @media (max-width: 480px) {
-    .eff-liste { grid-template-columns: 1fr; gap: 2px; }
-    .eff-liste dd { text-align: left; margin-bottom: 8px; }
-  }
-
   .logs-list .panel-card { padding: 4px 20px; }
   .log-row {
     display: flex; gap: 12px; align-items: baseline;

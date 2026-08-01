@@ -9,7 +9,7 @@ import math
 from datetime import datetime, timedelta
 
 from .battery import _lade_deckel_soc
-from .demand import _hour_slots, _total_load_w
+from .demand import _expected_load_w, _hour_slots
 from .types import DischargeSlot, PlanInput, PlanResult, PvSlot, SocPoint
 
 
@@ -115,7 +115,7 @@ def _discharge_plan(
     # Wunschleistung je Slot aus dem Lastprofil, gedeckelt auf die
     # Entladeleistung; bei knappem Budget alle Slots proportional strecken.
     raw = [
-        (t, nxt, min(_total_load_w(inp, t), max_discharge_w))
+        (t, nxt, min(_expected_load_w(inp, t), max_discharge_w))
         for t, nxt in _hour_slots(start, end)
     ]
     need_kwh = sum(w * (nxt - t).total_seconds() / 3600 / 1000 for t, nxt, w in raw)
@@ -165,7 +165,7 @@ def _soc_forecast(
     points = [SocPoint(zeit=inp.now, soc=round(energy / cap_kwh * 100, 1))]
     for t, nxt in _hour_slots(inp.now, end):
         hours = (nxt - t).total_seconds() / 3600
-        balance_w = _pv_power_at(res.pv_kurve, t) - _total_load_w(inp, t)
+        balance_w = _pv_power_at(res.pv_kurve, t) - _expected_load_w(inp, t)
         if balance_w >= 0:
             charge_w = min(balance_w, max_charge_w)
             # Ladedeckel mitführen (Akku-Schonung): nie über den Deckel laden,

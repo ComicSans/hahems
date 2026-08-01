@@ -1,7 +1,8 @@
 """Verbrauchs-/Bedarfsmodell: erwartete Last je Zeitpunkt und Fensterenergie.
 
-Gelerntes Lastprofil, Grundlast-Fallback und Wärmepumpenmodell — die Grundlage
-für Nachtdefizit, Restüberschuss und die SoC-Prognose.
+Gelerntes Lastprofil mit Grundlast-Fallback — die Grundlage für Nachtdefizit,
+Restüberschuss und die SoC-Prognose. Wärmeerzeuger stecken implizit im Profil;
+HEMS modelliert sie nicht getrennt.
 """
 from __future__ import annotations
 
@@ -29,48 +30,6 @@ def _expected_load_w(inp: PlanInput, t: datetime) -> float:
     return inp.night_load_w
 
 
-def _forecast_temp_at(inp: PlanInput, t: datetime) -> float | None:
-    """Außentemperatur der Stunde von t: Vorhersage, sonst aktueller Wert."""
-    if inp.temp_forecast_c:
-        temp = inp.temp_forecast_c.get(
-            t.replace(minute=0, second=0, microsecond=0)
-        )
-        if temp is not None:
-            return temp
-    return inp.heating.outdoor_temp_c if inp.heating is not None else None
-
-
-def _waermepumpe_expected_w(inp: PlanInput, t: datetime) -> float:
-    """Erwartete WP-Leistung zur Stunde von t aus dem Verbrauchsmodell.
-
-    Ohne Modell 0 (die WP steckt dann implizit im Lastprofil). Während der
-    Sommersperre und ohne Temperaturwert zählt nur die Basisleistung
-    (Warmwasser/Standby), sonst kommt der Heizgradstunden-Term dazu.
-    """
-    m = inp.waermepumpe_model
-    if m is None:
-        return 0.0
-    watt = m.base_w
-    heat_locked = inp.heating is not None and inp.heating.heat_locked
-    temp = _forecast_temp_at(inp, t)
-    if temp is not None and not heat_locked:
-        watt += m.k_w_per_k * max(0.0, m.limit_c - temp)
-    return min(watt, m.max_w) if m.max_w else watt
-
-
-def _total_load_w(inp: PlanInput, t: datetime) -> float:
-    """Gesamtlast der Stunde: Profil (WP-bereinigt) plus WP-Modell."""
-    return _expected_load_w(inp, t) + _waermepumpe_expected_w(inp, t)
-
-
-def _waermepumpe_window_kwh(inp: PlanInput, start: datetime, end: datetime) -> float:
-    """Erwartete WP-Energie im Fenster, stundenweise aus dem Modell."""
-    return sum(
-        _waermepumpe_expected_w(inp, t) * (nxt - t).total_seconds() / 3600 / 1000
-        for t, nxt in _hour_slots(start, end)
-    )
-
-
 def _profile_covers(inp: PlanInput, start: datetime, end: datetime) -> bool:
     """True, wenn das Profil jede Stunde des Fensters (in einem Tagtyp) kennt."""
     prof = inp.load_profile_w
@@ -93,8 +52,8 @@ def _hour_slots(start: datetime, end: datetime) -> list[tuple[datetime, datetime
 
 
 def _window_load_kwh(inp: PlanInput, start: datetime, end: datetime) -> float:
-    """Erwartete Verbrauchsenergie im Fenster: Profil plus WP-Modell."""
+    """Erwartete Verbrauchsenergie im Fenster aus dem Lastprofil."""
     return sum(
-        _total_load_w(inp, t) * (nxt - t).total_seconds() / 3600 / 1000
+        _expected_load_w(inp, t) * (nxt - t).total_seconds() / 3600 / 1000
         for t, nxt in _hour_slots(start, end)
     )

@@ -17,12 +17,9 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
 
 from .config_flow import EDIT_STEPS, GENERAL_SCHEMA, ROLE_LABELS, ROLE_SCHEMAS
 from .const import CONF_DEVICES, DOMAIN
-from .models import parse_devices
-from .waermepumpe.entities import ROLLEN
 
 _WS_REGISTERED = f"{DOMAIN}_ws_registered"
 _LABELS_CACHE = f"{DOMAIN}_field_labels"
@@ -37,7 +34,6 @@ def async_register_ws(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_remove)
     websocket_api.async_register_command(hass, ws_set_general)
     websocket_api.async_register_command(hass, ws_logs)
-    websocket_api.async_register_command(hass, ws_partner)
     hass.data[_WS_REGISTERED] = True
 
 
@@ -148,11 +144,9 @@ def _step_descriptions(tr: dict, top: str, step: str) -> dict:
 def _role_steps(role: str) -> tuple[str, ...]:
     """Übersetzungs-Schritte einer Rolle, vollständigster zuerst.
 
-    Der Rollen-Slug ist nicht der Schrittname: `heating_circuit` steht in den
-    Übersetzungen unter `edit_heating`/`add_heating`. Ohne diese Ableitung
-    findet das Panel keine Beschriftung und zeigt den rohen Schlüssel —
-    „antitakt_starts“ statt „Taktschutz: Verdichterstarts je Fenster“, und der
-    Hilfetext fehlt ganz.
+    Der Rollen-Slug ist nicht der Schrittname: `switchable_load` steht in den
+    Übersetzungen unter `edit_switchable`/`add_switchable`. Ohne diese Ableitung
+    findet das Panel keine Beschriftung und zeigt den rohen Schlüssel.
     """
     step = EDIT_STEPS.get(role)
     if step is None:
@@ -348,45 +342,3 @@ def ws_logs(hass, connection, msg):
     changelog = getattr(coordinator, "changelog", None)
     entries = list(changelog.entries()) if changelog is not None else []
     connection.send_result(msg["id"], {"entries": entries})
-
-
-@websocket_api.websocket_command({vol.Required("type"): "hems/partner/get"})
-@callback
-def ws_partner(hass, connection, msg):
-    """Wärmepumpen-Analysen samt Rollenzuordnung liefern.
-
-    Der Reiter „Effizienz" im Panel hängt daran. Eine leere Liste ist der
-    Normalfall und kein Fehler: dann ist keine Analyse-Rolle konfiguriert und
-    das Panel blendet den Reiter aus.
-
-    Die Zuordnung läuft über die **Kennung** aus der Entity-Registry und nicht
-    über `entity_id`: Nutzende benennen Entities um, und eine Zuordnung über
-    `entity_id` bräche beim ersten Mal. Die Kennung lautet
-    `<eintrag-id>_<rolle-id>_<rolle>`.
-
-    Bis August 2026 lag die Analyse in der eigenständigen Integration
-    `wp_optimization` und wurde hier über die Config-Entries anderer Domänen
-    gesucht. Der Name des Kommandos ist geblieben, damit ein Panel aus einem
-    Browser-Cache nicht ins Leere läuft.
-    """
-    entry = _entry(hass, msg.get("entry_id"))
-    if entry is None:
-        connection.send_result(msg["id"], {"waermepumpen_analyse": []})
-        return
-
-    registry = er.async_get(hass)
-    vorhanden = {
-        e.unique_id: e.entity_id
-        for e in er.async_entries_for_config_entry(registry, entry.entry_id)
-    }
-    gefunden = []
-    for rolle in parse_devices(entry.options.get(CONF_DEVICES, [])).analyses:
-        praefix = f"{entry.entry_id}_{rolle.id}_"
-        rollen = {
-            name: vorhanden[praefix + name]
-            for name in ROLLEN
-            if praefix + name in vorhanden
-        }
-        if rollen:
-            gefunden.append({"id": rolle.id, "titel": rolle.name, "rollen": rollen})
-    connection.send_result(msg["id"], {"waermepumpen_analyse": gefunden})

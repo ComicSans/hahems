@@ -1,38 +1,29 @@
-"""Bedarfsmodell (strategies/demand.py) mit WP-Modell, gelerntem Lastprofil und
-Temperaturvorhersage.
+"""Bedarfsmodell (strategies/demand.py) mit gelerntem Lastprofil.
 
-Regressionswächter für den Domänen-Refactor: diese Eingaben aktivieren
-`_waermepumpe_expected_w`, `_forecast_temp_at` und den Profilzweig von `_expected_load_w`
-— Pfade, die die übrigen Tests (ohne waermepumpe_model/load_profile_w/temp_forecast_c)
-nie durchlaufen. Ein beim Move verlorener Import fiele erst hier auf.
+Regressionswächter für den Domänen-Refactor: diese Eingaben aktivieren den
+Profilzweig von `_expected_load_w` — einen Pfad, den die übrigen Tests (ohne
+load_profile_w) nie durchlaufen. Ein beim Move verlorener Import fiele erst
+hier auf.
 """
 from __future__ import annotations
 
-from datetime import timedelta
-
-from factories import NOON, plan_input
+from factories import plan_input
 from hems import planner as P
-from hems.strategies.types import WaermepumpeModel
 
 
-def _mit_modell():
+def _mit_profil():
     inp = plan_input(socs=[60, 60, 60], saldo_w=-1500)
-    inp.waermepumpe_model = WaermepumpeModel(base_w=300.0, k_w_per_k=80.0, limit_c=17.0, max_w=3000.0)
     inp.load_profile_w = {(0, h): 500.0 for h in range(24)}
     inp.load_profile_w.update({(1, h): 450.0 for h in range(24)})
-    inp.temp_forecast_c = {
-        NOON.replace(minute=0, second=0, microsecond=0) + timedelta(hours=k): 2.0
-        for k in range(-14, 26)
-    }
     return inp
 
 
-def test_compute_plan_mit_waermepumpe_modell_laeuft_durch():
-    # Deckt _waermepumpe_expected_w / _forecast_temp_at / _expected_load_w (Profilzweig)
-    # ab — kein NameError, plausibler Plan.
-    r = P.compute_plan(_mit_modell())
+def test_compute_plan_mit_lastprofil_laeuft_durch():
+    # Deckt den Profilzweig von _expected_load_w ab — kein NameError,
+    # plausibler Plan.
+    r = P.compute_plan(_mit_profil())
     assert r.regelung is not None
-    assert r.soc_prognose  # nutzt _total_load_w -> _expected_load_w + _waermepumpe_expected_w
+    assert r.soc_prognose  # nutzt _expected_load_w
     assert r.ueberschuss_rest_kwh >= 0.0
 
 
@@ -40,5 +31,5 @@ def test_profil_beeinflusst_erwartungswerte():
     # Ohne Profil greift die Grundlast, mit Profil die gelernte Last — die
     # erwartete Rest-Energie unterscheidet sich (der Profilzweig wird genutzt).
     ohne = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=-1500))
-    mit = P.compute_plan(_mit_modell())
+    mit = P.compute_plan(_mit_profil())
     assert ohne.ueberschuss_rest_kwh != mit.ueberschuss_rest_kwh

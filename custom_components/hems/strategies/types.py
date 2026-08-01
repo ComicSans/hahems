@@ -9,14 +9,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from ..const import (
-    DEFAULT_ANTITAKT_PAUSE_MIN,
-    DEFAULT_ANTITAKT_STARTS,
-    DEFAULT_ANTITAKT_WINDOW_MIN,
     DEFAULT_BOOST_SALDO_OFF_W,
     DEFAULT_BOOST_SALDO_ON_W,
     DEFAULT_BOOST_SOC_OFF,
     DEFAULT_BOOST_SOC_ON,
-    DEFAULT_DEWPOINT_MARGIN_K,
     DEFAULT_GAIN_LEVEL,
     DEFAULT_LEGIONELLA_TARGET,
     EV_VOLTAGE_PER_PHASE_V,
@@ -37,80 +33,6 @@ class StorageState:
     # Saldo-Regelung selbstkorrigierend, ohne Abschalt-Mess-Zyklus.
     power_w: float | None = None
     cold_reserve: bool = False
-
-
-@dataclass
-class HeatingState:
-    """Eingaben für die Heizkreis-Empfehlung (witterungsgeführt)."""
-
-    name: str
-    outdoor_temp_c: float | None
-    demand_pct: float | None  # Wärmeanforderung der Räume, 0–100 %
-    heat_locked: bool  # Sommersperre aktiv (Kalendermonat, vom Aufrufer)
-    heat_on_c: float
-    heat_off_c: float
-    cool_on_c: float
-    cool_off_c: float
-    frost_on_c: float  # Frostschutz greift ab dieser Außentemperatur (mit Hysterese)
-    frost_off_c: float  # ... und lässt erst darüber wieder los
-    curve_base_c: float
-    curve_slope: float
-    vlt_min_c: float
-    vlt_min_cold_c: float
-    vlt_max_c: float
-    cool_vlt_c: float
-    # Die Anlage bereitet gerade Warmwasser (optionale Rolle, vom Coordinator
-    # abgelesen). Ändert die Empfehlung nicht; der Wert wird nur durchgereicht
-    # und setzt die Aktuierung aus, siehe HeatingResult.ww_bereitung. Ohne
-    # konfigurierte Rolle bleibt er False, und alles bleibt wie bisher.
-    dhw_active: bool = False
-    # Der Verdichter läuft gerade (optionale Rolle). Nur daraus zählt der
-    # Taktschutz die Starts; ohne die Rolle bleibt der Wert None und der
-    # Taktschutz ruht vollständig.
-    compressor_on: bool | None = None
-    # Raumklima für die Taupunkt-Untergrenze im Kühlbetrieb (zwei optionale
-    # Rollen). Beide werden gebraucht — eine Taupunktrechnung ohne Temperatur
-    # oder ohne Feuchte gibt es nicht. Fehlt eine, bleibt die Grenze aus und
-    # der Kühl-Sollwert gilt unverändert.
-    room_temp_c: float | None = None
-    room_humidity_pct: float | None = None
-    # Sicherheitsabstand des Vorlaufs zum Taupunkt, siehe _taupunkt_grenze.
-    dewpoint_margin_k: float = DEFAULT_DEWPOINT_MARGIN_K
-    # Taktschutz-Parameter, siehe _taktschutz. starts = 0 schaltet ihn ab.
-    antitakt_starts: int = DEFAULT_ANTITAKT_STARTS
-    antitakt_window_min: int = DEFAULT_ANTITAKT_WINDOW_MIN
-    antitakt_pause_min: int = DEFAULT_ANTITAKT_PAUSE_MIN
-    # Heizkurve aus der Wärmepumpen-Analyse übernehmen statt aus curve_base_c
-    # und curve_slope. Voreingestellt aus: die Empfehlung entsteht aus
-    # Betrieb, den HEMS selbst erzeugt hat, und wer das einschaltet, soll es
-    # bewusst tun. Die Dämpfung steht in strategies/kurve.py.
-    curve_from_analysis: bool = False
-    # Die Empfehlung selbst, vom Coordinator aus der Analyse abgelesen. Ohne
-    # Analyse bleiben alle drei None und `empfehlung_datenbasis` leer.
-    empfehlung_fusspunkt_c: float | None = None
-    empfehlung_steilheit: float | None = None
-    empfehlung_vorlauf_min_c: float | None = None
-    empfehlung_datenbasis: str | None = None
-    # Mehrere Analyse-Rollen konfiguriert: dann ist nicht entscheidbar, welche
-    # diesen Heizkreis beschreibt, und es wird nichts übernommen. Raten wäre
-    # hier teurer als nichts zu tun.
-    empfehlung_mehrdeutig: bool = False
-
-
-@dataclass
-class WaermepumpeModel:
-    """Verbrauchsmodell der Wärmepumpe: P = base_w + k × (Heizgrenze − T).
-
-    Vom Coordinator aus der Langzeitstatistik gelernt (oder Richtwert-
-    Fallback). base_w deckt Warmwasser und Standby oberhalb der Heizgrenze,
-    der k-Term den witterungsabhängigen Heizanteil. max_w deckelt auf die
-    historisch beobachtete Spitzenleistung.
-    """
-
-    base_w: float
-    k_w_per_k: float
-    limit_c: float  # Heizgrenze (heat_off_c des Heizkreises)
-    max_w: float | None = None
 
 
 @dataclass
@@ -272,51 +194,6 @@ class SwitchableResult:
 
 
 @dataclass
-class HeatingResult:
-    """Empfehlung für den Heizkreis: Modus plus Vorlauf-Sollwert."""
-
-    name: str
-    modus: str = "unbekannt"  # "heizen" | "kuehlen" | "aus" | "unbekannt"
-    vlt_ziel_c: float | None = None
-    t_aussen_c: float | None = None
-    sommer_sperre: bool = False
-    leise_empfohlen: bool | None = None  # Flüsterbetrieb reicht (niedriger Vorlauf)
-    frostschutz: bool = False  # Heizen nur wegen Frostschutz erzwungen (Sperre übersteuert)
-    # Die Anlage bereitet gerade Warmwasser: die Empfehlung bleibt stehen, aber
-    # HEMS stellt in diesem Fenster nichts (siehe plan_heating_control). Damit
-    # ist die Anzeige erklärbar: Empfehlung und Ist dürfen auseinanderlaufen,
-    # ohne dass etwas kaputt ist.
-    ww_bereitung: bool = False
-    # Die Anlage hat den geschriebenen Modus nicht übernommen: HEMS hat ihn
-    # gestellt, und ein danach gelesener Ist-Wert zeigt ihn immer noch nicht.
-    # Kein Planungsergebnis — die Aktuierung trägt es nach dem Planlauf ein
-    # (siehe actuator._apply_wp), damit Sensor und Log es zeigen können. Ohne
-    # Steuer-Entity bleibt es False, weil dann nichts geschrieben wird.
-    modus_nicht_uebernommen: bool = False
-    # Taktschutz: Zwangspause gegen zu viele Verdichterstarts. `modus` steht
-    # dann auf "aus", obwohl die Außentemperatur Kühlen hergäbe — beides
-    # zusammen macht die Anzeige erklärbar.
-    taktschutz: bool = False
-    taktschutz_bis: datetime | None = None
-    verdichterstarts: int = 0  # Starts im laufenden Beobachtungsfenster
-    # Taupunkt der Raumluft, sobald beide Raumklima-Rollen antworten — sonst
-    # None. Rein informativ, auch wenn gerade nicht gekühlt wird.
-    taupunkt_c: float | None = None
-    # Untergrenze, die der Kühl-Vorlauf nicht unterschreiten soll (Taupunkt
-    # plus Sicherheitsabstand), und ob sie den Sollwert gerade anhebt. Liegt
-    # `taupunkt_grenze_c` unter dem Kühl-Sollwert, wacht die Grenze nur.
-    taupunkt_grenze_c: float | None = None
-    taupunkt_begrenzt: bool = False
-    # Welche Heizkurve gerade gilt und warum. "konfiguriert" heißt: aus dem
-    # Dialog. "empfehlung": aus der Wärmepumpen-Analyse übernommen.
-    # "wartet": Übernahme ist an, die Datenbasis reicht noch nicht.
-    kurve_quelle: str = "konfiguriert"
-    kurve_grund: str = ""
-    kurve_fusspunkt_c: float | None = None
-    kurve_steilheit: float | None = None
-
-
-@dataclass
 class PlanFlags:
     """Zustand der Schmitt-Trigger zwischen zwei Planläufen.
 
@@ -340,35 +217,6 @@ class PlanFlags:
     # Kaltreserve der Saldo-Regelung: Reserve-Speicher entladen mit, solange
     # der mittlere SoC der übrigen unten ist.
     kaltreserve: bool = False
-    # Heizkreis-Modus (Außentemperatur-Hysterese) und Flüster-Empfehlung.
-    waermepumpe_heizen: bool = False
-    waermepumpe_kuehlen: bool = False
-    waermepumpe_leise: bool = False
-    # Frostschutz-Trigger: eigener Latch, unabhängig vom Heiz-/Sperr-Zustand.
-    waermepumpe_frost: bool = False
-    # Taupunkt-Untergrenze hebt den Kühl-Vorlauf gerade an. Eigener Latch, weil
-    # die Untergrenze mit der Raumfeuchte wandert und sonst um den Sollwert
-    # herum ein- und ausschalten würde.
-    waermepumpe_taupunkt: bool = False
-    # Taktschutz: Verdichterzustand des letzten Laufs (für die Flankenerkennung),
-    # die Startzeitpunkte im rollierenden Fenster, das Ende der Zwangspause und
-    # der Zeitpunkt, seit dem der Heizkreis nach einer Pause wieder frei läuft.
-    # Die Startzeiten sind ein Tupel, keine Liste: `compute_plan` schreibt die
-    # Flags mit `dataclasses.replace` fort, das Referenzen kopiert — eine Liste
-    # wäre zwischen Ein- und Ausgabe geteilt und würde die Eingabe
-    # mitverändern, sobald jemand sie anhängt statt sie zu ersetzen.
-    # Übernommene Heizkurve: die Werte selbst und wann sie übernommen wurden.
-    # Sie gehören in die Flags und nicht in die Konfiguration — eine Übernahme
-    # ist eine laufende Entscheidung, keine Einstellung, und sie soll nicht
-    # stillschweigend das überschreiben, was jemand von Hand eingetragen hat.
-    kurve_fusspunkt_c: float | None = None
-    kurve_steilheit: float | None = None
-    kurve_vorlauf_min_c: float | None = None
-    kurve_uebernommen_am: datetime | None = None
-    takt_verdichter_an: bool = False
-    takt_start_zeiten: tuple[datetime, ...] = ()
-    takt_pause_bis: datetime | None = None
-    takt_frei_seit: datetime | None = None
     # E-Auto: Überschuss reicht (mit Marge) für die Wallbox-Mindestleistung.
     # Start konservativ False, damit der erste Lauf nach einem Neustart nicht
     # sofort "E-Auto laden" meldet, ohne den Momentanüberschuss zu kennen.
@@ -467,24 +315,12 @@ class PlanInput:
     thermal_boost_soc_off: float = DEFAULT_BOOST_SOC_OFF
     thermal_boost_saldo_on_w: float = DEFAULT_BOOST_SALDO_ON_W
     thermal_boost_saldo_off_w: float = DEFAULT_BOOST_SALDO_OFF_W
-    # Witterungsgeführter Heizkreis (optional).
-    heating: HeatingState | None = None
     # Modulierbare Lasten (Wallboxen …) für die Überschussregelung. Leer =
     # keine Wallbox konfiguriert; dann bleibt die alte, ungeprüfte Empfehlung.
     modulateds: list[ModulatedState] = field(default_factory=list)
     # Schaltbare Lasten (nur an/aus) für die Überschussregelung. Leer = keine
     # konfiguriert; dann bleibt die Schaltlast-Empfehlung leer.
     switchables: list[SwitchableState] = field(default_factory=list)
-    # Wärmepumpen-Verbrauchsmodell. Ist es gesetzt, ist das Lastprofil
-    # WP-bereinigt (der Coordinator zieht die WP-Statistik beim Lernen ab)
-    # und die WP wird hier explizit temperaturabhängig aufgeschlagen —
-    # so folgt die Bedarfsprognose der Wettervorhersage statt dem
-    # 28-Tage-Mittel hinterherzulaufen.
-    waermepumpe_model: WaermepumpeModel | None = None
-    # Stündliche Temperaturvorhersage (UTC-Stundenanfang → °C) aus der
-    # Wetterintegration; fehlende Stunden fallen auf die aktuelle
-    # Außentemperatur des Heizkreises zurück.
-    temp_forecast_c: dict[datetime, float] | None = None
     # Schmitt-Trigger-Zustand des vorigen Laufs; siehe PlanFlags.
     flags: PlanFlags = field(default_factory=PlanFlags)
 
@@ -519,9 +355,6 @@ class SocPoint:
 @dataclass
 class PlanResult:
     nachtdefizit_kwh: float = 0.0
-    # Anteil der Wärmepumpe am Nachtdefizit (bereits darin enthalten),
-    # nur zur Transparenz separat ausgewiesen.
-    waermepumpe_nacht_kwh: float = 0.0
     ueberschuss_rest_kwh: float = 0.0
     speicher_soc: float | None = None
     speicher_verfuegbar_kwh: float = 0.0
@@ -556,8 +389,6 @@ class PlanResult:
     # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).
     ev_regelung: EvControlResult | None = None
     schaltbare: SwitchableResult | None = None
-    # Heizkreis-Empfehlung (None, wenn kein Heizkreis konfiguriert ist).
-    heizung: HeatingResult | None = None
     empfehlung: str = "keine Daten"
     prioritaeten: list[str] = field(default_factory=list)
     # Fortgeschriebener Trigger-Zustand für den nächsten Lauf.

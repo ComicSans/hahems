@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from datetime import datetime, timedelta
 
 from homeassistant.components import persistent_notification
@@ -13,7 +12,6 @@ from homeassistant.helpers.event import (
     EventStateChangedData,
     async_track_state_change_event,
 )
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.sun import get_astral_event_date, get_astral_event_next
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
@@ -23,7 +21,6 @@ from .changelog import ChangeLog, decision_snapshot, diff_snapshots
 from .config_check import ConfigCheck, check_config
 from .const import (
     ALERT_CHANNELS,
-    ALERT_UNAVAILABLE,
     CONF_BASELINE_W,
     CONF_DEVICES,
     CONF_FREE_H,
@@ -41,7 +38,6 @@ from .const import (
     DEFAULT_FREE_KWH,
     DEFAULT_GAIN_LEVEL,
     DEFAULT_NIGHT_W,
-    DEFAULT_WAERMEPUMPE_W_PER_K,
     DOMAIN,
     EV_DEMAND_FLOOR_W,
     EV_DEMAND_GRACE_S,
@@ -54,8 +50,6 @@ from .const import (
     SALDO_JUMP_W,
     SWITCH_LEARN_FLOOR_HEAT_W,
     SWITCH_LEARN_FLOOR_W,
-    WAERMEPUMPE_MODEL_DAYS,
-    WAERMEPUMPE_MODEL_MIN_HOURS,
     WEATHER_CONDITION_FACTORS,
 )
 from .models import DeviceRegistry, parse_devices
@@ -67,22 +61,16 @@ from .planner import (
     weekly_windows,
 )
 from .power_memory import PowerMemory
-from .strategies.alerts import Alert, FaultLatch, FaultSignal
 from .strategies.alerts import evaluate as evaluate_alerts
 from .strategies.switchable import lern_leistung
 from .strategies.types import (
-    HeatingState,
     ModulatedState,
     PlanFlags,
     PlanInput,
     PlanResult,
     StorageState,
     SwitchableState,
-    WaermepumpeModel,
 )
-from .waermepumpe.analysis.types import Analyse
-from .waermepumpe.const import GRUND_NORMAL, GRUND_SPERRE
-from .waermepumpe.runner import AnalyseLauf
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -121,8 +109,7 @@ def _state_power_w(state) -> float | None:
 
 
 class LoadModelLearner:
-    """Lernt Nacht-Grundlast, 24-h-Lastprofil und WP-Heizgradstunden-Modell aus
-    der Statistik-Historie.
+    """Lernt Nacht-Grundlast und 24-h-Lastprofil aus der Statistik-Historie.
 
     Aus `HemsCoordinator` herausgelöst (siehe docs/architektur-review.md) —
     reine Kapselung derselben Logik, keine Verhaltensänderung. Bekommt seine
@@ -140,9 +127,6 @@ class LoadModelLearner:
         # (Tagtyp, UTC-Stunde) → mittlere Last in W; Tagtyp 0 = Werktag, 1 = Wochenende
         self.load_profile: dict[tuple[int, int], float] | None = None
         self.profile_source: str = "konstante"
-        # WP-Verbrauchsmodell (Heizgradstunden), im STATS_CACHE-Takt gelernt.
-        self.waermepumpe_model: WaermepumpeModel | None = None
-        self.waermepumpe_model_quelle: str = ""
 
     async def refresh(self) -> float:
         """Lastmodell lernen: Nacht-Grundlast (Skalar) und 24-h-Lastprofil.
@@ -154,11 +138,9 @@ class LoadModelLearner:
         Nacht-Profil aus dem rohen Zähler, zuletzt der konfigurierte
         Konstantwert. Rückgabe ist die Nacht-Grundlast als Fallback-Skalar.
 
-        Liegt eine WP-Leistungsstatistik vor, wird sie stundenweise aus
-        beiden Profilquellen herausgerechnet und stattdessen ein
-        temperaturabhängiges WP-Verbrauchsmodell gelernt — das gemittelte
-        Profil würde den WP-Verbrauch sonst wetterblind fortschreiben und
-        saisonalen Übergängen wochenlang hinterherlaufen.
+        Wärmeerzeuger stecken implizit im Profil: Sie werden weder getrennt
+        modelliert noch herausgerechnet. Das Profil schreibt ihren Verbrauch
+        damit wetterblind aus dem 28-Tage-Mittel fort.
         """
         fallback = float(self._opt(CONF_NIGHT_W, DEFAULT_NIGHT_W))
         now = dt_util.utcnow()
@@ -169,15 +151,8 @@ class LoadModelLearner:
         ):
             return self.night_load_w
 
-        waermepumpe_by_ts = await self._waermepumpe_hourly_stats(now)
-        self.waermepumpe_model, self.waermepumpe_model_quelle = await self._learn_waermepumpe_model(
-            now, waermepumpe_by_ts
-        )
-        # Profile nur bereinigen, wenn die WP auch explizit modelliert wird —
-        # sonst bliebe ihr Verbrauch komplett unberücksichtigt.
-        waermepumpe_abzug = waermepumpe_by_ts if self.waermepumpe_model is not None else None
-        night_scalar, night_profile = await self._meter_night_stats(now, waermepumpe_abzug)
-        house_profile = await self._house_load_profile(now, waermepumpe_abzug)
+        night_scalar, night_profile = await self._meter_night_stats(now)
+        house_profile = await self._house_load_profile(now)
 
         if house_profile:
             self.load_profile = house_profile
@@ -188,101 +163,12 @@ class LoadModelLearner:
         else:
             self.load_profile = None
             self.profile_source = "konstante"
-        if self.waermepumpe_model is not None:
-            self.profile_source += ", wp-bereinigt"
 
         self.night_load_w = (
             night_scalar if night_scalar and night_scalar > 0 else fallback
         )
         self._night_load_fetched = now
         return self.night_load_w
-
-    async def _waermepumpe_hourly_stats(self, now: datetime) -> dict[float, float] | None:
-        """Stündliche WP-Leistung je Statistik-Zeitstempel — Basis für die
-        Profilbereinigung und das Verbrauchsmodell.
-
-        Nur heizungsgekoppelte Schaltlasten (`heat_coupled`) zählen. Eine
-        überschussgesteuerte Last (Pool, Luftentfeuchter) folgt keiner
-        Außentemperatur; sie würde die Heizgradstunden-Regression verzerren
-        (zu hohe Basisleistung) und zugleich fälschlich aus dem Lastprofil
-        herausgerechnet. Solche Lasten bleiben im Profil und werden über ihr
-        gelerntes `erwartet_w` geregelt.
-        """
-        entities = [
-            s.power_entity
-            for s in self._registry().switchables
-            if s.power_entity and s.heat_coupled
-        ]
-        if not entities:
-            return None
-        by_ts: dict[float, float] = {}
-        for entity in entities:
-            rows = await self._statistics_hourly_mean(
-                entity, now - timedelta(days=WAERMEPUMPE_MODEL_DAYS)
-            )
-            for row in rows or []:
-                ts, mean = row.get("start"), row.get("mean")
-                if ts is None or mean is None:
-                    continue
-                by_ts[ts] = by_ts.get(ts, 0.0) + max(0.0, float(mean))
-        return by_ts or None
-
-    async def _learn_waermepumpe_model(
-        self, now: datetime, waermepumpe_by_ts: dict[float, float] | None
-    ) -> tuple[WaermepumpeModel | None, str]:
-        """Heizgradstunden-Modell der WP lernen: P = Basis + k × (Grenze − T).
-
-        Basis ist die mittlere WP-Leistung oberhalb der Heizgrenze
-        (Warmwasser, Standby), k die Steigung aus der Statistik der Stunden
-        darunter. Ohne Heizkreis oder WP-Statistik gibt es kein Modell (die
-        WP bleibt dann implizit im Lastprofil); reicht die Historie noch
-        nicht, überbrückt der Richtwert aus const.py.
-        """
-        heating_cfg = (
-            self._registry().heatings[0] if self._registry().heatings else None
-        )
-        if heating_cfg is None or not waermepumpe_by_ts:
-            return None, ""
-        limit = heating_cfg.heat_off_c
-        temp_rows = await self._statistics_hourly_mean(
-            heating_cfg.outdoor_temp_entity, now - timedelta(days=WAERMEPUMPE_MODEL_DAYS)
-        )
-
-        warm: list[float] = []
-        heiz: list[tuple[float, float]] = []  # (Heizgradstunden, Watt)
-        for row in temp_rows or []:
-            ts, mean = row.get("start"), row.get("mean")
-            if ts is None or mean is None or ts not in waermepumpe_by_ts:
-                continue
-            temp, watt = float(mean), waermepumpe_by_ts[ts]
-            if temp >= limit:
-                warm.append(watt)
-            else:
-                heiz.append((limit - temp, watt))
-
-        base = sum(warm) / len(warm) if warm else 0.0
-        if len(heiz) >= WAERMEPUMPE_MODEL_MIN_HOURS:
-            hgs = sum(grad for grad, _w in heiz)
-            heizenergie = sum(max(0.0, w - base) for _grad, w in heiz)
-            if hgs > 0:
-                return (
-                    WaermepumpeModel(
-                        base_w=round(base, 1),
-                        k_w_per_k=round(heizenergie / hgs, 1),
-                        limit_c=limit,
-                        max_w=round(max(waermepumpe_by_ts.values()), 0),
-                    ),
-                    "gelernt",
-                )
-        return (
-            WaermepumpeModel(
-                base_w=round(base, 1),
-                k_w_per_k=DEFAULT_WAERMEPUMPE_W_PER_K,
-                limit_c=limit,
-                max_w=None,
-            ),
-            "richtwert",
-        )
 
     async def _statistics_hourly_mean(
         self, stat_id: str, start: datetime
@@ -310,15 +196,14 @@ class LoadModelLearner:
         return stats.get(stat_id, [])
 
     async def _meter_night_stats(
-        self, now: datetime, waermepumpe_by_ts: dict[float, float] | None = None
+        self, now: datetime
     ) -> tuple[float | None, dict[tuple[int, int], float] | None]:
         """Nachtlast aus dem rohen Zähler (14 Tage) als Fallback lernen.
 
         Nur Nachtstunden, weil tagsüber PV den Zählerwert verfälscht. Liefert
         den Skalar-Mittelwert und ein Nacht-Profil, das auf beide Wochentag-
         typen gespiegelt wird — es dient nur, bis der Hausverbrauch genug
-        Historie für ein volles 24-h-Profil hat. Eine übergebene WP-Statistik
-        wird stundenweise abgezogen (die WP kommt dann aus dem Modell).
+        Historie für ein volles 24-h-Profil hat.
         """
         meter = self._opt(CONF_METER, None)
         if not meter:
@@ -335,8 +220,7 @@ class LoadModelLearner:
             utc = dt_util.utc_from_timestamp(ts)
             if dt_util.as_local(utc).hour in NIGHT_HOURS_LOCAL:
                 # Nur Bezug zählt; ein evtl. gedeckelter Zähler liefert eh >= 0
-                watt = float(mean) - (waermepumpe_by_ts or {}).get(ts, 0.0)
-                by_hour.setdefault(utc.hour, []).append(max(0.0, watt))
+                by_hour.setdefault(utc.hour, []).append(max(0.0, float(mean)))
         if not by_hour:
             return None, None
 
@@ -350,7 +234,7 @@ class LoadModelLearner:
         return scalar, profile
 
     async def _house_load_profile(
-        self, now: datetime, waermepumpe_by_ts: dict[float, float] | None = None
+        self, now: datetime
     ) -> dict[tuple[int, int], float] | None:
         """Volles 24-h-Lastprofil aus dem rekonstruierten Hausverbrauch lernen.
 
@@ -358,9 +242,7 @@ class LoadModelLearner:
         measurement → Langzeitstatistik). Gebündelt nach Wochentagstyp
         (Werktag/Wochenende) und UTC-Stunde über `PROFILE_DAYS`. Buckets mit
         zu wenigen Beobachtungen werden verworfen; ist das Profil insgesamt zu
-        dünn, greift der Aufrufer auf das Nacht-Profil zurück. Eine übergebene
-        WP-Statistik wird stundenweise abgezogen (die WP kommt dann aus dem
-        Modell).
+        dünn, greift der Aufrufer auf das Nacht-Profil zurück.
         """
         stat_id = self._own_entity_id("lastfluss")
         if not stat_id:
@@ -376,8 +258,7 @@ class LoadModelLearner:
                 continue
             utc = dt_util.utc_from_timestamp(ts)
             daytype = 1 if utc.weekday() >= 5 else 0
-            watt = float(mean) - (waermepumpe_by_ts or {}).get(ts, 0.0)
-            buckets.setdefault((daytype, utc.hour), []).append(max(0.0, watt))
+            buckets.setdefault((daytype, utc.hour), []).append(max(0.0, float(mean)))
 
         profile = {
             key: round(sum(vals) / len(vals), 1)
@@ -400,8 +281,6 @@ class WeatherClient:
         self._opt = opt
         self._weather_cache: tuple[str | None, float | None] = (None, None)
         self._weather_fetched: datetime | None = None
-        self._temp_forecast: dict[datetime, float] = {}
-        self._temp_forecast_fetched: datetime | None = None
 
     async def tomorrow(self) -> tuple[str | None, float | None]:
         """Wetterlage und PV-Ertragsfaktor (0–1) für morgen bestimmen.
@@ -450,49 +329,6 @@ class WeatherClient:
         self._weather_fetched = now
         return self._weather_cache
 
-    async def hourly_forecast(self) -> dict[datetime, float]:
-        """Stündliche Temperaturvorhersage (UTC-Stundenanfang → °C) holen.
-
-        Speist das WP-Verbrauchsmodell des Planners. Integrationen ohne
-        Stunden-Vorhersage liefern leer; der Planner fällt dann auf die
-        aktuelle Außentemperatur zurück. Auch ein leeres Ergebnis wird
-        gecacht, damit nicht jeder Update-Zyklus einen Service-Call kostet.
-        """
-        entity = self._opt(CONF_WEATHER, None)
-        if not entity:
-            return {}
-        now = dt_util.utcnow()
-        if (
-            self._temp_forecast_fetched is not None
-            and now - self._temp_forecast_fetched < WEATHER_CACHE
-        ):
-            return self._temp_forecast
-
-        forecast: dict[datetime, float] = {}
-        try:
-            resp = await self._hass.services.async_call(
-                "weather",
-                "get_forecasts",
-                {"entity_id": entity, "type": "hourly"},
-                blocking=True,
-                return_response=True,
-            )
-            for item in (resp or {}).get(entity, {}).get("forecast", []):
-                when = dt_util.parse_datetime(item.get("datetime") or "")
-                temp = item.get("temperature")
-                if when is None or temp is None:
-                    continue
-                key = dt_util.as_utc(when).replace(
-                    minute=0, second=0, microsecond=0
-                )
-                forecast[key] = float(temp)
-        except Exception as err:  # Wetter ist optional, nie fatal
-            _LOGGER.debug("Stündliche Wettervorhersage nicht verfügbar: %s", err)
-
-        self._temp_forecast = forecast
-        self._temp_forecast_fetched = now
-        return forecast
-
 
 class HemsData:
     """Ergebnis eines Update-Zyklus."""
@@ -512,7 +348,6 @@ class HemsData:
         self.haus_w: float | None = None
         self.lastprofil_quelle: str = ""
         self.lastprofil: list[dict] = []
-        self.waermepumpe_modell: dict | None = None
         # Eigene Entity-IDs, aus denen die Plankarte den gemessenen Verlauf
         # des laufenden Tages nachlädt (Slugs sind instanzabhängig).
         self.verlauf_pv_entity: str | None = None
@@ -528,9 +363,6 @@ class HemsData:
         # Pro-Schaltlast-Momentaufnahme für die Lastfluss-Karte (Name,
         # Priorität, An/Aus, Ist- und erwartete Leistung, Begründung).
         self.schaltlasten: list[dict] = []
-        # Ergebnis der Wärmepumpen-Analyse je Rolle. Leer, solange keine
-        # Analyse-Rolle konfiguriert ist — der Reiter bleibt dann aus.
-        self.analysen: dict[str, Analyse] = {}
 
 
 class HemsCoordinator(DataUpdateCoordinator[HemsData]):
@@ -548,19 +380,11 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._prev_mode: str = MODE_OBSERVE
         # Signatur des letzten Config-Checks, damit nur bei Änderung geloggt wird.
         self._check_signature: tuple | None = None
-        # Störungsmeldungen: entprellte Latch-Zustände je Heizkreis-Rolle
-        # (in-memory; nach Neustart neu aufgebaut, der Reconcile ist trotzdem
-        # restart-fest), Signatur der zuletzt zugestellten Meldungen (verhindert
-        # Zyklus-Lärm), und die aktiven Störungen für den Push-Sensor.
-        self._fault_latches: dict[str, FaultLatch] = {}
+        # Signatur der zuletzt zugestellten Meldungen (verhindert Zyklus-Lärm).
         self._alert_signature: tuple | None = None
-        self.fault_alerts: list[Alert] = []
         # Optimierungsziel und E-Auto-Zwangsladung (von Select bzw. Switch
         # gesetzt, in RestoreEntity persistiert).
         self.goal: str = GOAL_SELF_CONSUMPTION
-        # Wärmepumpen-Analysen, je Rolle einer. Eigener 30-s-Takt, siehe
-        # waermepumpe/runner.py.
-        self.analyse_laeufe: dict[str, AnalyseLauf] = {}
         self.ev_force: bool = False
         # Regel-Aggressivität (min/normal/max), vom Select gesetzt und in
         # RestoreEntity persistiert. Default aggressiv, damit Ladelücken zügig
@@ -572,9 +396,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._decisions: dict | None = None
         # Schalt-Ebene (nur im Auto-Modus aktiv).
         self._actuator = Actuator(hass)
-        # Lastprofil-/WP-Modell-Lernen und Wetter-Fetch sind eigene
-        # Collaborators (siehe docs/architektur-review.md) statt Methoden
-        # direkt auf dem Coordinator.
+        # Lastprofil-Lernen und Wetter-Fetch sind eigene Collaborators (siehe
+        # docs/architektur-review.md) statt Methoden direkt auf dem Coordinator.
         self._load_model = LoadModelLearner(
             hass, self._opt, lambda: self.registry, self._own_entity_id
         )
@@ -584,12 +407,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._last_jump_refresh: datetime | None = None
         # Hysterese-Zustand des Planners, über die Update-Zyklen fortgeschrieben.
         self._plan_flags = PlanFlags()
-        # Die übernommene Heizkurve überlebt Neustarts und Reloads. Sie muss
-        # es: Ein Optionswechsel lädt die Integration neu, und ohne diesen
-        # Speicher wären Zeitstempel und Vorwerte weg — die Zusage "höchstens
-        # einmal in 24 Stunden" gälte dann nur zwischen zwei Reloads, und wer
-        # gerade an der Konfiguration schraubt, löst sie am häufigsten aus.
-        self._kurve_store: Store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.kurve")
         # Fairness-Akkumulator für die Lastrotation: geladene Energie je Last
         # (kWh) am laufenden lokalen Kalendertag, aus der gemessenen Leistung
         # integriert. Reset um Mitternacht. Bewusst „dumm" — jede Entscheidung
@@ -613,40 +430,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
     def registry(self) -> DeviceRegistry:
         return parse_devices(self.entry.options.get(CONF_DEVICES, []))
 
-    def _fault_signals(self, reg: DeviceRegistry) -> list[FaultSignal]:
-        """Rohsignale der als Störungsquelle konfigurierten Heizkreis-Entitäten
-        ablesen; fehlt die Entität, geht raw=None als „unbestimmt" durch."""
-        signals: list[FaultSignal] = []
-        for h in reg.heatings:
-            if not h.fault_entity:
-                continue
-            st = self.hass.states.get(h.fault_entity)
-            signals.append(
-                FaultSignal(
-                    role_id=h.id,
-                    role_name=h.name,
-                    entity_id=h.fault_entity,
-                    domain=h.fault_entity.split(".")[0],
-                    raw=st.state if st else None,
-                )
-            )
-        return signals
-
-    def _deliver_alerts(self, reg: DeviceRegistry, config_errors: list[str]) -> None:
+    def _deliver_alerts(self, config_errors: list[str]) -> None:
         """Meldungen bewerten und über ihre Kanäle abgleichen. Reconcile über
         die volle Kandidatenmenge (aktiv → anlegen, inaktiv → löschen), damit es
         ohne persistierten Zustand restart-fest bleibt."""
-        result = evaluate_alerts(
-            self._fault_signals(reg), config_errors, self._fault_latches
-        )
-        self._fault_latches = result.latches
-        # Push-Sensor spiegelt die aktiven Meldungen mit „sensor"-Kanal.
-        self.fault_alerts = [
-            a
-            for a in result.alerts
-            if a.active and "sensor" in ALERT_CHANNELS.get(a.severity, ())
-        ]
-        # Nur bei Änderung zustellen: eine daueraktive Störung soll nicht jede
+        result = evaluate_alerts(config_errors)
+        # Nur bei Änderung zustellen: eine daueraktive Meldung soll nicht jede
         # Minute die Notification neu hochziehen, und eine weggeklickte Meldung
         # nicht sofort zurückkommen. Nach Neustart ist die Signatur leer, der
         # erste Zyklus reconcilet die volle Menge.
@@ -667,11 +456,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                         DOMAIN,
                         slug,
                         is_fixable=False,
-                        severity=(
-                            ir.IssueSeverity.WARNING
-                            if a.severity == ALERT_UNAVAILABLE
-                            else ir.IssueSeverity.ERROR
-                        ),
+                        severity=ir.IssueSeverity.ERROR,
                         translation_key=a.translation_key,
                         translation_placeholders=a.placeholders,
                     )
@@ -704,20 +489,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         for t in reg.thermals:
             if t.temp_entity:
                 ids.add(t.temp_entity)
-        for h in reg.heatings:
-            ids.update(
-                e
-                for e in (
-                    h.outdoor_temp_entity,
-                    h.demand_entity,
-                    h.fault_entity,
-                    h.dhw_active_entity,
-                    h.compressor_entity,
-                    h.room_temp_entity,
-                    h.room_humidity_entity,
-                )
-                if e
-            )
         for s in reg.switchables:
             ids.update(e for e in (s.switch_entity, s.power_entity) if e)
         for m in reg.modulateds:
@@ -1047,9 +818,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
     async def _async_update_data(self) -> HemsData:
         data = HemsData()
         reg = self.registry
-        # Vor allem anderen: die Heizkurven-Übernahme liest daraus, und der
-        # Heizkreis-Zustand wird weiter unten gebaut.
-        self._analysen_einlesen(data)
 
         # Meter (positiv = Netzbezug)
         raw = self._power_w(self._opt(CONF_METER, None))
@@ -1170,7 +938,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             for st in storages
         ]
         thermal = reg.thermals[0] if reg.thermals else None
-        heating_cfg = reg.heatings[0] if reg.heatings else None
 
         # Darstellungshorizont der Plankarte: der ganze heutige und der ganze
         # morgige Kalendertag (lokal), plus die Sonnenzeiten beider Tage für
@@ -1197,61 +964,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             dt_util.DEFAULT_TIME_ZONE,
         )
 
-        heating = None
-        if heating_cfg is not None:
-            month = dt_util.now().month
-            lo, hi = heating_cfg.heat_lock_from_month, heating_cfg.heat_lock_to_month
-            # Sperrbereich über den Jahreswechsel (z. B. 11 → 3) zulassen.
-            locked = lo <= month <= hi if lo <= hi else (month >= lo or month <= hi)
-            heating = HeatingState(
-                name=heating_cfg.name,
-                outdoor_temp_c=self._num(heating_cfg.outdoor_temp_entity),
-                demand_pct=self._num(heating_cfg.demand_entity),
-                heat_locked=locked,
-                heat_on_c=heating_cfg.heat_on_c,
-                heat_off_c=heating_cfg.heat_off_c,
-                cool_on_c=heating_cfg.cool_on_c,
-                cool_off_c=heating_cfg.cool_off_c,
-                frost_on_c=heating_cfg.frost_on_c,
-                frost_off_c=heating_cfg.frost_off_c,
-                curve_base_c=heating_cfg.curve_base_c,
-                curve_slope=heating_cfg.curve_slope,
-                vlt_min_c=heating_cfg.vlt_min_c,
-                vlt_min_cold_c=heating_cfg.vlt_min_cold_c,
-                vlt_max_c=heating_cfg.vlt_max_c,
-                cool_vlt_c=heating_cfg.cool_vlt_c,
-                dhw_active=self._is_on(heating_cfg.dhw_active_entity),
-                # Ohne Rolle (und bei ausgefallener Rückmeldung) bleibt der
-                # Verdichterzustand unbekannt, und der Taktschutz zählt nicht.
-                compressor_on=self._is_on_or_none(heating_cfg.compressor_entity),
-                # Raumklima für die Taupunkt-Untergrenze. Fehlt eines von
-                # beiden (nicht konfiguriert oder Sensor stumm), rechnet die
-                # Strategie keinen Taupunkt und die Grenze bleibt aus.
-                room_temp_c=self._num(heating_cfg.room_temp_entity),
-                room_humidity_pct=self._num(heating_cfg.room_humidity_entity),
-                dewpoint_margin_k=heating_cfg.dewpoint_margin_k,
-                antitakt_starts=heating_cfg.antitakt_starts,
-                antitakt_window_min=heating_cfg.antitakt_window_min,
-                antitakt_pause_min=heating_cfg.antitakt_pause_min,
-                curve_from_analysis=heating_cfg.curve_from_analysis,
-                **self._kurven_empfehlung(reg, data),
-            )
-
         modulateds = self._modulated_states(reg, now)
         switchables = self._switchable_states(reg, now)
 
-        # Lastmodell zuerst: der Aufruf lernt auch das WP-Modell, das unten
-        # in den PlanInput einfließt.
         night_load_w = await self._load_model.refresh()
-        temp_forecast = await self._weather.hourly_forecast()
-        if self._load_model.waermepumpe_model is not None:
-            data.waermepumpe_modell = {
-                "quelle": self._load_model.waermepumpe_model_quelle,
-                "basis_w": self._load_model.waermepumpe_model.base_w,
-                "k_w_pro_k": self._load_model.waermepumpe_model.k_w_per_k,
-                "heizgrenze_c": self._load_model.waermepumpe_model.limit_c,
-                "max_w": self._load_model.waermepumpe_model.max_w,
-            }
 
         data.plan = compute_plan(
             PlanInput(
@@ -1305,15 +1021,11 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 thermal_boost_saldo_off_w=thermal.boost_saldo_off_w
                 if thermal
                 else 200,
-                heating=heating,
                 modulateds=modulateds,
                 switchables=switchables,
-                waermepumpe_model=self._load_model.waermepumpe_model,
-                temp_forecast_c=temp_forecast or None,
                 flags=self._plan_flags,
             )
         )
-        await self._kurve_sichern(self._plan_flags, data.plan.flags)
         self._plan_flags = data.plan.flags
 
         # Pro-Schaltlast-Zeilen für die Lastfluss-Karte. Erst hier, weil die
@@ -1346,15 +1058,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Config-Sanity-Check (speist binary_sensor.hems_konfiguration). Fehler/
         # Überlappungen nur bei Änderung loggen, nicht jeden 60-s-Zyklus.
         data.config_check = check_config(self.hass, reg)
-        # Was der Analyse an ihren Eingängen auffällt, gehört in denselben
-        # Check: eine fehlende Einheit am Durchfluss verfälscht jeden COP um
-        # den Faktor 60, und ohne diese Zeile stünde das nur im Log.
-        # Warnung und nicht Fehler — eine kaputte Messkette darf den Planer
-        # nicht am Schalten hindern, sie macht nur die Kennzahlen wertlos.
-        for lauf in self.analyse_laeufe.values():
-            data.config_check.warnings.extend(
-                f"{lauf.rolle.name}: {meldung}" for meldung in lauf.konfigfehler
-            )
         self.config_check = data.config_check
         sig = data.config_check.signature()
         if sig != self._check_signature:
@@ -1369,7 +1072,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Defensiv gekapselt: eine Meldung ist optional und darf nie den ganzen
         # Update-Zyklus reißen (sonst gingen alle HEMS-Entitäten auf unavailable).
         try:
-            self._deliver_alerts(reg, data.config_check.errors)
+            self._deliver_alerts(data.config_check.errors)
         except Exception:  # noqa: BLE001
             _LOGGER.exception("HEMS: Zustellung der Störungsmeldungen fehlgeschlagen")
 
@@ -1394,110 +1097,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 await self._actuator.release_battery(reg)
         self._prev_mode = self.mode
 
-        # Der Analyse sagen, ob HEMS gerade selbst eingreift. Erst hier, weil
-        # es am Plan hängt; eingelesen wurde sie vor dem Planlauf.
-        self._analysen_rueckmelden(data)
-
         # Entscheidungsänderungen für den Logs-Reiter fortschreiben.
         self._record_decisions(data)
         return data
 
-    # --- Wärmepumpen-Analyse ---------------------------------------------
-
-    async def async_kurve_laden(self) -> None:
-        """Zuletzt übernommene Heizkurve in die Plan-Flags zurückholen."""
-        gespeichert = await self._kurve_store.async_load()
-        if not gespeichert:
-            return
-        stand = gespeichert.get("uebernommen_am")
-        self._plan_flags = replace(
-            self._plan_flags,
-            kurve_fusspunkt_c=gespeichert.get("fusspunkt_c"),
-            kurve_steilheit=gespeichert.get("steilheit"),
-            kurve_vorlauf_min_c=gespeichert.get("vorlauf_min_c"),
-            kurve_uebernommen_am=dt_util.parse_datetime(stand) if stand else None,
-        )
-
-    async def _kurve_sichern(self, vorher: PlanFlags, nachher: PlanFlags) -> None:
-        """Nur bei Änderung schreiben, nicht jeden 60-s-Zyklus."""
-        if vorher.kurve_uebernommen_am == nachher.kurve_uebernommen_am:
-            return
-        if nachher.kurve_uebernommen_am is None:
-            await self._kurve_store.async_remove()
-            return
-        await self._kurve_store.async_save(
-            {
-                "fusspunkt_c": nachher.kurve_fusspunkt_c,
-                "steilheit": nachher.kurve_steilheit,
-                "vorlauf_min_c": nachher.kurve_vorlauf_min_c,
-                "uebernommen_am": nachher.kurve_uebernommen_am.isoformat(),
-            }
-        )
-
-    async def async_start_analysen(self) -> None:
-        """Für jede Analyse-Rolle einen Auswertelauf starten."""
-        for rolle in self.registry.analyses:
-            lauf = AnalyseLauf(self.hass, self.entry.entry_id, rolle)
-            self.analyse_laeufe[rolle.id] = lauf
-            await lauf.async_start()
-
-    def async_stop_analysen(self) -> None:
-        for lauf in self.analyse_laeufe.values():
-            lauf.async_stop()
-        self.analyse_laeufe.clear()
-
-    def _analysen_einlesen(self, data: HemsData) -> None:
-        """Den letzten Stand jedes Auswertelaufs übernehmen.
-
-        Vor dem Planlauf, weil die Heizkurven-Übernahme daraus liest. Der
-        Auswertelauf hat einen eigenen, feineren Takt; hier wird nur abgeholt,
-        nie gerechnet.
-        """
-        for rolle_id, lauf in self.analyse_laeufe.items():
-            if lauf.analyse is not None:
-                data.analysen[rolle_id] = lauf.analyse
-
-    def _kurven_empfehlung(self, reg: DeviceRegistry, data: HemsData) -> dict:
-        """Die Heizkurvenempfehlung für den HeatingState.
-
-        Bei mehreren Analyse-Rollen wird nichts übernommen: welche davon
-        diesen Heizkreis beschreibt, ist nicht entscheidbar, und raten wäre
-        hier teurer als nichts zu tun. Der Grund steht danach als Attribut am
-        Heizkreis-Sensor.
-        """
-        if len(reg.analyses) > 1:
-            return {"empfehlung_mehrdeutig": True}
-        if not reg.analyses:
-            return {}
-        analyse = data.analysen.get(reg.analyses[0].id)
-        if analyse is None:
-            return {}
-        return {
-            "empfehlung_fusspunkt_c": analyse.kurve.fusspunkt_c,
-            "empfehlung_steilheit": analyse.kurve.steilheit,
-            "empfehlung_vorlauf_min_c": analyse.kurve.vorlauf_min_c,
-            "empfehlung_datenbasis": analyse.datenbasis_empfehlung,
-        }
-
-    def _analysen_rueckmelden(self, data: HemsData) -> None:
-        """Der Analyse melden, dass HEMS gerade selbst eingreift.
-
-        Warum das überhaupt gemeldet wird: Wirft HEMS die Wärmepumpe wegen
-        PV-Überschuss an oder hält sie aus einer Lastspitze heraus, ist das
-        kein normaler Betrieb und darf die Erwartungsbasis nicht prägen.
-
-        Gemeldet wird derzeit nur die Taktschutz-Pause. Alles andere läuft als
-        `normal` durch — HEMS stellt am Heizkreis Modus und Vorlauf, hält aber
-        keine Historie darüber, ob eine Stellung gerade vom PV-Überschuss
-        getrieben war. Die Meldung ist damit vollständig für den Fall, in dem
-        HEMS die Anlage aktiv anhält, und unvollständig für den Fall, in dem
-        es sie anders fährt als sie selbst gefahren wäre.
-        """
-        heizung = data.plan.heizung
-        taktschutz = bool(heizung and heizung.taktschutz)
-        for lauf in self.analyse_laeufe.values():
-            lauf.steuerung_aktiv = self.mode == MODE_AUTO and taktschutz
-            lauf.steuerung_grund = GRUND_SPERRE if taktschutz else GRUND_NORMAL
 
     def _record_decisions(self, data: HemsData) -> None:
         """Aktuelle Entscheidungen gegen den Vorlauf diffen und Änderungen loggen.

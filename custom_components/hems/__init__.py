@@ -25,6 +25,11 @@ PLATFORMS = [
     Platform.SWITCH,
 ]
 
+# Rollen, die es einmal gab und die die Migration aus den Optionen räumt.
+# Als Literale und nicht als Konstanten aus const.py: dort sind sie entfernt,
+# und ein Migrationspfad muss auch dann noch wissen, wie die Altdaten heißen.
+_ENTFALLENE_ROLLEN = ("heating_circuit", "heat_pump_analysis")
+
 FRONTEND_URL = "/hems-frontend"
 FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"
 
@@ -99,20 +104,28 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Optionen auf das aktuelle Schema heben.
 
     1 → 2: Schaltbare Lasten kennen `heat_coupled`. Bis dahin galten *alle*
-    schaltbaren Lasten als Wärmepumpe (ihre Leistung floss gesammelt ins
-    Heizgradstunden-Modell). Bestehende Einträge bekommen das Flag deshalb auf
-    True — sonst verlöre eine laufende Installation ihr WP-Modell stillschweigend
-    und würde das Nachtdefizit unterschätzen. Neue Lasten starten auf False.
+    schaltbaren Lasten als Wärmepumpe. Bestehende Einträge bekommen das Flag
+    auf True, neue starten auf False. Es markiert heute noch, welche Last im
+    Lastfluss als Wärmeerzeuger erscheint und mit welchem Boden ihre
+    Leistungsaufnahme gelernt wird.
+
+    2 → 3: Die Rollen Heizkreis und Wärmepumpen-Analyse sind entfallen — HEMS
+    regelt Speicher, Warmwasser und Lasten. Ihre Einträge werden aus den
+    Optionen entfernt: sie werden ohnehin nicht mehr gelesen, blieben aber
+    sonst als unbekannte Geräte im Panel stehen. Die dazu angelegten Entitäten
+    verschwinden mit dem nächsten Neustart aus der Registry.
     """
-    if entry.version >= 2:
+    if entry.version >= 3:
         return True
 
     devices = [dict(d) for d in entry.options.get(CONF_DEVICES, [])]
-    for device in devices:
-        if device.get("role") == ROLE_SWITCHABLE and "heat_coupled" not in device:
-            device["heat_coupled"] = True
+    if entry.version < 2:
+        for device in devices:
+            if device.get("role") == ROLE_SWITCHABLE and "heat_coupled" not in device:
+                device["heat_coupled"] = True
+    devices = [d for d in devices if d.get("role") not in _ENTFALLENE_ROLLEN]
     hass.config_entries.async_update_entry(
-        entry, options={**entry.options, CONF_DEVICES: devices}, version=2
+        entry, options={**entry.options, CONF_DEVICES: devices}, version=3
     )
     return True
 
@@ -132,10 +145,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     power_memory = PowerMemory(hass)
     await power_memory.async_load()
     coordinator.power_memory = power_memory
-    # Zuletzt übernommene Heizkurve zurückholen, bevor der erste Planlauf
-    # rechnet: sonst sähe er eine leere Übernahme und griffe sofort wieder zu,
-    # obwohl die Tagesfrist noch läuft.
-    await coordinator.async_kurve_laden()
     await coordinator.async_config_entry_first_refresh()
     # Quellen sind nach einem Neustart evtl. noch nicht bereit: sofort neu
     # rechnen, sobald sie verfügbar werden, statt bis zum nächsten Poll zu warten.
@@ -143,9 +152,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Bei einem sprunghaften Netzsaldo (Wolkenkante, Lastsprung) sofort statt
     # erst zum nächsten 60-s-Poll neu rechnen (Aktuierungs-Totzeit verkürzen).
     coordinator.async_setup_saldo_jump_tracking()
-    # Die Wärmepumpen-Analyse läuft in ihrem eigenen, feineren Takt: der
-    # Planer rechnet minütlich, eine Verdichter-Startzählung braucht 30 s.
-    await coordinator.async_start_analysen()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -161,7 +167,6 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
-        coordinator.async_stop_analysen()
         # Ausstehende Log-Einträge und gelernte Leistungen vor dem
         # Reload/Entladen sichern.
         if coordinator.changelog is not None:

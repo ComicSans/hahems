@@ -23,9 +23,8 @@ from .const import (
 )
 from .strategies import coordination
 from .strategies.battery import _lade_deckel_soc, _storage_control
-from .strategies.demand import _profile_covers, _window_load_kwh, _waermepumpe_window_kwh
+from .strategies.demand import _profile_covers, _window_load_kwh
 from .strategies.forecast import _discharge_plan, _pv_curve, _soc_forecast
-from .strategies.heating import _heating_plan
 from .strategies.loads import _modulated_control
 from .strategies.switchable import switchable_control
 from .strategies.types import PlanInput, PlanResult, _latch
@@ -203,13 +202,6 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         else _window_load_kwh(inp, inp.sunset, inp.sunrise),
         2,
     )
-    # WP-Anteil am Nachtdefizit separat ausweisen (Transparenz).
-    result.waermepumpe_nacht_kwh = round(
-        _waermepumpe_window_kwh(inp, inp.now, inp.next_sunrise)
-        if ist_nacht
-        else _waermepumpe_window_kwh(inp, inp.sunset, inp.sunrise),
-        2,
-    )
 
     # Folgetag einpreisen: Meldet das Wetter dichte Bewölkung oder deckt die
     # Morgen-Prognose nicht einmal das Nachtdefizit, wird der Speicher heute
@@ -260,19 +252,10 @@ def compute_plan(inp: PlanInput) -> PlanResult:
 
     # Erwarteter Restverbrauch bis Sonnenuntergang: aus dem gelernten Profil,
     # sofern es die Tagesstunden abdeckt, sonst die konfigurierte Grundlast.
-    # Die WP kommt in beiden Pfaden aus dem Modell obendrauf (im Profilpfad
-    # steckt sie bereits in _window_load_kwh).
     if _profile_covers(inp, inp.now, inp.sunset):
         expected_day_kwh = _window_load_kwh(inp, inp.now, inp.sunset)
     else:
-        expected_day_kwh = (
-            inp.baseline_load_w * result.sonnenfenster_h / 1000
-            + (
-                _waermepumpe_window_kwh(inp, inp.now, inp.sunset)
-                if not ist_nacht
-                else 0.0
-            )
-        )
+        expected_day_kwh = inp.baseline_load_w * result.sonnenfenster_h / 1000
     result.ueberschuss_rest_kwh = round(
         max(0.0, inp.pv_remaining_kwh - expected_day_kwh), 2
     )
@@ -370,10 +353,6 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     result.regelung = _storage_control(
         inp, result, ev_target_w=ev_target_w, schaltbar_delta_w=schaltbar_delta
     )
-
-    # Heizkreis: Modus- und Vorlauf-Empfehlung.
-    if inp.heating is not None:
-        result.heizung = _heating_plan(inp, result)
 
     # SoC-Prognose ab jetzt bis zum Horizontende. Bewusst nicht rückwirkend:
     # bekannt ist nur der aktuelle Stand, alles davor wäre erfunden.

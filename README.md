@@ -4,11 +4,12 @@
 
 Home Energy Management System als Home-Assistant-Custom-Integration.
 
-HEMS prognostiziert PV-Ertrag und Verbrauch, plant daraus Speicher, Warmwasser,
-Wärmepumpe und Wallbox und zeigt jederzeit an, was es warum empfiehlt. Auf Wunsch
-schaltet es die Geräte auch selbst.
+HEMS prognostiziert PV-Ertrag und Verbrauch, plant daraus Speicher, Warmwasser
+und Lasten und zeigt jederzeit an, was es warum empfiehlt. Auf Wunsch schaltet
+es die Geräte auch selbst. Der Schwerpunkt liegt auf dem Akku: wann er lädt,
+wie weit, und wer ihm den Überschuss streitig machen darf.
 
-**Geräte-agnostisch:** Du konfigurierst *Rollen* — „Speicher“, „Heizkreis“,
+**Geräte-agnostisch:** Du konfigurierst *Rollen* — „Speicher“, „Warmwasser“,
 „modulierbare Last“ — und weist ihnen deine Entitäten zu. Im Code steht keine
 einzige Entity-ID, also funktioniert HEMS mit jedem Fabrikat, dessen Werte in
 Home Assistant ankommen.
@@ -22,7 +23,7 @@ Home Assistant ankommen.
 | **PV-Prognose** | Eine separate Integration wie [Forecast.Solar](https://www.home-assistant.io/integrations/forecast_solar/) oder Solcast. HEMS rechnet keine eigene Prognose, es liest deren Sensoren. |
 | **Recorder** | Für gelernte Lastprofile und den Messverlauf in der Plan-Karte. Standardmäßig aktiv. |
 
-Alles Weitere — Speicher, Warmwasser, Heizkreis, Lasten — ist optional. HEMS
+Alles Weitere — Speicher, Warmwasser, Lasten — ist optional. HEMS
 läuft auch mit reinem Zähler und PV-Prognose und liefert dann eben nur die
 Empfehlungen, die es aus diesen Daten ableiten kann.
 
@@ -39,7 +40,7 @@ hinzufügen, dann installieren und Home Assistant neu starten.
 1. **Einstellungen → Geräte & Dienste → Integration hinzufügen → „HEMS“**
 2. Zähler-Entität und Grundlast angeben.
 3. Über **Konfigurieren** die Geräte als Rollen anlegen: PV-Prognoseflächen,
-   Speicher, Warmwasser, Heizkreis, schaltbare und modulierbare Lasten.
+   Speicher, Warmwasser, schaltbare und modulierbare Lasten.
    Alternativ im HEMS-Panel unter **Konfiguration**.
 4. `binary_sensor.hems_konfiguration` prüfen — er sagt dir, ob die
    Konfiguration für den Auto-Modus taugt.
@@ -84,33 +85,6 @@ mit folgenden Ansichten:
 Der native Options-Flow (Einstellungen → Geräte & Dienste → HEMS →
 Konfigurieren) bleibt als gleichwertiger Weg erhalten.
 
-### Effizienz — sobald eine Wärmepumpen-Analyse konfiguriert ist
-
-Ist die Rolle **Wärmepumpen-Analyse** angelegt, kommt ein weiterer Reiter
-**Effizienz** hinzu: COP gegen Datenblatt, Spreizung, Taktung,
-Wärmeverlustkoeffizient und ein Vorschlag für die Heizkurve. Ohne sie bleibt
-der Reiter aus, und HEMS ist unverändert vollständig.
-
-Die Rolle braucht fünf Messwerte — Vorlauf, Rücklauf, Durchfluss, elektrische
-Leistung, Außentemperatur — und eine Gerätekennlinie aus der mitgelieferten
-Liste. Sie kennt weder Protokolle noch Register: woher die Werte kommen, ist
-ihr gleich. Betriebsart und Verdichterfrequenz verbessern das Ergebnis, sind
-aber nicht Pflicht.
-
-Die Werte dort sind **beratend**. Die Analyse hat keinen Schreibpfad;
-geschaltet wird über die Rolle Heizkreis. Zwei Stellen, die denselben Sollwert
-schreiben, sind der Fehler, den diese Trennung verhindert.
-
-Eine Ausnahme lässt sich einschalten: **Heizkurve aus der Wärmepumpen-Analyse
-übernehmen** am Heizkreis. Dann fährt HEMS nach der gemessenen Empfehlung statt
-nach Fußpunkt und Steilheit aus dem Dialog — höchstens einmal am Tag, nur bei
-belastbarer Datenbasis und nur bei spürbarer Abweichung. Die Dämpfung ist
-nötig, weil die Empfehlung aus Betrieb entsteht, den HEMS mit der vorigen
-Empfehlung selbst erzeugt hat. Was gerade gilt, steht als `kurve_quelle` und
-`kurve_grund` an `sensor.hems_heizkreis`.
-
-Details: [docs/waermepumpen-analyse.md](docs/waermepumpen-analyse.md).
-
 ## Lovelace-Karten
 
 Beide Karten werden automatisch registriert — keine Ressourcen-Konfiguration
@@ -124,8 +98,8 @@ height: 440                     # optional, px; "auto" = inhaltsabhängig
 ```
 
 Die **Lastfluss-Karte** zeigt animierte Flüsse zwischen PV, Netz, Batterie und
-Haus. Wärmepumpe und Wallbox erscheinen als Chips, sobald für sie eine
-Leistungs-Entität konfiguriert ist. Konventionen: `netz_w` positiv = Netzbezug,
+Haus. Schaltbare Lasten stehen einzeln als Zeilen darunter, die Wallbox als
+Chip, sobald für sie eine Leistungs-Entität konfiguriert ist. Konventionen: `netz_w` positiv = Netzbezug,
 `batterie_w` positiv = Entladen.
 
 ```yaml
@@ -169,7 +143,6 @@ funktioniert unabhängig davon.
 - `sensor.hems_entladeplan` — W, geplante Akku-Entladung ins Haus; Stunden-Slots, SoC-Prognose und PV-Kurve als Attribute
 - `sensor.hems_warmwasser_soll` — °C, mit Status (aus / legionellenschutz / pv_boost / basis)
 - `sensor.hems_speicher_regelung` — Modus entladen / laden / pausiert, Zuteilung je Speicher als Attribut
-- `sensor.hems_heizkreis` — Modus heizen / kuehlen / aus, Vorlauf-Soll als Attribut
 
 **Steuerung und Diagnose**
 
@@ -177,31 +150,15 @@ funktioniert unabhängig davon.
 - `select.hems_optimierungsziel` — eigenverbrauch / nulleinspeisung / vollladen
 - `switch.hems_e_auto_zwangsladung`
 - `binary_sensor.hems_konfiguration` — Config-Check für den Auto-Modus
-- `binary_sensor.hems_warmepumpen_storung` — Quelle für einen Handy-Push
-
-**Wärmepumpen-Analyse** (nur bei konfigurierter Rolle, Präfix aus ihrem Namen)
-
-- COP momentan / Soll / Abweichung, Wärmeleistung, Wärmemenge, Spreizung
-- Verdichterstarts, Verdichterlaufzeit, mittlere Taktlänge
-- Wärmeverlustkoeffizient und Heizkurvenvorschlag (Fußpunkt, Steilheit,
-  Vorlauf-Minimum)
-- Datenbasis und Datenbasis Empfehlung — getrennt geführt: die eine sagt, wie
-  sauber gerade gemessen wird, die andere, wie lange schon beobachtet wurde
-- sieben Hinweise als eigene Binärsensoren, jeder mit zwei Schwellen
 
 ## Weiterlesen
 
-- [docs/waermepumpen-analyse.md](docs/waermepumpen-analyse.md) — was die
-  Effizienzanalyse misst, unter welchen Namen sie es veröffentlicht, und
-  welche Regeln dabei bindend sind
 - [CONCEPT.md](CONCEPT.md) — Konzept und Phasenplan
 - [CHANGELOG.md](CHANGELOG.md) — Änderungen, die nach einem Update eine
   manuelle Anpassung erfordern
-- [ATTRIBUTION.md](ATTRIBUTION.md) — Herkunft und Lizenz der Gerätekennlinien
 - [lg-therma-v-esphome-modbus](https://github.com/ComicSans/lg-therma-v-esphome-modbus)
-  — Wärmepumpe per Modbus RTU anbinden, ohne Cloud und ohne Gateway; die
-  Entitäten passen direkt auf die HEMS-Rollen Heizkreis, Warmwasser und
-  Wärmepumpen-Analyse
+  — Wärmepumpe per Modbus RTU anbinden, ohne Cloud und ohne Gateway; ihre
+  Entitäten passen auf die HEMS-Rollen Warmwasser und schaltbare Last
 
 Jedes Konfigurationsfeld ist im Formular selbst erklärt — Label und Hilfetext
 stehen in den Übersetzungsdateien und werden von `test_config_ws_labels.py`

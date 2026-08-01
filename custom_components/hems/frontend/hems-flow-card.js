@@ -10,7 +10,7 @@
  *   speicher[] (name, soc, watt), schaltlasten[] (name, prio, ist_an,
  *   soll_an, watt, erwartet_w, grund)
  * plus Status der Regelungen für die Chips:
- *   regelung_modus, regelung_w, warmwasser_soll_c, warmwasser_status, waermepumpe_modus, waermepumpe_vlt_c
+ *   regelung_modus, regelung_w, warmwasser_soll_c, warmwasser_status
  *
  * Die Aufteilung auf die Kanten folgt derselben Merit-Order wie der
  * Planner: PV deckt zuerst das Haus, dann die Akkus, der Rest speist ein.
@@ -208,12 +208,9 @@ class HemsFlowCard extends HTMLElement {
     };
     const regelungLabel = { laden: "Laden", entladen: "Entladen", pausiert: "Pausiert" };
     const chips = [
-      // Kein Sammel-Chip für die Wärmepumpe mehr: schaltbare Lasten stehen
-      // jetzt einzeln als Zeilen (Name, Priorität, Empfehlung) unter dem
-      // Diagramm — die WP ist eine davon.
-      a.waermepumpe_modus != null && a.waermepumpe_vlt_c != null
-        ? `🌡 Wärmepumpe ${a.waermepumpe_modus === "kuehlen" ? "kühlt" : a.waermepumpe_modus} · VLT ${Math.round(a.waermepumpe_vlt_c)} °C`
-        : null,
+      // Kein Sammel-Chip für die Wärmepumpe: schaltbare Lasten stehen
+      // einzeln als Zeilen (Name, Priorität, Empfehlung) unter dem Diagramm —
+      // ein Wärmeerzeuger ist eine davon.
       a.wallbox_w != null ? `🚗 Wallbox ${fmtW(a.wallbox_w)}` : null,
       a.regelung_modus != null
         ? `🔋 Akku-Empfehlung: ${regelungLabel[a.regelung_modus] ?? a.regelung_modus}${

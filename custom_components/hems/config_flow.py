@@ -1,8 +1,6 @@
 """Config- und Options-Flow: alle Geräte werden über die UI angelegt und gepflegt."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from uuid import uuid4
 
 import voluptuous as vol
@@ -23,9 +21,6 @@ from .const import (
     CONF_PV_MINUS_BATTERY,
     CONF_PV_POWER,
     CONF_WEATHER,
-    DEFAULT_ANTITAKT_PAUSE_MIN,
-    DEFAULT_ANTITAKT_STARTS,
-    DEFAULT_ANTITAKT_WINDOW_MIN,
     DEFAULT_BASE_TARGET,
     DEFAULT_BASELINE_W,
     DEFAULT_BOOST_SALDO_OFF_W,
@@ -33,35 +28,18 @@ from .const import (
     DEFAULT_BOOST_SOC_OFF,
     DEFAULT_BOOST_SOC_ON,
     DEFAULT_COMFORT_TARGET,
-    DEFAULT_COOL_OFF_C,
-    DEFAULT_COOL_ON_C,
-    DEFAULT_COOL_VLT_C,
-    DEFAULT_CURVE_BASE_C,
-    DEFAULT_CURVE_SLOPE,
-    DEFAULT_DEWPOINT_MARGIN_K,
     DEFAULT_FREE_H,
     DEFAULT_FREE_KWH,
-    DEFAULT_HEAT_FROST_OFF_C,
-    DEFAULT_HEAT_FROST_ON_C,
-    DEFAULT_HEAT_LOCK_FROM,
-    DEFAULT_HEAT_LOCK_TO,
-    DEFAULT_HEAT_OFF_C,
-    DEFAULT_HEAT_ON_C,
     DEFAULT_LEGIONELLA_TARGET,
     DEFAULT_MAX_CHARGE_W,
     DEFAULT_MAX_DISCHARGE_W,
     DEFAULT_NIGHT_W,
     DEFAULT_RESERVE_SOC,
-    DEFAULT_VLT_MAX_C,
-    DEFAULT_VLT_MIN_C,
-    DEFAULT_VLT_MIN_COLD_C,
     DOMAIN,
     PRIORITY_AUTO,
     PRIORITY_BATTERY_FIRST,
     PRIORITY_EV_FIRST,
-    ROLE_ANALYSIS,
     ROLE_FORECAST,
-    ROLE_HEATING,
     ROLE_MODULATED,
     ROLE_STORAGE,
     ROLE_SWITCHABLE,
@@ -73,10 +51,8 @@ ROLE_LABELS = {
     ROLE_FORECAST: "PV-Prognose",
     ROLE_STORAGE: "Speicher",
     ROLE_THERMAL: "Warmwasser",
-    ROLE_HEATING: "Heizkreis",
     ROLE_SWITCHABLE: "Schaltbare Last",
     ROLE_MODULATED: "Modulierbare Last",
-    ROLE_ANALYSIS: "Wärmepumpen-Analyse",
 }
 
 
@@ -195,87 +171,6 @@ THERMAL_SCHEMA = vol.Schema(
     }
 )
 
-HEATING_SCHEMA = vol.Schema(
-    {
-        vol.Required("name"): selector.TextSelector(),
-        vol.Required("outdoor_temp_entity"): _entity(device_class="temperature"),
-        vol.Optional("demand_entity"): _entity(),
-        vol.Optional("control_entity"): _entity(["climate", "select", "input_select"]),
-        vol.Optional("setpoint_entity"): _entity(["number", "input_number"]),
-        vol.Optional("mode_heat_option"): selector.TextSelector(),
-        vol.Optional("mode_cool_option"): selector.TextSelector(),
-        vol.Optional("mode_off_option"): selector.TextSelector(),
-        vol.Optional("silent_switch_entity"): _entity(["switch", "input_boolean"]),
-        vol.Optional("season_select_entity"): _entity(["input_select", "select"]),
-        vol.Optional("fault_entity"): _entity(["binary_sensor", "sensor"]),
-        vol.Optional("dhw_active_entity"): _entity(
-            ["binary_sensor", "switch", "input_boolean"]
-        ),
-        vol.Optional("compressor_entity"): _entity(
-            ["binary_sensor", "switch", "input_boolean"]
-        ),
-        vol.Optional("room_temp_entity"): _entity(device_class="temperature"),
-        vol.Optional("room_humidity_entity"): _entity(device_class="humidity"),
-        vol.Required(
-            "dewpoint_margin_k", default=DEFAULT_DEWPOINT_MARGIN_K
-        ): _number(0, 6, "K", 0.5),
-        vol.Required("antitakt_starts", default=DEFAULT_ANTITAKT_STARTS): _number(
-            0, 20, "Starts", 1
-        ),
-        vol.Required(
-            "antitakt_window_min", default=DEFAULT_ANTITAKT_WINDOW_MIN
-        ): _number(15, 240, "min", 5),
-        vol.Required(
-            "antitakt_pause_min", default=DEFAULT_ANTITAKT_PAUSE_MIN
-        ): _number(5, 120, "min", 5),
-        vol.Required("heat_on_c", default=DEFAULT_HEAT_ON_C): _number(
-            -10, 25, "°C", 0.5
-        ),
-        vol.Required("heat_off_c", default=DEFAULT_HEAT_OFF_C): _number(
-            -10, 30, "°C", 0.5
-        ),
-        vol.Required("cool_on_c", default=DEFAULT_COOL_ON_C): _number(
-            15, 40, "°C", 0.5
-        ),
-        vol.Required("cool_off_c", default=DEFAULT_COOL_OFF_C): _number(
-            10, 35, "°C", 0.5
-        ),
-        vol.Required("frost_on_c", default=DEFAULT_HEAT_FROST_ON_C): _number(
-            -10, 15, "°C", 0.5
-        ),
-        vol.Required("frost_off_c", default=DEFAULT_HEAT_FROST_OFF_C): _number(
-            -10, 15, "°C", 0.5
-        ),
-        vol.Required(
-            "heat_lock_from_month", default=DEFAULT_HEAT_LOCK_FROM
-        ): _number(1, 12, ""),
-        vol.Required("heat_lock_to_month", default=DEFAULT_HEAT_LOCK_TO): _number(
-            1, 12, ""
-        ),
-        vol.Required("curve_base_c", default=DEFAULT_CURVE_BASE_C): _number(
-            25, 60, "°C", 0.1
-        ),
-        vol.Required("curve_slope", default=DEFAULT_CURVE_SLOPE): _number(
-            0, 3, "K/K", 0.01
-        ),
-        vol.Required(
-            "curve_from_analysis", default=False
-        ): selector.BooleanSelector(),
-        vol.Required("vlt_min_c", default=DEFAULT_VLT_MIN_C): _number(
-            15, 40, "°C", 0.5
-        ),
-        vol.Required("vlt_min_cold_c", default=DEFAULT_VLT_MIN_COLD_C): _number(
-            15, 40, "°C", 0.5
-        ),
-        vol.Required("vlt_max_c", default=DEFAULT_VLT_MAX_C): _number(
-            25, 70, "°C", 0.5
-        ),
-        vol.Required("cool_vlt_c", default=DEFAULT_COOL_VLT_C): _number(
-            10, 30, "°C", 0.5
-        ),
-    }
-)
-
 SWITCHABLE_SCHEMA = vol.Schema(
     {
         vol.Required("name"): selector.TextSelector(),
@@ -305,126 +200,29 @@ MODULATED_SCHEMA = vol.Schema(
 )
 
 
-def _preset_optionen() -> list[selector.SelectOptionDict]:
-    """Mitgelieferte Gerätekennlinien als Auswahlliste.
-
-    Beim Import gelesen und nicht bei jedem Formularaufruf: es sind zehn
-    kleine Dateien, und ein Preset kommt nur mit einer neuen Version dazu.
-    Fällt das Lesen aus, bleibt die Liste leer statt zu raten — dann sieht
-    man im Dialog sofort, dass etwas mit der Installation nicht stimmt.
-    """
-    verzeichnis = Path(__file__).parent / "waermepumpe" / "presets"
-    optionen: list[selector.SelectOptionDict] = []
-    for datei in sorted(verzeichnis.glob("*.json")):
-        try:
-            roh = json.loads(datei.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        optionen.append(
-            selector.SelectOptionDict(
-                value=roh.get("schluessel", datei.stem),
-                label=roh.get("anzeigename", datei.stem),
-            )
-        )
-    return optionen
-
-
-# Wärmepumpen-Analyse: fünf Pflichteingänge, zwei optionale. Sie kennt weder
-# Protokolle noch Register — woher die Werte kommen, ist ihr gleich. Und sie
-# hat bewusst keine Steuer-Entity: gestellt wird über die Rolle Heizkreis.
-ANALYSIS_SCHEMA = vol.Schema(
-    {
-        vol.Required("name", default="Wärmepumpe"): selector.TextSelector(),
-        vol.Required("preset"): selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=_preset_optionen(),
-                mode=selector.SelectSelectorMode.DROPDOWN,
-            )
-        ),
-        vol.Required("vorlauf_temp"): _entity(device_class="temperature"),
-        vol.Required("ruecklauf_temp"): _entity(device_class="temperature"),
-        vol.Required("leistung_elektrisch"): _entity(device_class="power"),
-        vol.Required("aussentemperatur"): _entity(device_class="temperature"),
-        # Optional, und das ist kein Zugeständnis: an vielen Anlagen ist der
-        # Volumenstrom schlicht nicht auslesbar. Ohne ihn tritt der
-        # Nennvolumenstrom des Presets ein, der COP ist geschätzt statt
-        # gemessen, und die Datenbasis wird entsprechend gedeckelt.
-        # Ohne device_class, weil ein Volumenstrom in HA keine trägt — die
-        # Einheit wird aus `unit_of_measurement` gelesen, nie geraten.
-        vol.Optional("durchfluss"): _entity(["sensor", "input_number"]),
-        vol.Optional("verdichter_frequenz"): _entity(["sensor"]),
-        vol.Optional("betriebsart"): _entity(["sensor", "climate", "select"]),
-        vol.Optional("warmwasser_aktiv"): _entity(
-            ["binary_sensor", "switch", "input_boolean"]
-        ),
-        vol.Required("standby_w", default=0): _number(0, 1000, "W", 1),
-        vol.Required(
-            "durchfluss_nominal_lh", default=0
-        ): _number(0, 10000, "l/h", 10),
-    }
-)
-
-
-
-def _halbjahr_versetzt(monat: int) -> int:
-    """Denselben Monat auf der anderen Halbkugel: plus sechs, mit Umlauf."""
-    return (monat + 5) % 12 + 1
-
-
-def _rollen_vorgaben(hass, role: str) -> dict:
-    """Vorbelegung eines Rollen-Formulars, die vom Standort abhängt.
-
-    Bisher genau eine: die Sommersperre des Heizkreises. Die Vorgaben Mai bis
-    September sind die Nordhalbkugel — auf der Südhalbkugel wären sie genau
-    die Heizmonate, und HEMS empfähle im Winter nie Heizen. Die Sperre selbst
-    kann den Jahreswechsel längst überspannen (`heat_lock_from_month` größer
-    als `..._to_month`); es war nur die Vorbelegung, die eine Halbkugel
-    unterstellte.
-
-    Vorbelegung und nicht Automatik: Wer auf der Südhalbkugel wohnt, sieht im
-    Formular November bis März stehen und kann es ändern. Ein Wert, den HEMS
-    hinter dem Formular still umrechnet, wäre nicht mehr nachvollziehbar.
-    """
-    if role != ROLE_HEATING:
-        return {}
-    breite = getattr(hass.config, "latitude", None)
-    if breite is None or breite >= 0:
-        return {}
-    return {
-        "heat_lock_from_month": _halbjahr_versetzt(DEFAULT_HEAT_LOCK_FROM),
-        "heat_lock_to_month": _halbjahr_versetzt(DEFAULT_HEAT_LOCK_TO),
-    }
-
-
 ROLE_SCHEMAS = {
     ROLE_FORECAST: FORECAST_SCHEMA,
     ROLE_STORAGE: STORAGE_SCHEMA,
     ROLE_THERMAL: THERMAL_SCHEMA,
-    ROLE_HEATING: HEATING_SCHEMA,
     ROLE_SWITCHABLE: SWITCHABLE_SCHEMA,
     ROLE_MODULATED: MODULATED_SCHEMA,
-    ROLE_ANALYSIS: ANALYSIS_SCHEMA,
 }
 
 # Onboarding-Assistent: Reihenfolge der Kategorie-Schritte
 WIZARD_MENUS = {
     ROLE_FORECAST: ("forecast_menu", "add_forecast", "storage_menu"),
     ROLE_STORAGE: ("storage_menu", "add_storage", "thermal_menu"),
-    ROLE_THERMAL: ("thermal_menu", "add_thermal", "heating_menu"),
-    ROLE_HEATING: ("heating_menu", "add_heating", "switchable_menu"),
+    ROLE_THERMAL: ("thermal_menu", "add_thermal", "switchable_menu"),
     ROLE_SWITCHABLE: ("switchable_menu", "add_switchable", "modulated_menu"),
-    ROLE_MODULATED: ("modulated_menu", "add_modulated", "analysis_menu"),
-    ROLE_ANALYSIS: ("analysis_menu", "add_analysis", "finish"),
+    ROLE_MODULATED: ("modulated_menu", "add_modulated", "finish"),
 }
 
 EDIT_STEPS = {
     ROLE_FORECAST: "edit_forecast",
     ROLE_STORAGE: "edit_storage",
     ROLE_THERMAL: "edit_thermal",
-    ROLE_HEATING: "edit_heating",
     ROLE_SWITCHABLE: "edit_switchable",
     ROLE_MODULATED: "edit_modulated",
-    ROLE_ANALYSIS: "edit_analysis",
 }
 
 # Zähler, Grundlasten und Prioritäten: identisch bei Einrichtung und Grundwerten
@@ -452,8 +250,9 @@ GENERAL_SCHEMA = vol.Schema(
 
 
 class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    # 2: schaltbare Lasten kennen `heat_coupled` (siehe async_migrate_entry).
-    VERSION = 2
+    # 2: schaltbare Lasten kennen `heat_coupled`.
+    # 3: Heizkreis und Wärmepumpen-Analyse entfallen (siehe async_migrate_entry).
+    VERSION = 3
 
     def __init__(self) -> None:
         self._general: dict = {}
@@ -487,17 +286,11 @@ class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_thermal_menu(self, user_input=None):
         return self._wizard_menu(ROLE_THERMAL)
 
-    async def async_step_heating_menu(self, user_input=None):
-        return self._wizard_menu(ROLE_HEATING)
-
     async def async_step_switchable_menu(self, user_input=None):
         return self._wizard_menu(ROLE_SWITCHABLE)
 
     async def async_step_modulated_menu(self, user_input=None):
         return self._wizard_menu(ROLE_MODULATED)
-
-    async def async_step_analysis_menu(self, user_input=None):
-        return self._wizard_menu(ROLE_ANALYSIS)
 
     async def _async_add_step(self, role: str, step_id: str, user_input):
         if user_input is not None:
@@ -505,9 +298,7 @@ class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self._wizard_menu(role)
         return self.async_show_form(
             step_id=step_id,
-            data_schema=self.add_suggested_values_to_schema(
-                ROLE_SCHEMAS[role], _rollen_vorgaben(self.hass, role)
-            ),
+            data_schema=ROLE_SCHEMAS[role],
         )
 
     async def async_step_add_forecast(self, user_input=None):
@@ -519,17 +310,11 @@ class HemsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_add_thermal(self, user_input=None):
         return await self._async_add_step(ROLE_THERMAL, "add_thermal", user_input)
 
-    async def async_step_add_heating(self, user_input=None):
-        return await self._async_add_step(ROLE_HEATING, "add_heating", user_input)
-
     async def async_step_add_switchable(self, user_input=None):
         return await self._async_add_step(ROLE_SWITCHABLE, "add_switchable", user_input)
 
     async def async_step_add_modulated(self, user_input=None):
         return await self._async_add_step(ROLE_MODULATED, "add_modulated", user_input)
-
-    async def async_step_add_analysis(self, user_input=None):
-        return await self._async_add_step(ROLE_ANALYSIS, "add_analysis", user_input)
 
     async def async_step_finish(self, user_input=None):
         return self.async_create_entry(
@@ -554,10 +339,8 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
                 "add_forecast",
                 "add_storage",
                 "add_thermal",
-                "add_heating",
                 "add_switchable",
                 "add_modulated",
-                "add_analysis",
                 "edit_device",
                 "remove_device",
                 "general",
@@ -600,9 +383,7 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
             return self._save_devices(devices)
         return self.async_show_form(
             step_id=step_id,
-            data_schema=self.add_suggested_values_to_schema(
-                ROLE_SCHEMAS[role], _rollen_vorgaben(self.hass, role)
-            ),
+            data_schema=ROLE_SCHEMAS[role],
         )
 
     async def async_step_add_forecast(self, user_input=None):
@@ -614,17 +395,11 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_add_thermal(self, user_input=None):
         return await self._async_add_step(ROLE_THERMAL, "add_thermal", user_input)
 
-    async def async_step_add_heating(self, user_input=None):
-        return await self._async_add_step(ROLE_HEATING, "add_heating", user_input)
-
     async def async_step_add_switchable(self, user_input=None):
         return await self._async_add_step(ROLE_SWITCHABLE, "add_switchable", user_input)
 
     async def async_step_add_modulated(self, user_input=None):
         return await self._async_add_step(ROLE_MODULATED, "add_modulated", user_input)
-
-    async def async_step_add_analysis(self, user_input=None):
-        return await self._async_add_step(ROLE_ANALYSIS, "add_analysis", user_input)
 
     # -- Geräte bearbeiten -------------------------------------------------
 
@@ -670,9 +445,6 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_edit_thermal(self, user_input=None):
         return await self._async_edit_step(ROLE_THERMAL, "edit_thermal", user_input)
 
-    async def async_step_edit_heating(self, user_input=None):
-        return await self._async_edit_step(ROLE_HEATING, "edit_heating", user_input)
-
     async def async_step_edit_switchable(self, user_input=None):
         return await self._async_edit_step(
             ROLE_SWITCHABLE, "edit_switchable", user_input
@@ -682,9 +454,6 @@ class HemsOptionsFlow(config_entries.OptionsFlow):
         return await self._async_edit_step(
             ROLE_MODULATED, "edit_modulated", user_input
         )
-
-    async def async_step_edit_analysis(self, user_input=None):
-        return await self._async_edit_step(ROLE_ANALYSIS, "edit_analysis", user_input)
 
     # -- Entfernen und Grundwerte ------------------------------------------
 

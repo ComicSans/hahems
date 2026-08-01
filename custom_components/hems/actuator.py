@@ -16,20 +16,18 @@ Prinzipien (wie die Referenz-Automationen):
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .actuation import plan_heating_control, plan_ww_action
+from .actuation import plan_ww_action
 from .models import DeviceRegistry
 from .strategies.types import PlanResult
 
 _LOGGER = logging.getLogger(__name__)
 
 # HEMS-Modus (deutsch) → Home-Assistant climate hvac_mode und zurück.
-_HVAC = {"heizen": "heat", "kuehlen": "cool", "aus": "off"}
-_HVAC_REVERSE = {v: k for k, v in _HVAC.items()}
 
 # Warmwasser: Mindestlaufzeit vor dem Abschalten (gegen Takten), wie in der
 # abgelösten WW-Automation. Der Warmup nach dem Einschalten ergibt sich von
@@ -46,31 +44,19 @@ _EPS = 1.0
 # Drossel spammt das jede Minute dieselbe Fehlermeldung ins HA-Log.
 _CALL_THROTTLE = timedelta(minutes=5)
 
-# Frist, nach der ein geschriebener Heizkreis-Modus im Ist-Zustand angekommen
-# sein muss. Zwei Planläufe (60 s) plus Abfragezyklus des Geräts — kürzer wäre
-# jeder reguläre Moduswechsel kurz eine „Nicht-Übernahme", denn die
-# Service-Aufrufe laufen unblockierend und der Ist-Wert hängt am Gerätetakt.
-MODUS_QUITTUNG_FRIST = timedelta(minutes=2)
-
-
 class Actuator:
     """Schaltet die Empfehlung im Auto-Modus auf die konfigurierten Geräte."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
         self._last_call: dict[tuple, object] = {}
-        # Steuer-Entity → (zuletzt geschriebener Heizkreis-Modus, Zeitpunkt).
-        # Nur was tatsächlich rausging, siehe _apply_wp. Nach einem Neustart
-        # leer: dann verhält sich die Aktuierung wie vor dieser Buchführung.
-        self._last_mode: dict[str, tuple[str, datetime]] = {}
 
     async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
-        """Reihenfolge WW → WP → Akku → modulierbare Lasten. Jedes Gerät
+        """Reihenfolge WW → Akku → modulierbare Lasten. Jedes Gerät
         gekapselt. Die Zwangsladung ist bereits in der Empfehlung kodiert
         (plan.ev_regelung.zwang → jede Last läuft, mit dem dort berechneten
         Sollstrom zwischen Unter- und Obergrenze)."""
         await self._guard(self._apply_ww, reg, plan, name="Warmwasser")
-        await self._guard(self._apply_wp, reg, plan, name="Wärmepumpe")
         await self._guard(self._apply_battery, reg, plan, name="Speicher")
         await self._guard(self._apply_modulated, reg, plan, name="Lasten")
         await self._guard(self._apply_switchable, reg, plan, name="Schaltlasten")
@@ -78,7 +64,7 @@ class Actuator:
     async def release_battery(self, reg: DeviceRegistry) -> None:
         """Akku-Setpoints einmalig auf 0/0 (passiv) setzen — beim Verlassen des
         Auto-Modus, damit der Speicher nicht mit der zuletzt kommandierten Rate
-        blind weiterläuft. WW/WP/EV bleiben unangetastet (ein Sollwert ist
+        blind weiterläuft. WW/EV bleiben unangetastet (ein Sollwert ist
         ungefährlich); ihre letzte Einstellung übernimmt der Nutzer."""
         for s in reg.storages:
             try:
@@ -113,12 +99,7 @@ class Actuator:
             return None
 
     async def _call(self, domain: str, service: str, entity: str, **data) -> bool:
-        """Service aufrufen; ``False``, wenn die Drossel den Aufruf verworfen hat.
-
-        Der Rückgabewert zählt dort, wo HEMS sich merkt, was es geschrieben hat
-        (Heizkreis-Modus): ein gedrosselter Aufruf ging nicht raus und darf
-        nicht als geschrieben gebucht werden.
-        """
+        """Service aufrufen; ``False``, wenn die Drossel den Aufruf verworfen hat."""
         key = (domain, service, entity, tuple(sorted(data.items())))
         now = dt_util.utcnow()
         last = self._last_call.get(key)
@@ -207,138 +188,6 @@ class Actuator:
 
     def _age(self, state) -> timedelta:
         return dt_util.utcnow() - state.last_changed
-
-    # --- Wärmepumpe ---------------------------------------------------------
-
-    def _heating_mode_options(self, h) -> dict[str, str]:
-        """Kanonischer Modus → konfigurierte Select-Option (nur die gesetzten)."""
-        return {
-            mode: opt
-            for mode, opt in (
-                ("heizen", h.mode_heat_option),
-                ("kuehlen", h.mode_cool_option),
-                ("aus", h.mode_off_option),
-            )
-            if opt
-        }
-
-    def _quittierter_modus(self, entity: str) -> str | None:
-        """Zuletzt geschriebener Modus, sobald er angekommen sein müsste.
-
-        Die Frist und nicht „ein Messwert, der nach dem Schreiben aufgenommen
-        wurde": Ein Steuer-Entity, das den Befehl schlicht ignoriert, ändert
-        seinen Zustand nicht — und ein unveränderter Zustand wird auch nicht neu
-        veröffentlicht. Die Bedingung „es gab seither ein Update" wäre also genau
-        in dem Fall nie erfüllt, den sie sichtbar machen soll. Die Frist deckt
-        beide Lagen ab: den zurückfallenden Wert und den, der nie kommt.
-        """
-        letzter = self._last_mode.get(entity)
-        if letzter is None:
-            return None
-        modus, geschrieben_am = letzter
-        if dt_util.utcnow() - geschrieben_am < MODUS_QUITTUNG_FRIST:
-            return None
-        return modus
-
-    async def _apply_wp(self, reg: DeviceRegistry, plan: PlanResult) -> None:
-        """Ist-Modus/-Sollwert lesen, Entscheidung an die HA-freie
-        ``plan_heating_control`` delegieren, domain-abhängig stellen. climate
-        trägt Modus + Vorlauf-Soll selbst; ein Modus-Select trägt nur den Modus,
-        der Vorlauf-Soll läuft dann über setpoint_entity (Number)."""
-        if not reg.heatings or plan.heizung is None:
-            return
-        h = reg.heatings[0]
-        ent = h.control_entity
-        if not ent:
-            return
-        domain = ent.split(".")[0]
-        st = self._state(ent)
-        if st in (None, "unavailable", "unknown"):
-            return
-        if plan.heizung.modus not in ("heizen", "kuehlen", "aus"):
-            # "unbekannt" → nichts anfassen (auch nicht Silent/Saison).
-            return
-
-        if domain == "climate":
-            current_mode = _HVAC_REVERSE.get(st)
-            current_setpoint = self._num_attr(ent, "temperature")
-            mode_options: dict[str, str] = {}
-        else:
-            mode_options = self._heating_mode_options(h)
-            current_mode = {opt: mode for mode, opt in mode_options.items()}.get(st)
-            current_setpoint = self._num_state(h.setpoint_entity)
-
-        hp = plan_heating_control(
-            modus=plan.heizung.modus,
-            vlt_ziel_c=plan.heizung.vlt_ziel_c,
-            current_mode=current_mode,
-            current_setpoint=current_setpoint,
-            ww_bereitung=plan.heizung.ww_bereitung,
-            last_written_mode=self._quittierter_modus(ent),
-        )
-        # Beobachtung aus der Aktuierung zurück in die Empfehlung: Sensor und
-        # Entscheidungs-Log hängen an `plan.heizung`, und der Coordinator liest
-        # beides erst nach diesem Aufruf. Das ist derselbe Weg, den die
-        # Rückmeldung an die Wärmepumpen-Analyse nimmt.
-        plan.heizung.modus_nicht_uebernommen = hp.modus_nicht_uebernommen
-        if hp.modus_nicht_uebernommen:
-            _LOGGER.warning(
-                "HEMS-Actuator: %s hat den Modus '%s' nicht übernommen "
-                "(zeigt weiter '%s') — HEMS schreibt erneut",
-                ent,
-                plan.heizung.modus,
-                current_mode,
-            )
-
-        if hp.set_mode is not None:
-            geschrieben = False
-            if domain == "climate":
-                geschrieben = await self._call(
-                    "climate", "set_hvac_mode", ent, hvac_mode=_HVAC[hp.set_mode]
-                )
-            else:
-                # Ohne konfigurierte Option lässt sich der Modus nicht stellen.
-                option = mode_options.get(hp.set_mode)
-                if option:
-                    geschrieben = await self._call(
-                        domain, "select_option", ent, option=option
-                    )
-            # Nur buchen, was tatsächlich rausging: ein gedrosselter oder mangels
-            # Option unterbliebener Aufruf darf weder den einmaligen Rückweg
-            # verbrauchen noch eine Nicht-Übernahme melden, die niemand geschrieben hat.
-            if geschrieben:
-                self._last_mode[ent] = (hp.set_mode, dt_util.utcnow())
-
-        if hp.set_setpoint is not None:
-            if domain == "climate":
-                await self._call(
-                    "climate", "set_temperature", ent, temperature=int(hp.set_setpoint)
-                )
-            else:
-                await self._set_number(h.setpoint_entity, hp.set_setpoint)
-
-        # Flüsterbetrieb und Saison-Select laufen auch während einer
-        # Warmwasserladung weiter: Das Gate oben schützt Modus und Vorlauf-Soll,
-        # um die es beim Schreib-Pingpong geht. Der Flüsterschalter ist eine
-        # Geräusch-Einstellung und der Saison-Select nur Statistik, und beide
-        # bewegt die Anlage während der Ladung nicht, also gibt es hier nichts,
-        # wogegen HEMS anschreiben könnte.
-        # Flüsterbetrieb (optional): folgt der Empfehlung mit eigener Hysterese.
-        if h.silent_switch_entity and plan.heizung.leise_empfohlen is not None:
-            await self._turn(h.silent_switch_entity, plan.heizung.leise_empfohlen)
-
-        # Saison-Statistik-Richtung (optional): heizen/kuehlen/aus. select_option
-        # auf der echten Domain des Entitys — season_select_entity darf ein
-        # `select` oder ein `input_select` sein (beide bieten select_option); der
-        # feste "input_select"-Aufruf schlug auf einem `select` lautlos fehl.
-        if h.season_select_entity and plan.heizung.modus in ("heizen", "kuehlen", "aus"):
-            if self._state(h.season_select_entity) != plan.heizung.modus:
-                await self._call(
-                    h.season_select_entity.split(".")[0],
-                    "select_option",
-                    h.season_select_entity,
-                    option=plan.heizung.modus,
-                )
 
     # --- Speicher (Akku) ----------------------------------------------------
 

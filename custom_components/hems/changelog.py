@@ -42,7 +42,6 @@ _WARMWASSER_LABEL = {
     "pv_boost": "PV-Boost",
     "basis": "Basis",
 }
-_WAERMEPUMPE_LABEL = {"heizen": "heizen", "kuehlen": "kühlen", "aus": "aus", "unbekannt": "unbekannt"}
 
 # key → (Titel, Kategorie). Reihenfolge bestimmt die Ausgabe je Zyklus.
 _DECISION_FIELDS: dict[str, tuple[str, str]] = {
@@ -53,9 +52,6 @@ _DECISION_FIELDS: dict[str, tuple[str, str]] = {
     "akku_reserve": ("Akku-Kaltreserve", "akku"),
     "warmwasser_status": ("Warmwasser", "ww"),
     "warmwasser_soll": ("Warmwasser-Sollwert", "ww"),
-    "waermepumpe_modus": ("Wärmepumpe", "wp"),
-    "waermepumpe_vlt": ("Wärmepumpen-Vorlauf", "wp"),
-    "waermepumpe_quittung": ("Wärmepumpen-Modus gestellt", "wp"),
 }
 
 
@@ -94,25 +90,6 @@ def decision_snapshot(mode: str, goal: str, ev_force: bool, plan: Any) -> dict:
     if getattr(plan, "warmwasser_soll_c", None) is not None:
         soll = round(plan.warmwasser_soll_c)
         snap["warmwasser_soll"] = (soll, f"{soll} °C")
-
-    heiz = getattr(plan, "heizung", None)
-    if heiz is not None:
-        disp = _WAERMEPUMPE_LABEL.get(heiz.modus, heiz.modus)
-        if getattr(heiz, "frostschutz", False):
-            disp = f"{disp} (Frostschutz)"
-        snap["waermepumpe_modus"] = (heiz.modus, disp)
-        if heiz.vlt_ziel_c is not None:
-            vlt = round(heiz.vlt_ziel_c)
-            snap["waermepumpe_vlt"] = (vlt, f"{vlt} °C")
-        # Beide Lagen ins Snapshot, nicht nur die schlechte: `diff_snapshots`
-        # schreibt ohnehin nur Änderungen, und ohne den guten Wert gäbe es zur
-        # Meldung nie eine Entwarnung — der Log behielte einen Fehlerstand, den
-        # es längst nicht mehr gibt.
-        quittiert = not getattr(heiz, "modus_nicht_uebernommen", False)
-        snap["waermepumpe_quittung"] = (
-            quittiert,
-            "angekommen" if quittiert else "Anlage übernimmt den Modus nicht",
-        )
 
     # Die Wallbox-Sofortladung wird bewusst nicht separat geführt: sie folgt
     # 1:1 dem Nutzer-Schalter „E-Auto Zwangsladung" (ev_force) und würde je

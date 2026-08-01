@@ -2,11 +2,9 @@
 
 Ein Feld, das die Fachlogik entbehren kann, im Dialog aber als Pflicht steht,
 sperrt jemanden aus, der es nicht liefern kann — und zwar ohne
-Fehlermeldung, weil das Formular sich einfach nicht abschicken lässt. Genau
-so ist `durchfluss` der Wärmepumpen-Analyse einmal zur Pflicht geworden: die
-Analyse fällt ohne ihn auf den Nennvolumenstrom des Presets zurück, an vielen
-Anlagen ist der Volumenstrom gar nicht auslesbar, und der Dialog hätte diese
-Anlagen ausgeschlossen.
+Fehlermeldung, weil das Formular sich einfach nicht abschicken lässt. Genau so
+ist einmal ein Messeingang zur Pflicht geworden, für den die Fachlogik längst
+einen Rückfallwert hatte.
 
 Umgekehrt genauso: ein Feld ohne Vorgabewert im Modell, das im Dialog optional
 ist, lässt `parse_devices` beim Anlegen mit einem `TypeError` scheitern.
@@ -125,19 +123,6 @@ def test_jedes_pflichtfeld_des_modells_steht_im_formular(rolle: str) -> None:
         f"{rolle}: ohne Vorgabewert und nicht im Formular: "
         f"{sorted(pflicht - set(FELDER[rolle]))}"
     )
-
-
-def test_der_durchfluss_bleibt_optional() -> None:
-    """Der Fall, der diese Datei ausgelöst hat.
-
-    Die Analyse fällt ohne Volumenstromzähler auf den Nennvolumenstrom des
-    Presets zurück und meldet `durchfluss_geschaetzt`. An vielen Anlagen — auch
-    an der Referenzinstallation — ist der Volumenstrom über die Anbindung gar
-    nicht erreichbar. Pflicht im Formular hätte sie ausgeschlossen.
-    """
-    assert FELDER["ROLE_ANALYSIS"]["durchfluss"] is False
-    feld = models.HeatPumpAnalysis.__dataclass_fields__["durchfluss"]
-    assert not _ohne_vorgabe(feld)
 
 
 def _ohne_vorgabe(feld) -> bool:

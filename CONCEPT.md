@@ -20,15 +20,14 @@ und kein Argument. Bei dynamischen Tarifen kippt diese Abwägung; dann wäre die
 Entscheidung neu zu treffen.
 
 **Rollen statt Geräte.** Im Code steht keine einzige Entity-ID. Konfiguriert
-werden Rollen — Speicher, Heizkreis, modulierbare Last — und ihnen werden
+werden Rollen — Speicher, Warmwasser, modulierbare Last — und ihnen werden
 Entities zugewiesen. Damit funktioniert HEMS mit jedem Fabrikat, dessen Werte
 in Home Assistant ankommen, und ein weiteres Gerät ist eine weitere
 Rolleninstanz statt eines Codepfads.
 
-**Fachlogik ohne Home Assistant.** Alles unter `strategies/` und
-`waermepumpe/analysis/` kommt mit der Standardbibliothek aus. Das ist der
-Grund, warum die Testsuite ohne HA-Installation in gut einer Sekunde
-durchläuft — und deshalb jede Regel einzeln prüft, statt sich auf eine
+**Fachlogik ohne Home Assistant.** Alles unter `strategies/` kommt mit der
+Standardbibliothek aus. Das ist der Grund, warum die Testsuite ohne
+HA-Installation in gut einer Sekunde durchläuft — und deshalb jede Regel einzeln prüft, statt sich auf eine
 Handvoll Rauchtests zu beschränken.
 
 **Denken, messen und schalten sind getrennt.** `select.hems_modus` trennt
@@ -38,13 +37,11 @@ irgendetwas geschaltet wird.
 
 **Nie zwei Schreiber auf einem Sollwert.** Der Actuator schreibt nur auf
 konfigurierte Steuer-Entities, nur bei Wertänderung, nie auf eine fehlende
-Empfehlung, und isoliert Fehler je Gerät. Die Wärmepumpen-Analyse hat gar
-keinen Schreibpfad — geprüft von `tests/waermepumpe/test_architektur.py`,
-nicht nur zugesagt.
+Empfehlung, und isoliert Fehler je Gerät.
 
 **Jede Ja-Nein-Entscheidung hat zwei Schwellen.** Eine einzelne Schwelle lässt
-die Entscheidung um sich herum flattern; an einer Wärmepumpe hieße das Ein und
-Aus in jedem Abfragetakt. `_latch` in `strategies/types.py` ist ein
+die Entscheidung um sich herum flattern; an einer schaltbaren Last hieße das
+Ein und Aus in jedem Abfragetakt. `_latch` in `strategies/types.py` ist ein
 Schmitt-Trigger, und die Konstanten kommen paarweise.
 
 ## Rollenmodell
@@ -58,10 +55,8 @@ der Zähler.
 | PV-Prognose | 0..n | je eine Dachfläche oder Ausrichtung |
 | Speicher | 0..n | SoC, Kapazität, Reserve, Lade- und Entladegrenzen, Sollwert-Entities |
 | Warmwasser | 0..n | Temperatur, Basis- und Komfort-Soll, Sperrzeiten, Legionellenschutz |
-| Heizkreis | 0..n | witterungsgeführte Modus- und Vorlaufempfehlung |
-| Schaltbare Last | 0..n | An/Aus mit Taktschutz |
+| Schaltbare Last | 0..n | An/Aus mit Mindestlauf- und Mindestpausenzeit |
 | Modulierbare Last | 0..n | stufenlos regelbar, etwa eine Wallbox |
-| Wärmepumpen-Analyse | 0..n | misst Effizienz, schreibt nie |
 
 Mehrere Speicher werden zu einem virtuellen Gesamtspeicher aggregiert;
 Sollwerte verteilt der Regler proportional zu freier Kapazität und Leistung.
@@ -74,9 +69,6 @@ custom_components/hems/
   coordinator.py    liest Entities, ruft den Planner, ruft den Actuator
   planner.py        rollierender Plan, reine Funktion
   strategies/       die Fachlogik, frei von Home Assistant
-  waermepumpe/      Effizienzanalyse
-    analysis/       ebenfalls HA-frei, ohne jeden Schreibpfad
-    presets/        Gerätekennlinien als JSON
   actuator.py       der einzige Ort, an dem geschrieben wird
   frontend/         Panel und zwei Lovelace-Karten
 ```
@@ -90,7 +82,9 @@ jede Regel gegen einen konstruierten Zustand prüfen, ohne eine Anlage.
 Lastprofil gerechnet. Primärquelle ist der rekonstruierte Hausverbrauch, aus
 dem ein 24-Stunden-Profil je Wochentagstyp entsteht; fällt die Historie noch
 aus, greift das Nachtprofil aus dem rohen Zähler, zuletzt die konfigurierte
-Grundlast. HEMS rechnet **keine eigene PV-Prognose** — dafür gibt es
+Grundlast. Wärmeerzeuger stecken implizit im Profil und werden nicht getrennt
+modelliert — der Bedarf folgt damit dem Mittel der letzten Wochen und nicht
+dem Wetter. HEMS rechnet **keine eigene PV-Prognose** — dafür gibt es
 Integrationen, die es besser können.
 
 **Plan.** Rollierend in 15-Minuten-Schritten über 24 bis 48 Stunden. Je Slot:
@@ -113,21 +107,6 @@ und möglichst wenig Zeit bei 100 % verbringt.
 zuerst der Ladestrom heruntergeregelt, erst danach hilft der Akku. Sonst
 finanzierte der Speicher das Laden.
 
-**Der Taktschutz senkt die Startrate, nicht die Taktlänge.** Reißt die
-Startzahl im rollierenden Fenster die Schwelle, empfiehlt HEMS eine
-Zwangspause — die Anlage bekommt eine echte Ruhephase statt der vier Minuten
-ihrer eigenen Wiederanlaufsperre. Der einzelne Takt wird davon nicht länger.
-
-**Die Taupunkt-Untergrenze im Kühlbetrieb hebt an, sie senkt nie.** An einer
-Flächenkühlung schlägt sich Wasser nieder, sobald die Oberfläche den Taupunkt
-unterschreitet. Die Vorlauftemperatur ist dabei nicht die
-Oberflächentemperatur — deshalb ein konfigurierbarer Sicherheitsabstand und
-keine Grenze exakt auf dem Taupunkt.
-
-**Die Kurvenübernahme ist dreifach gebremst.** Siehe
-[docs/waermepumpen-analyse.md](docs/waermepumpen-analyse.md): Die Empfehlung
-entsteht aus Betrieb, den HEMS mit der vorigen Empfehlung selbst erzeugt hat.
-
 ## Was bewusst fehlt
 
 - **Eigene PV-Prognose.** Siehe oben.
@@ -138,6 +117,10 @@ entsteht aus Betrieb, den HEMS mit der vorigen Empfehlung selbst erzeugt hat.
   das; eine Kopie davon wäre eine zweite Wahrheit.
 - **Automatische Erkennung von Geräten.** Welche Entity welche Rolle spielt,
   weiß nur, wer die Anlage kennt. Geraten wäre schlimmer als gefragt.
+- **Steuerung und Analyse von Wärmeerzeugern.** War einmal da und ist mit
+  Version 3 gegangen: HEMS konzentriert sich auf das Akku-Management, und ein
+  witterungsgeführter Heizkreis ist eine eigene Disziplin mit eigener
+  Sensorik. Eine Wärmepumpe lässt sich weiter als schaltbare Last führen.
 
 ## Standortannahmen
 
@@ -150,11 +133,15 @@ und ändern lässt sie sich immer.
 
 ## Stand
 
-Beobachten, Warmwasser, Speicher, Lasten, Heizkreis und die
-Wärmepumpen-Analyse sind gebaut und laufen. Offen ist ein Simulationsdienst,
-der die Vergangenheit mit virtuellen Speichergrößen durchrechnet
-(Autarkiegrad, Eigenverbrauchsquote, vermiedener Netzbezug) — die Rechenkerne
-dafür stehen in `tests/simulate.py`, ein Dienst darum herum nicht.
+Beobachten, Warmwasser, Speicher und Lasten sind gebaut und laufen. Offen ist
+ein Simulationsdienst, der die Vergangenheit mit virtuellen Speichergrößen
+durchrechnet (Autarkiegrad, Eigenverbrauchsquote, vermiedener Netzbezug) — die
+Rechenkerne dafür stehen in `tests/simulate.py`, ein Dienst darum herum nicht.
+
+Mit Version 3 sind die Rollen **Heizkreis** und **Wärmepumpen-Analyse**
+entfallen. HEMS steuert keine Wärmeerzeuger mehr und misst ihre Effizienz
+nicht; eine Wärmepumpe bleibt als schaltbare Last regelbar. Was das für die
+Bedarfsprognose bedeutet, steht oben unter „Prognose".
 
 ## Referenzinstallation
 
@@ -171,7 +158,5 @@ alles andere aus dem Rollenmodell folgt, nicht aus Erfahrung.
 - Hauptzähler-Leistung nach OBIS 16.7.0 als einzige Regelgröße
 - fester Strompreis
 
-Was daran nicht repräsentativ ist: Der Wasserdurchfluss der Wärmepumpe ist
-über Modbus nicht erreichbar, ein COP lässt sich an dieser Anlage also nicht
-rechnen. Die Wärmepumpen-Analyse braucht dafür einen eigenen
-Volumenstromsensor.
+Die Wärmepumpe läuft dort als schaltbare Last mit Leistungsmessung; ihre
+Vorlauf- und Modussteuerung liegt außerhalb von HEMS.

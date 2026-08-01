@@ -204,113 +204,6 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
         else:
             c.info.append(f"{ctx}: kein Steuer-Entity — nur Beobachtung")
 
-    # --- Heizkreis (Wärmepumpe) --------------------------------------------
-    for h in reg.heatings:
-        ctx = f"Heizkreis '{h.name}'"
-        # Warmwasser-Rückmeldung: reine Leserolle, deshalb kein _need: sie
-        # gehört nicht in den Overlap-Scan (eine Automation, die darauf
-        # schreibt, ist kein Konflikt mit HEMS). Antwortet sie nicht, setzt
-        # HEMS die Heizkreis-Regelung während der Ladung nicht mehr aus; das
-        # ist eine Warnung wert, aber kein Fehler; ohne die Rolle lief HEMS
-        # vorher genauso.
-        if h.dhw_active_entity and not _exists(hass, h.dhw_active_entity):
-            c.warnings.append(
-                f"{ctx}: Warmwasser-Rückmeldung {h.dhw_active_entity} existiert "
-                f"nicht: HEMS erkennt laufende Speicherladungen nicht und "
-                f"stellt den Heizkreis auch währenddessen"
-            )
-        # Verdichter-Rückmeldung: ebenfalls reine Leserolle. Fehlt sie, zählt
-        # HEMS keine Starts und legt nie eine Zwangspause ein.
-        if h.compressor_entity and not _exists(hass, h.compressor_entity):
-            c.warnings.append(
-                f"{ctx}: Verdichter-Rückmeldung {h.compressor_entity} existiert "
-                f"nicht: der Taktschutz zählt keine Starts und pausiert nie"
-            )
-        # Raumklima für die Taupunkt-Untergrenze: ebenfalls reine Leserollen.
-        # Beide gehören zusammen — mit nur einer von beiden gibt es keinen
-        # Taupunkt, und die Grenze bleibt still aus. Das ist die Sorte Fehler,
-        # die man in der Konfiguration nicht sieht.
-        for entity, label in (
-            (h.room_temp_entity, "Raumtemperatur"),
-            (h.room_humidity_entity, "Raumfeuchte"),
-        ):
-            if entity and not _exists(hass, entity):
-                c.warnings.append(
-                    f"{ctx}: {label} {entity} existiert nicht: der Kühl-Vorlauf "
-                    f"wird nicht mehr gegen den Taupunkt begrenzt"
-                )
-        if bool(h.room_temp_entity) != bool(h.room_humidity_entity):
-            c.warnings.append(
-                f"{ctx}: nur eine der beiden Raumklima-Rollen gesetzt — der "
-                f"Taupunkt braucht Temperatur und Feuchte, die Untergrenze für "
-                f"den Kühl-Vorlauf bleibt aus"
-            )
-        if h.control_entity:
-            _mark("Wärmepumpe")
-            _need(
-                h.control_entity,
-                ("climate", "select", "input_select"),
-                ctx,
-                "Steuer-Entity",
-            )
-            if _domain(h.control_entity) in ("select", "input_select"):
-                # Select-Steuerung: der Vorlauf-Soll läuft über eine Number, und
-                # HEMS muss wissen, welche Select-Optionen heizen/aus bedeuten.
-                _need(
-                    h.setpoint_entity,
-                    ("number", "input_number"),
-                    ctx,
-                    "Vorlauf-Sollwert-Number",
-                )
-                if not (h.mode_heat_option and h.mode_off_option):
-                    c.errors.append(
-                        f"{ctx}: Modus-Select ohne mode_heat_option/"
-                        f"mode_off_option — HEMS kann heizen/aus nicht stellen"
-                    )
-                # Freitext-Falle: die Optionen müssen exakt echten Optionen des
-                # Select entsprechen, sonst schlägt select_option lautlos fehl
-                # (wie beim Speicher-Richtungs-Select).
-                ce_state = hass.states.get(h.control_entity)
-                options = ce_state.attributes.get("options") if ce_state else None
-                if options is not None:
-                    for opt, label in (
-                        (h.mode_heat_option, "mode_heat_option"),
-                        (h.mode_cool_option, "mode_cool_option"),
-                        (h.mode_off_option, "mode_off_option"),
-                    ):
-                        if opt and opt not in options:
-                            c.errors.append(
-                                f"{ctx}: {label} '{opt}' ist keine gültige Option "
-                                f"von {h.control_entity} "
-                                f"(verfügbar: {', '.join(options)})"
-                            )
-            elif (
-                h.setpoint_entity
-                or h.mode_heat_option
-                or h.mode_cool_option
-                or h.mode_off_option
-            ):
-                # climate trägt Modus und Sollwert selbst.
-                c.warnings.append(
-                    f"{ctx}: Vorlauf-Number/Modus-Optionen gesetzt, aber "
-                    f"Steuer-Entity ist ein climate — diese Felder bleiben "
-                    f"ungenutzt"
-                )
-            _need(
-                h.silent_switch_entity,
-                ("switch", "input_boolean"),
-                ctx,
-                "Silent-Schalter",
-            )
-            _need(
-                h.season_select_entity,
-                ("input_select", "select"),
-                ctx,
-                "Saison-Select",
-            )
-        else:
-            c.info.append(f"{ctx}: kein Steuer-Entity — nur Beobachtung")
-
     # --- Schaltbare Lasten --------------------------------------------------
     for s in reg.switchables:
         ctx = f"Schaltbare Last '{s.name}'"
@@ -329,12 +222,6 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
                 f"{ctx}: keine Leistungsmessung — HEMS rechnet dauerhaft mit "
                 f"{DEFAULT_SWITCHABLE_EXPECTED_W:.0f} W und schaltet die Last "
                 f"erst ab so viel Überschuss ein"
-            )
-        if s.heat_coupled and not reg.heatings:
-            c.info.append(
-                f"{ctx}: als heizungsgekoppelt markiert, aber kein Heizkreis "
-                f"konfiguriert — ohne Außentemperatur gibt es kein "
-                f"Verbrauchsmodell"
             )
 
     # --- E-Auto (Modulierbare Last) ----------------------------------------

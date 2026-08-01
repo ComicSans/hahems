@@ -44,12 +44,8 @@ GOALS = (GOAL_SELF_CONSUMPTION, GOAL_ZERO_FEEDIN, GOAL_FULL_CHARGE)
 ROLE_FORECAST = "forecast"
 ROLE_STORAGE = "storage"
 ROLE_THERMAL = "thermal"
-ROLE_HEATING = "heating_circuit"
 ROLE_SWITCHABLE = "switchable_load"
 ROLE_MODULATED = "modulated_load"
-# Wärmepumpen-Analyse: beratend, ohne jeden Schreibpfad. Bis August 2026 die
-# eigenständige Integration `wp_optimization`.
-ROLE_ANALYSIS = "heat_pump_analysis"
 
 MODE_OBSERVE = "beobachten"  # empfehlen + loggen, nicht schalten
 MODE_AUTO = "auto"  # empfehlen + schalten (Actuator aktiv)
@@ -154,94 +150,6 @@ CONTROL_LEAD_POWER_W = 30.0
 STORAGE_DAY_HOLD_SOC = 78.0
 STORAGE_FULL_CHARGE_LEAD_H = 3.0
 
-# Heizkreis: Modus-Schwellen (Außentemperatur, mit Hysterese), Sommersperre
-# fürs Heizen und witterungsgeführte Vorlaufkurve. Die Wärmeanforderung der
-# Räume (0–100 %) hebt die Kurve um bis zu HEATING_DEMAND_SHIFT_K an; ohne
-# Anforderung fällt der Vorlauf auf das Minimum (Absenkbetrieb).
-DEFAULT_HEAT_ON_C = 14
-DEFAULT_HEAT_OFF_C = 17
-DEFAULT_COOL_ON_C = 25
-DEFAULT_COOL_OFF_C = 22
-DEFAULT_HEAT_LOCK_FROM = 5  # Monat, ab dem Heizen gesperrt ist
-DEFAULT_HEAT_LOCK_TO = 9  # ... bis einschließlich
-DEFAULT_CURVE_BASE_C = 38.0  # Vorlauf-Soll bei 0 °C Außentemperatur
-DEFAULT_CURVE_SLOPE = 0.7  # K Vorlauf-Absenkung je K Außentemperatur
-DEFAULT_VLT_MIN_C = 25
-DEFAULT_VLT_MIN_COLD_C = 28  # Untergrenze bei Außentemperatur unter 5 °C
-DEFAULT_VLT_MAX_C = 45
-DEFAULT_COOL_VLT_C = 21
-HEATING_DEMAND_SHIFT_K = 5.0
-HEATING_COLD_THRESHOLD_C = 5.0
-# Frostschutz: Fällt die Außentemperatur unter DEFAULT_HEAT_FROST_ON_C, wird
-# Heizen erzwungen — auch bei aktiver Sommersperre, gegen die es sonst kein
-# Durchgriff gibt und in deren Monaten (Mai–Sep) Spätfröste real sind. Eigene
-# Hysterese (on < off) verhindert Takten um die Schwelle. off ≤ heat_on_c,
-# damit Frost- und Regelbetrieb sich nicht überlappen.
-DEFAULT_HEAT_FROST_ON_C = 6.0
-DEFAULT_HEAT_FROST_OFF_C = 8.0
-# Flüster-Empfehlung: bei niedrigem Vorlauf-Soll reicht der leise Betrieb,
-# bei hohem braucht die Anlage volle Leistung (Hysterese dazwischen).
-SILENT_VLT_ON_C = 35
-SILENT_VLT_OFF_C = 37
-
-# Taupunkt-Untergrenze im Kühlbetrieb: Unterschreitet der Vorlauf den Taupunkt
-# der Raumluft, schlägt sich an einer Flächenkühlung Wasser nieder. Gemessen am
-# 30.07.2026: 17 Minuten Vorlauf unter dem Raumtaupunkt von 13,3 °C, Minimum
-# 11,4 °C. Der Sicherheitsabstand liegt bei 2 K, weil die Vorlauftemperatur
-# nicht die Oberflächentemperatur ist — Estrich und Putz liegen dazwischen und
-# die Oberfläche bleibt einige Kelvin wärmer als das Wasser. Eine Grenze exakt
-# auf dem Taupunkt wäre deshalb zu scharf; ganz ohne Abstand fehlt die Reserve
-# für die Trägheit des Feuchtesensors.
-DEFAULT_DEWPOINT_MARGIN_K = 2.0
-
-# Übernahme der gemessenen Heizkurve (siehe strategies/kurve.py). Die
-# Empfehlung entsteht aus Betrieb, den HEMS mit der vorigen Empfehlung selbst
-# erzeugt hat — eine echte Rückkopplung. Diese vier Werte sind die Dämpfung.
-KURVE_MIN_ABSTAND_H = 24  # frühestens so viel später wird erneut übernommen
-KURVE_SCHWELLE_FUSSPUNKT_K = 1.0  # darunter ändert sich am Sollwert nichts
-KURVE_SCHWELLE_STEILHEIT = 0.05
-# Grenzen für übernommene Werte, identisch mit denen des Konfigurationsdialogs:
-# was dort niemand eintragen könnte, soll auch die Regression nicht liefern.
-KURVE_FUSSPUNKT_MIN_C = 25.0
-KURVE_FUSSPUNKT_MAX_C = 60.0
-KURVE_STEILHEIT_MIN = 0.0
-KURVE_STEILHEIT_MAX = 3.0
-
-# Stufe der Datenbasis, ab der die Analyse für eine Kurvenübernahme taugt.
-# Wörtlich dieselbe Zeichenkette wie in waermepumpe/analysis/types.py; sie
-# steht hier noch einmal, damit `strategies/` nichts aus der Analyse
-# importieren muss. test_kurve.py hält beide zusammen.
-DATENBASIS_BELASTBAR = "belastbar"
-# Zweite Schwelle: Einmal angehoben, bleibt der Vorlauf angehoben, bis die
-# Untergrenze diesen Betrag UNTER den Kühl-Sollwert gefallen ist. Ohne sie
-# würde der geschriebene Sollwert um die Grenze herum zwischen zwei Werten
-# springen, sobald die Raumfeuchte ein wenig schwankt.
-DEWPOINT_RELEASE_K = 1.0
-# Magnus-Koeffizienten für die Taupunktrechnung über Wasser (Sonntag 1990),
-# gültig von -45 bis +60 °C. Genauer als die oft zitierte 17.27/237.7-Fassung
-# und im hier relevanten Bereich auf besser als 0,1 K.
-MAGNUS_A = 17.62
-MAGNUS_B = 243.12
-
-# Taktschutz im Kühlbetrieb: Startet der Verdichter zu oft, legt HEMS eine
-# Zwangspause ein (Empfehlung „aus", die Anlage kommt zur Ruhe). Das begrenzt
-# die STARTRATE, nicht die Länge des einzelnen Takts: Aus vier Minuten Pause
-# werden dreißig, der Takt selbst bleibt so kurz, wie die Anlage ihn fährt.
-# Kurzzyklen sind Verdichterverschleiß, und die Anlage bietet dafür keinen
-# Stellwert an — die 3-Minuten-Wiederanlaufsperre ist nur lesbar.
-DEFAULT_ANTITAKT_STARTS = 4  # Starts im Fenster, ab denen pausiert wird (0 = aus)
-DEFAULT_ANTITAKT_WINDOW_MIN = 60
-DEFAULT_ANTITAKT_PAUSE_MIN = 30
-# Nach einer Pause läuft der Heizkreis mindestens so lange frei, bevor erneut
-# pausiert werden darf. Das ist die zweite Schwelle: ohne sie könnte die
-# nächste Pause unmittelbar folgen und HEMS würde den Kühlbetrieb dauerhaft
-# aussperren. Starts werden in dieser Zeit weitergezählt, nur das Auslösen ruht.
-ANTITAKT_RELEASE_MIN = 15
-# Wie viele Startzeitpunkte der Taktschutz höchstens mitführt. Das rollierende
-# Fenster wirft alte Einträge ohnehin weg; die Grenze fängt nur den Fall ab,
-# dass eine Anlage im Minutentakt startet und die Liste mitwächst.
-ANTITAKT_ZEITEN_MAX = 64
-
 # E-Auto: Die "E-Auto laden"-Empfehlung setzt voraus, dass der Überschuss die
 # physikalische Mindestladeleistung der Wallbox erreicht (min_a × Phasen ×
 # Netzspannung) — darunter kann real gar nicht geladen werden. Die
@@ -298,16 +206,6 @@ SWITCH_LEARN_WARMUP_S = 300.0
 # früh eingeschaltet.
 SWITCH_LEARN_DECAY = 0.25
 
-# Wärmepumpen-Verbrauchsmodell für die Bedarfsprognose (Tag und Nacht):
-# P(Stunde) = Basis + k × max(0, Heizgrenze − Außentemperatur). Basis ist die
-# mittlere WP-Leistung oberhalb der Heizgrenze (Warmwasser, Standby), k wird
-# aus der Langzeitstatistik der WP-Leistung gegen die Außentemperatur gelernt
-# (Heizgradstunden-Regression). Die Heizgrenze ist heat_off_c des Heizkreises.
-# Solange die Historie nicht reicht, greift der grobe Richtwert.
-WAERMEPUMPE_MODEL_DAYS = 45
-WAERMEPUMPE_MODEL_MIN_HOURS = 24  # Mindest-Stunden unter der Heizgrenze fürs Lernen
-DEFAULT_WAERMEPUMPE_W_PER_K = 40.0  # W elektrisch je K unter Heizgrenze (Richtwert EFH)
-
 # PV-Ertragsfaktor (0–1) je Wetterlage, falls die Vorhersage keinen
 # Bewölkungsgrad liefert. Diffuses Licht bringt auch bedeckt noch Ertrag.
 WEATHER_CONDITION_FACTORS = {
@@ -329,44 +227,20 @@ WEATHER_CONDITION_FACTORS = {
 }
 
 # Störungs-/Warnmeldungen an den Nutzer (Repair-Issue, persistente Notification,
-# Push-Sensor). Reine Bewertung in strategies/alerts.py, Zustellung im
-# Coordinator. Schweregrade steuern, über welche Kanäle eine Meldung läuft:
-#  • FAULT   — echte WP-Betriebsstörung: Push-Sensor + Notification + Repair.
+# Reine Bewertung in strategies/alerts.py, Zustellung im Coordinator.
+# Schweregrade steuern, über welche Kanäle eine Meldung läuft:
 #  • ERROR   — Config-Fehler (Auto-Modus würde scheitern): Repair (zusätzlich
 #              zum bestehenden Log + binary_sensor.hems_konfiguration).
 #  • WARNING — Config-Warnung: bleibt Sensor + Log, kein neuer Kanal (Setup-
 #              Thema, kein Betriebsalarm).
-ALERT_FAULT = "fault"
 ALERT_ERROR = "error"
 ALERT_WARNING = "warning"
-ALERT_UNAVAILABLE = "unavailable"  # Störungs-Entität nicht erreichbar (sanft)
 
-# Schweregrad → Zustellkanäle. Policy „nach Schweregrad": Betriebsalarme (FAULT)
-# pushen und landen als Repair, Config-Fehler (ERROR) werden Repair, die
-# Nichterreichbarkeit der Störungs-Quelle (UNAVAILABLE) nur ein sanftes Repair
-# ohne Push. Config-Warnungen tauchen hier bewusst nicht auf — sie bleiben
-# Sensor + Log. „sensor" heißt: fließt in den Push-Sensor binary_sensor.hems_
-# stoerung ein (Quelle für die Nutzer-Automation aufs Handy).
+# Schweregrad → Zustellkanäle. Config-Fehler (ERROR) werden ein Repair-Issue;
+# Config-Warnungen tauchen hier bewusst nicht auf — sie bleiben Sensor + Log.
 ALERT_CHANNELS = {
-    ALERT_FAULT: ("repair", "notify", "sensor"),
     ALERT_ERROR: ("repair",),
-    ALERT_UNAVAILABLE: ("repair",),
 }
 
-# WP-Störungsmeldung: die als Störungs-Entität konfigurierte Rolle liefert das
-# Rohsignal — ein binary_sensor (on = Störung) oder ein sensor (Wert ≠ 0/„ok" =
-# Störung; der Rohwert ist der Fehlercode und wandert in die Meldung). Entprellt
-# über aufeinanderfolgende Zyklen, weil die Modbus-/ESPHome-Strecke real für
-# einzelne Polls ausfällt und ein einzelner Aussetzer keinen Push auslösen darf.
-# Asymmetrisch: langsamer an (eine echte Störung hält an), schneller wieder aus
-# (eine behobene Störung soll den Alarm zügig räumen). `unavailable`/`unknown`
-# ist ein dritter Zustand — er hält nur die letzte Wertung und meldet die
-# fehlende Erreichbarkeit über einen eigenen, sanfteren Kanal (Repair statt
-# Push), statt als Störung durchzuschlagen.
-FAULT_DEBOUNCE_ON = 3  # Zyklen mit Störsignal, bis die Meldung greift
-FAULT_DEBOUNCE_OFF = 5  # störungsfreie Zyklen, bis sie wieder verschwindet
-# Rohwerte eines sensor-Störsignals, die als „keine Störung" gelten (case-
-# insensitiv). Alles andere (ein Fehlercode, „fault", „error") ist eine Störung.
-FAULT_OK_VALUES = ("0", "0.0", "ok", "none", "no_fault", "normal", "off", "false")
-# Sonderzustände einer Entität, die Nichterreichbarkeit bedeuten (kein Störwert).
+# Sonderzustände einer Entität, die Nichterreichbarkeit bedeuten.
 STATE_UNAVAILABLE_VALUES = ("unavailable", "unknown", "none", "")

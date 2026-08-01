@@ -15,15 +15,11 @@ from homeassistant.const import UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import HemsCoordinator, HemsData
-from .models import HeatPumpAnalysis
-from .waermepumpe.entities import ENERGIE_KEY, AnalyseSensorDescription
-from .waermepumpe.entities import SENSOREN as ANALYSE_SENSOREN
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -96,8 +92,8 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             # Pro-Speicher-Aufschlüsselung für die Karte (Name, SoC %, W)
             "speicher": d.speicher_liste,
             "haus_w": d.haus_w,
-            # Nur heizungsgekoppelte Schaltlasten; alle übrigen stehen
-            # einzeln in "schaltlasten" (Name, Prio, Empfehlung, Grund).
+            # Nur als Wärmeerzeuger markierte Schaltlasten; alle übrigen
+            # stehen einzeln in "schaltlasten" (Name, Prio, Empfehlung, Grund).
             "waermepumpe_w": d.waermepumpe_w,
             "schaltlasten": d.schaltlasten,
             "wallbox_w": d.wallbox_w,
@@ -108,8 +104,6 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             "regelung_w": d.plan.regelung.soll_w if d.plan.regelung else None,
             "warmwasser_soll_c": d.plan.warmwasser_soll_c,
             "warmwasser_status": d.plan.warmwasser_status,
-            "waermepumpe_modus": d.plan.heizung.modus if d.plan.heizung else None,
-            "waermepumpe_vlt_c": d.plan.heizung.vlt_ziel_c if d.plan.heizung else None,
         },
     ),
     HemsSensorDescription(
@@ -118,10 +112,6 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         value_fn=lambda d: d.plan.nachtdefizit_kwh,
-        attr_fn=lambda d: {
-            # WP-Anteil ist bereits im Nachtdefizit enthalten
-            "waermepumpe_anteil_kwh": d.plan.waermepumpe_nacht_kwh,
-        },
     ),
     HemsSensorDescription(
         key="ueberschuss_rest_heute",
@@ -209,9 +199,7 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             ],
             "warmwasser_soll_c": d.plan.warmwasser_soll_c,
             "warmwasser_status": d.plan.warmwasser_status,
-            # Status-Chips: Heizkreis und Saldo-Regelung
-            "waermepumpe_modus": d.plan.heizung.modus if d.plan.heizung else None,
-            "waermepumpe_vlt_c": d.plan.heizung.vlt_ziel_c if d.plan.heizung else None,
+            # Status-Chips der Saldo-Regelung
             "regelung_modus": d.plan.regelung.modus if d.plan.regelung else None,
             "regelung_w": d.plan.regelung.soll_w if d.plan.regelung else None,
             "reserve_aktiv": d.plan.regelung.reserve_aktiv
@@ -276,58 +264,6 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         else {},
     ),
     HemsSensorDescription(
-        key="heizkreis",
-        name="Heizkreis",
-        # Zustand = Modus-Empfehlung (heizen/kuehlen/aus)
-        value_fn=lambda d: d.plan.heizung.modus if d.plan.heizung else None,
-        attr_fn=lambda d: {
-            "vorlauf_ziel_c": d.plan.heizung.vlt_ziel_c,
-            "aussentemperatur_c": d.plan.heizung.t_aussen_c,
-            "sommersperre": d.plan.heizung.sommer_sperre,
-            "frostschutz": d.plan.heizung.frostschutz,
-            "leise_empfohlen": d.plan.heizung.leise_empfohlen,
-            # Solange das an ist, stellt HEMS am Heizkreis nichts: die Anlage
-            # führt den Vorlauf-Soll für die Speicherladung selbst. Empfehlung
-            # und Ist dürfen dann auseinanderlaufen; das ist kein Fehlzustand,
-            # und dieses Attribut ist der Beleg dafür.
-            "warmwasserbereitung_aktiv": d.plan.heizung.ww_bereitung,
-            # Steht das an, hat HEMS den Modus gestellt und die Anlage zeigt ihn
-            # danach immer noch nicht — der Befehl kommt nicht an. HEMS schreibt
-            # weiter dagegen; ohne dieses Attribut sähe man nur eine Empfehlung,
-            # die scheinbar gilt.
-            "modus_nicht_uebernommen": d.plan.heizung.modus_nicht_uebernommen,
-            # Taktschutz: Zwangspause gegen zu viele Verdichterstarts. Steht
-            # "taktschutz" an, ist der Modus deshalb "aus" und nicht wegen der
-            # Außentemperatur. "verdichterstarts" zählt das laufende Fenster.
-            "taktschutz": d.plan.heizung.taktschutz,
-            "taktschutz_bis": (
-                dt_util.as_local(d.plan.heizung.taktschutz_bis).isoformat()
-                if d.plan.heizung.taktschutz_bis
-                else None
-            ),
-            "verdichterstarts": d.plan.heizung.verdichterstarts,
-            # Taupunkt-Untergrenze im Kühlbetrieb: "taupunkt_grenze_c" ist der
-            # Wert, unter den der Vorlauf nicht soll (Taupunkt plus
-            # Sicherheitsabstand). Steht "taupunkt_begrenzt" an, ist der
-            # Vorlauf-Soll deshalb höher als der konfigurierte Kühlwert.
-            "taupunkt_c": d.plan.heizung.taupunkt_c,
-            "taupunkt_grenze_c": d.plan.heizung.taupunkt_grenze_c,
-            "taupunkt_begrenzt": d.plan.heizung.taupunkt_begrenzt,
-            # Welche Heizkurve gerade gilt und warum. "konfiguriert" = aus
-            # dem Dialog, "empfehlung" = aus der Wärmepumpen-Analyse
-            # übernommen, "wartet" = Übernahme ist an, die Datenbasis reicht
-            # noch nicht. "kurve_grund" sagt es im Klartext.
-            "kurve_quelle": d.plan.heizung.kurve_quelle,
-            "kurve_grund": d.plan.heizung.kurve_grund,
-            "kurve_fusspunkt_c": d.plan.heizung.kurve_fusspunkt_c,
-            "kurve_steilheit": d.plan.heizung.kurve_steilheit,
-            # Gelerntes Verbrauchsmodell für die Bedarfsprognose
-            "verbrauchsmodell": d.waermepumpe_modell,
-        }
-        if d.plan.heizung
-        else {},
-    ),
-    HemsSensorDescription(
         key="empfehlung",
         name="Empfehlung",
         value_fn=lambda d: d.plan.empfehlung[:255],
@@ -376,15 +312,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator: HemsCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[SensorEntity] = [
-        HemsSensor(coordinator, desc) for desc in SENSORS
-    ]
-    for rolle in coordinator.registry.analyses:
-        entities += [
-            AnalyseSensor(coordinator, rolle, desc) for desc in ANALYSE_SENSOREN
-        ]
-        entities.append(WaermemengeSensor(coordinator, rolle))
-    async_add_entities(entities)
+    async_add_entities(HemsSensor(coordinator, desc) for desc in SENSORS)
 
 
 class HemsSensor(CoordinatorEntity[HemsCoordinator], SensorEntity):
@@ -412,113 +340,3 @@ class HemsSensor(CoordinatorEntity[HemsCoordinator], SensorEntity):
         if self.entity_description.attr_fn is None:
             return None
         return self.entity_description.attr_fn(self.coordinator.data)
-
-
-class AnalyseSensor(CoordinatorEntity[HemsCoordinator], SensorEntity):
-    """Ein Wert aus der Wärmepumpen-Analyse.
-
-    Eigene Klasse und nicht `HemsSensor`, weil die Analyse einen anderen
-    Verfügbarkeitsbegriff hat: Der Planer rechnet ab der ersten Sekunde, die
-    Analyse erst, wenn die Messkette steht. Bis dahin ist `None` der richtige
-    Zustand und kein Fehler.
-    """
-
-    _attr_has_entity_name = True
-    entity_description: AnalyseSensorDescription
-
-    def __init__(
-        self,
-        coordinator: HemsCoordinator,
-        rolle: HeatPumpAnalysis,
-        description: AnalyseSensorDescription,
-    ) -> None:
-        super().__init__(coordinator)
-        self.entity_description = description
-        self._rolle = rolle
-        self._attr_unique_id = (
-            f"{coordinator.entry.entry_id}_{rolle.id}_{description.key}"
-        )
-        self._attr_device_info = _analyse_geraet(coordinator, rolle)
-
-    @property
-    def native_value(self):
-        analyse = self.coordinator.data.analysen.get(self._rolle.id)
-        if analyse is None:
-            return None
-        return self.entity_description.wert(analyse)
-
-
-class WaermemengeSensor(
-    CoordinatorEntity[HemsCoordinator], RestoreEntity, SensorEntity
-):
-    """Aufsummierte Wärmemenge.
-
-    Integriert die geprüfte thermische Leistung über die Zeit. Bewusst hier
-    und nicht in der Fachlogik: die Integration über die Zeit braucht die Uhr,
-    und `analysis/` soll ohne Uhr auskommen.
-
-    Der Stand wird über Neustarts hinweg wiederhergestellt. Ein
-    `total_increasing`-Zähler, der bei jedem Neustart auf null fällt, ist
-    schlimmer als keiner: die Langzeitstatistik deutet den Rücksprung als
-    neuen Zyklus und addiert den alten Stand dazu.
-    """
-
-    _attr_has_entity_name = True
-    _attr_name = "Wärmemenge"
-    _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_suggested_display_precision = 2
-
-    def __init__(
-        self, coordinator: HemsCoordinator, rolle: HeatPumpAnalysis
-    ) -> None:
-        super().__init__(coordinator)
-        self._rolle = rolle
-        self._attr_unique_id = f"{coordinator.entry.entry_id}_{rolle.id}_{ENERGIE_KEY}"
-        self._attr_device_info = _analyse_geraet(coordinator, rolle)
-        self._kwh = 0.0
-        self._letzter_ts: float | None = None
-
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        alt = await self.async_get_last_state()
-        if alt is not None and alt.state not in (None, "unknown", "unavailable"):
-            try:
-                self._kwh = float(alt.state)
-            except (TypeError, ValueError):
-                self._kwh = 0.0
-
-    @property
-    def native_value(self) -> float:
-        return round(self._kwh, 3)
-
-    def _handle_coordinator_update(self) -> None:
-        analyse = self.coordinator.data.analysen.get(self._rolle.id)
-        if analyse is not None and analyse.waermeleistung_w:
-            jetzt = analyse.takt.letzter_ts
-            if jetzt is not None and self._letzter_ts is not None:
-                delta = jetzt - self._letzter_ts
-                # Lücken nach einem Neustart nicht als Dauerleistung buchen.
-                if 0 < delta <= 900:
-                    self._kwh += analyse.waermeleistung_w * delta / 3_600_000.0
-            self._letzter_ts = jetzt
-        super()._handle_coordinator_update()
-
-
-def _analyse_geraet(
-    coordinator: HemsCoordinator, rolle: HeatPumpAnalysis
-) -> DeviceInfo:
-    """Eigenes Gerät je Analyse-Rolle, unter dem HEMS-Gerät.
-
-    Nicht am HEMS-Gerät selbst: die Analyse beschreibt eine reale Wärmepumpe,
-    und bei zwei Wärmepumpen wären zwanzig gleichnamige Entities an einem
-    Gerät nicht mehr auseinanderzuhalten.
-    """
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{coordinator.entry.entry_id}_{rolle.id}")},
-        via_device=(DOMAIN, coordinator.entry.entry_id),
-        name=rolle.name,
-        manufacturer="Tobias Reithmeier",
-        model="HEMS Wärmepumpen-Analyse",
-    )

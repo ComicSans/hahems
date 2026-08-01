@@ -13,7 +13,6 @@
  *   warmwasser_legionellen  [{von, bis}]                      Legionellenschutz-Fenster
  *   warmwasser_soll_c, warmwasser_status                              WW-Sollwert-Empfehlung
  *   regelung_modus, regelung_w, reserve_aktiv         Speicher-Saldo-Regelung
- *   waermepumpe_modus, waermepumpe_vlt_c                                Heizkreis-Empfehlung
  *   budget_kwh, pv_rest_heute_kwh, pv_morgen_kwh, speicher_soc, wetter_morgen
  *   verlauf_pv_entity, verlauf_soc_entity             Quellen für den Verlauf
  *
@@ -49,12 +48,6 @@ const WARMWASSER_STATUS_LABEL = {
   legionellenschutz: "Legionellenschutz",
   pv_boost: "PV-Boost",
   basis: "Basis",
-};
-const WAERMEPUMPE_MODUS_LABEL = {
-  heizen: "heizen",
-  kuehlen: "kühlen",
-  aus: "aus",
-  unbekannt: "unbekannt",
 };
 const REGELUNG_MODUS_LABEL = {
   laden: "Laden",
@@ -441,7 +434,7 @@ class HemsPlanCard extends HTMLElement {
       .join("");
 
     // Status der drei Regelungen: WW-Sollwert, Speicher-Saldo-Regelung
-    // und Heizkreis-Empfehlung, sofern konfiguriert bzw. Daten vorliegen.
+    // sofern konfiguriert bzw. Daten vorliegen.
     // "aus (Sperrzeit)" zeigt nur den vom Nutzer selbst konfigurierten
     // Zustand ohne neue Information — Chip bleibt dafür weg.
     const warmwasserChip =
@@ -458,12 +451,6 @@ class HemsPlanCard extends HTMLElement {
               : ""
           }${a.reserve_aktiv ? " · Kaltreserve" : ""}`
         : null;
-    const waermepumpeChip =
-      a.waermepumpe_modus != null
-        ? `♨️ Wärmepumpe ${WAERMEPUMPE_MODUS_LABEL[a.waermepumpe_modus] ?? a.waermepumpe_modus}${
-            a.waermepumpe_vlt_c != null ? ` · VLT ${Math.round(a.waermepumpe_vlt_c)} °C` : ""
-          }`
-        : null;
 
     const chipTexts = [
       `☀️ Heute Rest ${fmtKwh(a.pv_rest_heute_kwh)}`,
@@ -474,7 +461,6 @@ class HemsPlanCard extends HTMLElement {
         : null,
       warmwasserChip,
       regelungChip,
-      waermepumpeChip,
     ].filter(Boolean);
     const chips = chipTexts.map((c) => `<span class="chip">${c}</span>`).join("");
     // Textalternative fürs SVG: dieselben Kurzinfos, die auch als Chips unter
