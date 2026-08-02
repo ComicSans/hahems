@@ -169,6 +169,10 @@ class HemsPlanCard extends HTMLElement {
     this._lastUpdated = null;
     this._history = null;
     this._historyFetched = 0;
+    // Kommt hass vor setConfig, verwirft der Setter es mangels Config —
+    // dann hier nachholen. HA ruft heute setConfig zuerst, verlassen kann
+    // sich eine Karte darauf nicht.
+    if (this._hass) this.hass = this._hass;
   }
 
   getCardSize() {
@@ -178,6 +182,8 @@ class HemsPlanCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    // Ohne Config nichts zu rendern: setConfig holt das Rendern nach.
+    if (!this._config) return;
     const state = hass.states[this._config.entity];
     const stamp = state ? state.last_updated : "missing";
     if (stamp === this._lastUpdated) return;
@@ -598,18 +604,13 @@ class HemsPlanCard extends HTMLElement {
   }
 }
 
-// Erst nach dem window-load registrieren, sonst landet die Definition in der
-// nativen Registry, bevor HA window.customElements durch
-// scoped-custom-element-registry ersetzt (siehe hems-flow-card.js).
-function defineWhenReady(tag, cls) {
-  const define = () => {
-    if (!window.customElements.get(tag)) window.customElements.define(tag, cls);
-  };
-  if (document.readyState === "complete") define();
-  else window.addEventListener("load", define, { once: true });
+// Ohne Verzögerung registrieren, sonst hängt die Vorschaukachel im
+// Kartenpicker im Ladekringel (Begründung in hems-flow-card.js).
+function defineCard(tag, cls) {
+  if (!window.customElements.get(tag)) window.customElements.define(tag, cls);
 }
 
-defineWhenReady("hems-plan-card", HemsPlanCard);
+defineCard("hems-plan-card", HemsPlanCard);
 
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === "hems-plan-card")) {

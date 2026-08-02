@@ -114,6 +114,10 @@ class HemsFlowCard extends HTMLElement {
       height: config.height ?? CARD_HEIGHT,
     };
     this._lastUpdated = null;
+    // Kommt hass vor setConfig, verwirft der Setter es mangels Config —
+    // dann hier nachholen. HA ruft heute setConfig zuerst, verlassen kann
+    // sich eine Karte darauf nicht.
+    if (this._hass) this.hass = this._hass;
   }
 
   getCardSize() {
@@ -122,6 +126,8 @@ class HemsFlowCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    // Ohne Config nichts zu rendern: setConfig holt das Rendern nach.
+    if (!this._config) return;
     const state = hass.states[this._config.entity];
     const stamp = state ? state.last_updated : "missing";
     if (stamp === this._lastUpdated) return;
@@ -450,22 +456,23 @@ class HemsFlowCard extends HTMLElement {
   }
 }
 
-// Erst nach dem window-load registrieren. HA bindet Karten aus
-// add_extra_js_url per dynamischem import() im <head> ein, also im Rennen mit
-// dem Frontend-Bundle. Gewinnt diese Datei, landet define() in der nativen
-// Registry; danach ersetzt HA window.customElements durch
-// scoped-custom-element-registry mit eigener Map und findet die Karte nicht
-// mehr ("Custom element not found"). Ein zweites define() ist keine Option:
-// dieselbe Klasse darf nur einmal registriert werden.
-function defineWhenReady(tag, cls) {
-  const define = () => {
-    if (!window.customElements.get(tag)) window.customElements.define(tag, cls);
-  };
-  if (document.readyState === "complete") define();
-  else window.addEventListener("load", define, { once: true });
+// Ohne Verzögerung registrieren. Der Kartenpicker löst jeden Kartentyp beim
+// Aufbau seiner Liste genau einmal auf; ist die Karte in dem Moment noch nicht
+// registriert, bleibt ihre Vorschaukachel dauerhaft im Ladekringel hängen —
+// eine spätere Registrierung holt der Picker nicht nach (nachgemessen: das
+// Element danach zu definieren löst den Kringel nicht auf).
+//
+// Eine frühere Fassung wartete hier auf das window-load-Event, damit die
+// Definition nicht in der nativen Registry landet, bevor HA
+// window.customElements durch scoped-custom-element-registry ersetzt. Der
+// Austausch ist beim Ausführen dieser Datei längst passiert: HA bindet sie per
+// add_extra_js_url erst nach dem Frontend-Bundle ein. Das Warten schützte
+// deshalb vor nichts und riskierte nur, zu spät zu kommen.
+function defineCard(tag, cls) {
+  if (!window.customElements.get(tag)) window.customElements.define(tag, cls);
 }
 
-defineWhenReady("hems-flow-card", HemsFlowCard);
+defineCard("hems-flow-card", HemsFlowCard);
 
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === "hems-flow-card")) {
