@@ -68,6 +68,7 @@ class HemsPanel extends HTMLElement {
     this._tab = "overview";
     this._built = false;
     this._cards = [];
+    this._pending = [];
     this._overviewReady = false;
   }
 
@@ -173,6 +174,7 @@ class HemsPanel extends HTMLElement {
     }
     this._sections.overview.innerHTML = "";
     this._cards = [];
+    this._pending = [];
     this._sections.overview.append(
       this._makeCard("hems-flow-card", { entity: flowEntity }, "Lastfluss"),
       this._makeCard("hems-plan-card", { entity: planEntity }, "Entlade- & PV-Plan"),
@@ -185,20 +187,45 @@ class HemsPanel extends HTMLElement {
   _makeCard(tag, config, title) {
     const holder = document.createElement("div");
     holder.className = "card-holder";
-    const mount = () => {
-      if (!config.entity) {
-        holder.innerHTML = `<div class="missing">${title}: Entität nicht gefunden.</div>`;
-        return;
-      }
+    if (!config.entity) {
+      holder.innerHTML = `<div class="missing">${title}: Entität nicht gefunden.</div>`;
+      return holder;
+    }
+    holder.innerHTML = `<div class="missing">${title} wird geladen…</div>`;
+    this._pending.push({ holder, tag, config });
+    this._mountPending();
+    return holder;
+  }
+
+  /** Noch nicht aufgesetzte Karten aufsetzen; wird bei jedem hass-Tick erneut
+   * versucht, solange etwas aussteht.
+   *
+   * Hier wird bewusst NICHT `window.customElements` gefragt. HA ersetzt diese
+   * Registry durch eine eigene (scoped-custom-element-registry); Karten, die
+   * per add_extra_js_url geladen wurden, definieren sich vorher in der
+   * Registry des Dokuments. `get()` liefert dann undefined und `whenDefined()`
+   * löst nie auf, obwohl die Karte längst definiert ist — nachgemessen auf der
+   * laufenden Instanz: `window.customElements.get("hems-flow-card")` false,
+   * `document.createElement("hems-flow-card").constructor.name` HemsFlowCard.
+   * Der Kartenrahmen blieb dadurch dauerhaft leer, ohne jede Fehlermeldung.
+   *
+   * `document.createElement` geht über die Registry des Dokuments und liefert
+   * die aufgewertete Instanz; ein vorhandenes `setConfig` belegt, dass das
+   * Upgrade stattgefunden hat. Ist es nicht da, ist die Karte wirklich noch
+   * nicht geladen und der Versuch wird beim nächsten Tick wiederholt.
+   */
+  _mountPending() {
+    if (!this._pending.length) return;
+    this._pending = this._pending.filter(({ holder, tag, config }) => {
       const el = document.createElement(tag);
-      if (el.setConfig) el.setConfig(config);
+      if (!el.setConfig) return true;
+      el.setConfig(config);
       el.hass = this._hass;
       this._cards.push({ el, config });
+      holder.textContent = "";
       holder.appendChild(el);
-    };
-    if (window.customElements.get(tag)) mount();
-    else window.customElements.whenDefined(tag).then(mount);
-    return holder;
+      return false;
+    });
   }
 
   _buildControl() {
@@ -260,6 +287,7 @@ class HemsPanel extends HTMLElement {
   _update() {
     if (!this._built) return;
     this._ensureEntities();
+    this._mountPending();
     for (const c of this._cards) c.el.hass = this._hass;
     this._renderSegmented("mode", this._modeEntity, "select");
     this._renderSegmented("goal", this._goalEntity, "select");
