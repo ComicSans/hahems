@@ -1163,7 +1163,20 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     heiz_plan[h.id].vorlauf_c if h.id in heiz_plan else None
                 ),
                 "vorlauf_ist_c": self._num(h.flow_setpoint_entity),
+                # Ob überhaupt eine Vorlauf-Entität hinterlegt ist — getrennt
+                # vom aktuellen Sollwert. Der ist auch bei konfigurierter
+                # Entität leer, solange nicht geheizt wird (Sperre, Heizgrenze,
+                # unbekannte Außentemperatur); ohne dieses Feld läse die Karte
+                # daraus „nicht eingerichtet".
+                "hat_vorlauf": bool(h.flow_setpoint_entity),
                 "soll_an": empfehlung[h.id].an if h.id in empfehlung else None,
+                # Die Begründung der Schaltentscheidung — nicht dieselbe wie
+                # `grund` daneben: der beschreibt die Witterungslage
+                # („Sommersperre"), diese die Lage, die tatsächlich entschieden
+                # hat („min_on gehalten"). Beide können auseinanderfallen, weil
+                # die Mindestlaufzeit vor der Sperre steht (siehe
+                # strategies/switchable.py).
+                "soll_grund": empfehlung[h.id].grund if h.id in empfehlung else "",
                 "kurve_fusspunkt_c": h.curve_base_c,
                 "kurve_steilheit": h.curve_slope,
                 "vlt_min_c": h.vlt_min_c,

@@ -420,14 +420,50 @@ class HemsPanel extends HTMLElement {
     // Vorlauf-Soll und -Ist getrennt: Der Sollwert ist, was HEMS schreibt, der
     // Ist-Wert, was an der Anlage steht. Gehen sie dauerhaft auseinander,
     // übernimmt das Gerät den Befehl nicht.
-    const vorlauf =
-      h.vorlauf_soll_c === null || h.vorlauf_soll_c === undefined
-        ? `<p class="hint">Kein Vorlauf-Sollwert konfiguriert — die Heizkurve
-           ist reine Anzeige, HEMS gibt nur frei und sperrt.</p>`
-        : zeile(
-            "Vorlauf (Soll → Ist)",
-            `${num(h.vorlauf_soll_c, "°C")} → ${num(h.vorlauf_ist_c, "°C")}`,
-          );
+    //
+    // Ob eine Vorlauf-Entität hinterlegt ist, sagt `hat_vorlauf` — nicht der
+    // Sollwert. Der ist auch bei eingerichteter Entität leer, solange nicht
+    // geheizt wird (Sperre, Heizgrenze, unbekannte Außentemperatur); daraus
+    // „nicht konfiguriert" zu lesen, blendete die Zeile ausgerechnet in der
+    // Lage aus, in der der Ist-Wert allein noch sichtbar wäre.
+    const vorlauf = !h.hat_vorlauf
+      ? `<p class="hint">Kein Vorlauf-Sollwert konfiguriert — die Heizkurve
+         ist reine Anzeige, HEMS gibt nur frei und sperrt.</p>`
+      : zeile(
+          "Vorlauf (Soll → Ist)",
+          `${num(h.vorlauf_soll_c, "°C")} → ${num(h.vorlauf_ist_c, "°C")}`,
+        ) +
+        (h.vorlauf_soll_c === null || h.vorlauf_soll_c === undefined
+          ? h.status === "unbekannt"
+            ? // Zwei verschiedene Lagen, nicht eine: „nicht geheizt" ist eine
+              // Entscheidung, „keine Außentemperatur" ihr Fehlen. Sie in einen
+              // Satz zu ziehen, wäre derselbe Fehler wie „einschalten" für eine
+              // laufende Anlage.
+              `<p class="hint">Ohne Außentemperatur rechnet HEMS keine Kurve —
+               der Sollwert bleibt unangetastet.</p>`
+            : `<p class="hint">Solange nicht geheizt wird, schreibt HEMS keinen
+               Sollwert — die Kurve unten gilt erst wieder ab dem Heizbetrieb.</p>`
+          : "");
+    // „einschalten" nur, wenn die Anlage steht: Die Empfehlung ist eine Lage,
+    // kein Befehl. Läuft die Anlage bereits, heißt dieselbe Empfehlung „an
+    // lassen" — sonst liest sich eine gehaltene Mindestlaufzeit wie ein
+    // Heizbefehl, und das ausgerechnet unter dem Banner „Sommersperre".
+    const empfehlung =
+      h.soll_an === null || h.soll_an === undefined
+        ? "—"
+        : h.soll_an
+          ? h.ist_an
+            ? "an lassen"
+            : "einschalten"
+          : h.ist_an
+            ? "abschalten"
+            : "aus lassen";
+    // Der Grund der Schaltentscheidung, nicht der der Witterungsführung (der
+    // steht im Banner). Die beiden fallen auseinander, sobald die
+    // Mindestlaufzeit die Sperre überstimmt.
+    const empfehlungGrund = h.soll_grund
+      ? ` <span class="hint">${escapeHtml(h.soll_grund)}</span>`
+      : "";
     return `
       <div class="panel-card">
         <div class="banner ${status.klasse}">
@@ -436,14 +472,7 @@ class HemsPanel extends HTMLElement {
         </div>
         ${zeile("Außentemperatur", num(h.t_aussen_c, "°C", 1))}
         ${zeile("Zustand", h.ist_an ? "läuft" : "aus")}
-        ${zeile(
-          "Empfehlung",
-          h.soll_an === null || h.soll_an === undefined
-            ? "—"
-            : h.soll_an
-              ? "einschalten"
-              : "aus lassen",
-        )}
+        ${zeile("Empfehlung", `${empfehlung}${empfehlungGrund}`)}
         ${zeile("Leistung", num(h.watt, "W"))}
         ${vorlauf}
         ${zeile(
