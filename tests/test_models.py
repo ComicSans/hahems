@@ -1,10 +1,8 @@
 """Rollenmodell (models.py): Options-Liste → DeviceRegistry.
 
-Deckt vor allem `heat_coupled` ab: nur damit markierte Schaltlasten dürfen ins
-Wärmepumpen-Verbrauchsmodell einfließen. Der Default muss False sein, damit
-eine neu angelegte überschussgesteuerte Last (Pool, Luftentfeuchter) die
-Heizgradstunden-Regression nicht verzerrt; bestehende Einträge hebt die
-Options-Migration (async_migrate_entry) einmalig auf True.
+Deckt die Rollentrennung ab: Ein Wärmeerzeuger ist eine eigene Rolle (Heizung)
+und keine Schaltlast mit Flag mehr. Beide werden nach Nutzer-Priorität
+sortiert, damit Konsumenten sie der Reihe nach abarbeiten können.
 """
 from __future__ import annotations
 
@@ -21,25 +19,57 @@ def _switchable(**kw) -> dict:
     }
 
 
-def test_heat_coupled_default_aus():
-    reg = parse_devices([_switchable()])
-    assert reg.switchables[0].heat_coupled is False
+def _heating(**kw) -> dict:
+    return {
+        "id": kw.pop("id", "h"),
+        "role": "heating",
+        "name": kw.pop("name", "Wärmepumpe"),
+        "switch_entity": kw.pop("switch_entity", "climate.wp"),
+        **kw,
+    }
 
 
-def test_heat_coupled_wird_uebernommen():
-    reg = parse_devices([_switchable(heat_coupled=True)])
-    assert reg.switchables[0].heat_coupled is True
+def test_heizung_ist_eine_eigene_rolle():
+    reg = parse_devices([_switchable(), _heating()])
+    assert [s.name for s in reg.switchables] == ["Last"]
+    assert [h.name for h in reg.heatings] == ["Wärmepumpe"]
+
+
+def test_heizung_erbt_die_schaltlast_defaults():
+    """Anti-Takt und Priorität gelten für die Heizung wie für jede Schaltlast."""
+    h = parse_devices([_heating()]).heatings[0]
+    assert (h.min_on_min, h.min_off_min, h.max_block_min, h.priority) == (
+        20,
+        10,
+        120,
+        1,
+    )
+
+
+def test_frostschutz_hat_hysterese_ab_werk():
+    """Ohne Hysterese taktet die Anlage an der Frostschwelle."""
+    h = parse_devices([_heating()]).heatings[0]
+    assert h.frost_off_c > h.frost_on_c
 
 
 def test_mehrere_schaltlasten_bleiben_erhalten_und_sortiert():
     reg = parse_devices(
         [
             _switchable(id="b", name="Entfeuchter", priority=3),
-            _switchable(id="a", name="Wärmepumpe", priority=1, heat_coupled=True),
+            _switchable(id="a", name="Pool", priority=1),
         ]
     )
-    assert [s.name for s in reg.switchables] == ["Wärmepumpe", "Entfeuchter"]
-    assert [s.heat_coupled for s in reg.switchables] == [True, False]
+    assert [s.name for s in reg.switchables] == ["Pool", "Entfeuchter"]
+
+
+def test_heizungen_werden_ebenfalls_nach_prioritaet_sortiert():
+    reg = parse_devices(
+        [
+            _heating(id="b", name="Heizstab", priority=3),
+            _heating(id="a", name="Wärmepumpe", priority=1),
+        ]
+    )
+    assert [h.name for h in reg.heatings] == ["Wärmepumpe", "Heizstab"]
 
 
 def test_unbekannte_felder_werden_ignoriert():

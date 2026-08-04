@@ -92,10 +92,13 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             # Pro-Speicher-Aufschlüsselung für die Karte (Name, SoC %, W)
             "speicher": d.speicher_liste,
             "haus_w": d.haus_w,
-            # Nur als Wärmeerzeuger markierte Schaltlasten; alle übrigen
+            # Summe der Wärmeerzeuger (Rolle Heizung); alle übrigen Schaltlasten
             # stehen einzeln in "schaltlasten" (Name, Prio, Empfehlung, Grund).
             "waermepumpe_w": d.waermepumpe_w,
             "schaltlasten": d.schaltlasten,
+            # Witterungsführung je Heizung für den Heizungs-Reiter des Panels:
+            # Außentemperatur, Status, Vorlauf-Soll/-Ist und die Kurve.
+            "heizungen": d.heizungen,
             "wallbox_w": d.wallbox_w,
             "speicher_soc": d.plan.speicher_soc,
             "pv_geschaetzt": d.pv_power_estimated,

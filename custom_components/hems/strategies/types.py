@@ -164,6 +164,19 @@ class SwitchableState:
     min_on_min: int = 20
     min_off_min: int = 10
     max_block_min: int = 120
+    # Vorgaben einer übergeordneten Domäne, die vor jeder Überschuss- und
+    # Anti-Takt-Entscheidung stehen. Heute setzt sie nur die Heizung
+    # (`strategies/heating.py`), und zwar in dieser Rangfolge:
+    #   zwang_an       – Frostschutz: einschalten, notfalls aus dem Netz.
+    #   zwang_aus      – Sommersperre: nicht heizen.
+    #   nicht_abschalten – HEMS ist blind (keine Außentemperatur) und lässt
+    #                    eine laufende Anlage in Ruhe, statt sie abzuschalten.
+    # Eine Schaltlast ohne Heizungsrolle lässt alle drei auf ihrem Default und
+    # verhält sich damit exakt wie bisher.
+    zwang_an: bool = False
+    zwang_aus: bool = False
+    nicht_abschalten: bool = False
+    grund_vorgabe: str = ""
 
 
 @dataclass
@@ -194,6 +207,73 @@ class SwitchableResult:
 
 
 @dataclass
+class HeatingState:
+    """Zustand eines Wärmeerzeugers für die Witterungsführung.
+
+    Die Schaltlage (`ist_an`, Mindestzeiten, gelernte Leistung) läuft NICHT
+    hier, sondern über den `SwitchableState` derselben `id` — die Heizung
+    konkurriert im selben Überschuss-Budget wie jede andere schaltbare Last.
+    Dieser Zustand trägt nur, was eine Steckdosenlast nicht hat: die
+    Außentemperatur und die Parameter von Frostschutz, Heizgrenze, Kurve und
+    Sommersperre.
+
+    `outdoor_temp_c` ist `None`, wenn weder ein eigener Temperatursensor noch
+    die Wetter-Entität einen Wert liefert. Dann kann HEMS weder Frost erkennen
+    noch die Kurve rechnen — siehe `heating_control`.
+    """
+
+    name: str
+    id: str = ""
+    outdoor_temp_c: float | None = None
+    month: int = 1
+    hat_vorlauf_entity: bool = False
+    frost_on_c: float = 3.0
+    frost_off_c: float = 5.0
+    heat_on_c: float = 15.0
+    heat_off_c: float = 18.0
+    curve_base_c: float = 32.0
+    curve_slope: float = 0.6
+    vlt_min_c: float = 25.0
+    vlt_max_c: float = 45.0
+    heat_lock_from_month: int = 0
+    heat_lock_to_month: int = 0
+
+
+@dataclass
+class HeatingSetpoint:
+    """Empfehlung für einen Wärmeerzeuger.
+
+    `zwang_an` ist der Frostschutz und der einzige Teil dieser Empfehlung, der
+    ohne Netzsaldo entsteht: er hängt allein an der Temperatur. Der Actuator
+    wertet ihn deshalb auch dann aus, wenn gar kein Überschussplan vorliegt
+    (Zähler unerreichbar) — sonst bliebe eine abgeschaltete Heizung genau in
+    der Störung aus, in der niemand hinschaut.
+    """
+
+    name: str
+    id: str = ""
+    zwang_an: bool = False
+    sperre: bool = False
+    nicht_abschalten: bool = False
+    # Witterungsgeführter Vorlauf-Sollwert (°C); None heißt „nicht schreiben".
+    vorlauf_c: float | None = None
+    t_aussen_c: float | None = None
+    # "frostschutz" | "heizen" | "sommersperre" | "heizgrenze" | "unbekannt"
+    status: str = ""
+    grund: str = ""
+
+
+@dataclass
+class HeatingResult:
+    """Empfehlung über alle Wärmeerzeuger."""
+
+    anlagen: list[HeatingSetpoint] = field(default_factory=list)
+
+    def by_id(self, geraete_id: str) -> HeatingSetpoint | None:
+        return next((a for a in self.anlagen if a.id == geraete_id), None)
+
+
+@dataclass
 class PlanFlags:
     """Zustand der Schmitt-Trigger zwischen zwei Planläufen.
 
@@ -221,6 +301,13 @@ class PlanFlags:
     # Start konservativ False, damit der erste Lauf nach einem Neustart nicht
     # sofort "E-Auto laden" meldet, ohne den Momentanüberschuss zu kennen.
     ev_bereit: bool = False
+    # Heizung: je Anlagen-ID ein eigener Schmitt-Trigger, weil mehrere
+    # Wärmeerzeuger unterschiedliche Schwellen (und Sensoren) haben können.
+    # Anders als die flachen Flags oben müssen diese beiden beim Fortschreiben
+    # KOPIERT werden — `dataclasses.replace` kopiert nur flach, ein geteiltes
+    # Dict würde die Eingabe des Aufrufers mitverändern (siehe compute_plan).
+    frost: dict[str, bool] = field(default_factory=dict)
+    heizen: dict[str, bool] = field(default_factory=dict)
 
 
 def _latch(prev: bool, value: float | None, on: float, off: float) -> bool:
@@ -319,8 +406,12 @@ class PlanInput:
     # keine Wallbox konfiguriert; dann bleibt die alte, ungeprüfte Empfehlung.
     modulateds: list[ModulatedState] = field(default_factory=list)
     # Schaltbare Lasten (nur an/aus) für die Überschussregelung. Leer = keine
-    # konfiguriert; dann bleibt die Schaltlast-Empfehlung leer.
+    # konfiguriert; dann bleibt die Schaltlast-Empfehlung leer. Wärmeerzeuger
+    # stehen hier MIT drin (gleiche `id` wie in `heatings`) — sie konkurrieren
+    # im selben Budget; `heatings` trägt nur ihre Witterungsführung.
     switchables: list[SwitchableState] = field(default_factory=list)
+    # Wärmeerzeuger für Frostschutz, Heizgrenze, Sommersperre und Heizkurve.
+    heatings: list[HeatingState] = field(default_factory=list)
     # Schmitt-Trigger-Zustand des vorigen Laufs; siehe PlanFlags.
     flags: PlanFlags = field(default_factory=PlanFlags)
 
@@ -394,6 +485,9 @@ class PlanResult:
     # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).
     ev_regelung: EvControlResult | None = None
     schaltbare: SwitchableResult | None = None
+    # Witterungsführung der Wärmeerzeuger. Entsteht ohne Netzsaldo (nur aus der
+    # Temperatur) und liegt deshalb auch dann vor, wenn `schaltbare` None ist.
+    heizung: HeatingResult | None = None
     empfehlung: str = "keine Daten"
     prioritaeten: list[str] = field(default_factory=list)
     # Fortgeschriebener Trigger-Zustand für den nächsten Lauf.

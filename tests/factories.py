@@ -113,6 +113,46 @@ def switchable(
     )
 
 
+def heating(
+    name: str = "Wärmepumpe",
+    *,
+    id: str = "sw1",
+    outdoor_temp_c: float | None = 8.0,
+    month: int = 1,
+    hat_vorlauf_entity: bool = True,
+    frost_on_c: float = 3.0,
+    frost_off_c: float = 5.0,
+    heat_on_c: float = 15.0,
+    heat_off_c: float = 18.0,
+    curve_base_c: float = 32.0,
+    curve_slope: float = 0.6,
+    vlt_min_c: float = 25.0,
+    vlt_max_c: float = 45.0,
+    heat_lock_from_month: int = 6,
+    heat_lock_to_month: int = 8,
+) -> P.HeatingState:
+    """Witterungsführung einer Heizung. Die `id` deckt sich absichtlich mit dem
+    Default von `switchable()` — Heizung und Schaltlast sind dasselbe Gerät in
+    zwei Sichten und werden über die id verbunden."""
+    return P.HeatingState(
+        name=name,
+        id=id,
+        outdoor_temp_c=outdoor_temp_c,
+        month=month,
+        hat_vorlauf_entity=hat_vorlauf_entity,
+        frost_on_c=frost_on_c,
+        frost_off_c=frost_off_c,
+        heat_on_c=heat_on_c,
+        heat_off_c=heat_off_c,
+        curve_base_c=curve_base_c,
+        curve_slope=curve_slope,
+        vlt_min_c=vlt_min_c,
+        vlt_max_c=vlt_max_c,
+        heat_lock_from_month=heat_lock_from_month,
+        heat_lock_to_month=heat_lock_to_month,
+    )
+
+
 def plan_input(
     *,
     now: datetime = NOON,
@@ -134,6 +174,7 @@ def plan_input(
     ev_force: bool = False,
     priority_mode: str = "auto",
     switchables: list[P.SwitchableState] | None = None,
+    heatings: list[P.HeatingState] | None = None,
     flags: P.PlanFlags | None = None,
     thermal_present: bool = False,
     thermal_temp: float | None = None,
@@ -177,6 +218,7 @@ def plan_input(
         weather_factor_tomorrow=weather_factor_tomorrow,
         modulateds=modulateds if modulateds is not None else [],
         switchables=switchables if switchables is not None else [],
+        heatings=heatings if heatings is not None else [],
         load_profile_w=load_profile_w,
         horizon_start=now.replace(hour=0, minute=0),
         horizon_end=(now + timedelta(days=1)).replace(hour=0, minute=0),

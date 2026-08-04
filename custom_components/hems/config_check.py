@@ -89,7 +89,14 @@ def _exists(hass: HomeAssistant, entity: str | None) -> bool:
     return bool(entity) and hass.states.get(entity) is not None
 
 
-def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
+# `weather` ist die global konfigurierte Wetter-Entität. Sie steht nicht in der
+# Registry, ist aber die Rückfall-Quelle für die Außentemperatur der Heizung —
+# ohne sie und ohne eigenen Sensor bleibt der Frostschutz blind. Bewusst als
+# Kommentar und nicht als Docstring: Die Start-Wache unten muss die erste
+# Anweisung der Funktion bleiben (siehe tests/test_config_check_start.py).
+def check_config(
+    hass: HomeAssistant, reg: DeviceRegistry, weather: str | None = None
+) -> ConfigCheck:
     if not pruefung_moeglich(hass.state):
         return check_beim_start()
 
@@ -221,6 +228,72 @@ def check_config(hass: HomeAssistant, reg: DeviceRegistry) -> ConfigCheck:
             c.warnings.append(
                 f"{ctx}: keine Leistungsmessung — HEMS rechnet dauerhaft mit "
                 f"{DEFAULT_SWITCHABLE_EXPECTED_W:.0f} W und schaltet die Last "
+                f"erst ab so viel Überschuss ein"
+            )
+
+    # --- Heizung ------------------------------------------------------------
+    for h in reg.heatings:
+        ctx = f"Heizung '{h.name}'"
+        _mark("Heizung (Frostschutz + Heizkurve)")
+        _need(
+            h.switch_entity,
+            ("switch", "climate", "input_boolean"),
+            ctx,
+            "Schalter",
+        )
+        # Ohne Temperatur greift weder Frostschutz noch Heizkurve — und HEMS
+        # rührt die Anlage dann gar nicht mehr an. Das ist die sichere, aber
+        # eben auch die wirkungslose Auslegung; sie gehört gesagt.
+        if not h.outdoor_temp_entity and not weather:
+            c.errors.append(
+                f"{ctx}: keine Außentemperatur (weder eigener Sensor noch "
+                f"Wetter-Entität) — Frostschutz und Heizkurve sind wirkungslos, "
+                f"HEMS schaltet die Anlage weder ein noch aus"
+            )
+        if h.outdoor_temp_entity:
+            _need(
+                h.outdoor_temp_entity,
+                ("sensor", "input_number", "number"),
+                ctx,
+                "Außentemperatur",
+            )
+        if h.flow_setpoint_entity:
+            _need(
+                h.flow_setpoint_entity,
+                ("number", "input_number"),
+                ctx,
+                "Vorlauf-Sollwert",
+            )
+        # HEMS ordnet vertauschte Schwellen selbst (siehe strategies/heating.py
+        # `_ordnung`) — sonst kehrte sich die Wirkung des Frostschutzes still
+        # um. Gemeldet wird es trotzdem: Der eingetragene Wert gilt dann nicht
+        # so, wie er dasteht, und das darf nicht stumm passieren.
+        if h.frost_off_c <= h.frost_on_c:
+            c.warnings.append(
+                f"{ctx}: Frostschutz-Aus ({h.frost_off_c:.1f} °C) liegt nicht über "
+                f"Frostschutz-Ein ({h.frost_on_c:.1f} °C) — HEMS rechnet mit "
+                f"{max(h.frost_off_c, h.frost_on_c + 1):.1f} °C, damit die Wirkung "
+                f"sich nicht umkehrt"
+            )
+        if h.heat_off_c <= h.heat_on_c:
+            c.warnings.append(
+                f"{ctx}: Heizgrenze-Aus ({h.heat_off_c:.1f} °C) liegt nicht über "
+                f"Heizgrenze-Ein ({h.heat_on_c:.1f} °C) — HEMS rechnet mit "
+                f"{max(h.heat_off_c, h.heat_on_c + 1):.1f} °C"
+            )
+        if h.vlt_max_c <= h.vlt_min_c:
+            c.warnings.append(
+                f"{ctx}: Vorlauf-Maximum ({h.vlt_max_c:.0f} °C) liegt nicht über "
+                f"dem Minimum ({h.vlt_min_c:.0f} °C) — die Heizkurve ist damit flach"
+            )
+        if h.switch_entity.split(".")[0] == "climate" and not h.mode_heat_option:
+            c.info.append(
+                f"{ctx}: climate-Entität ohne Heiz-Modus — HEMS schaltet auf 'heat'"
+            )
+        if not h.power_entity:
+            c.warnings.append(
+                f"{ctx}: keine Leistungsmessung — HEMS rechnet dauerhaft mit "
+                f"{DEFAULT_SWITCHABLE_EXPECTED_W:.0f} W und schaltet die Anlage "
                 f"erst ab so viel Überschuss ein"
             )
 

@@ -15,10 +15,21 @@ from .const import (
     DEFAULT_BOOST_SOC_ON,
     DEFAULT_COMFORT_TARGET,
     DEFAULT_LEGIONELLA_TARGET,
+    DEFAULT_CURVE_BASE_C,
+    DEFAULT_CURVE_SLOPE,
+    DEFAULT_FROST_OFF_C,
+    DEFAULT_FROST_ON_C,
+    DEFAULT_HEAT_LOCK_FROM_MONTH,
+    DEFAULT_HEAT_LOCK_TO_MONTH,
+    DEFAULT_HEAT_OFF_C,
+    DEFAULT_HEAT_ON_C,
     DEFAULT_MAX_CHARGE_W,
     DEFAULT_MAX_DISCHARGE_W,
     DEFAULT_RESERVE_SOC,
+    DEFAULT_VLT_MAX_C,
+    DEFAULT_VLT_MIN_C,
     ROLE_FORECAST,
+    ROLE_HEATING,
     ROLE_MODULATED,
     ROLE_STORAGE,
     ROLE_SWITCHABLE,
@@ -114,12 +125,66 @@ class SwitchableLoad:
     min_off_min: int = 10
     max_block_min: int = 120
     priority: int = 1
-    # Heizungsgekoppelt: die Last ist ein Wärmeerzeuger (Wärmepumpe, Heizstab).
-    # Zwei Wirkungen, beide unabhängig von der Regelung: Im Lastfluss wird sie
-    # als „Wärmepumpe" ausgewiesen statt anonym unter den Schaltlasten, und beim
-    # Lernen der Leistungsaufnahme gilt ein höherer Boden, weil solche Geräte mit
-    # kräftigem Standby-Sockel anlaufen (SWITCH_LEARN_FLOOR_HEAT_W).
-    heat_coupled: bool = False
+    # Nur für climate-Entitäten: der HVAC-Modus, der „an" bedeutet. Ein switch
+    # kennt on/off, eine climate-Entität heat/cool/auto/off — ohne diese Angabe
+    # wüsste HEMS nicht, worauf es einschalten soll (siehe entity_domain).
+    mode_heat_option: str | None = None
+
+
+@dataclass
+class HeatingSystem:
+    """Wärmeerzeuger mit Witterungsführung (Wärmepumpe, Heizung).
+
+    Aus Sicht der Überschussregelung ist das eine schaltbare Last und wird
+    genauso behandelt — dieselbe Priorität, dieselben Anti-Takt-Sperren,
+    dasselbe Budget. Drei Dinge kommen hinzu, die eine Steckdosenlast nicht hat:
+
+    • **Frostschutz.** Unter `frost_on_c` wird Einschalten erzwungen, an
+      Überschuss, Mindestpause und Sommersperre vorbei. Er ist der Grund, warum
+      diese Rolle überhaupt existiert: eine Heizung, die HEMS aus Sparsamkeit
+      abschaltet, darf das Haus nicht auskühlen lassen.
+    • **Sommersperre.** In den Sperrmonaten wird Heizen nie empfohlen.
+    • **Heizkurve.** Ist eine `flow_setpoint_entity` konfiguriert, schreibt HEMS
+      den witterungsgeführten Vorlauf-Sollwert.
+
+    HEMS ist dabei keine Sicherheitseinrichtung: Der geräteeigene Frostschutz
+    bleibt zuständig und wird von HEMS nicht ersetzt. Bei einer über einen
+    SG-Ready-Kontakt (`switch`) angebundenen Anlage sperrt HEMS ohnehin nur; bei
+    einer `climate`-Entität schaltet es den Erzeuger wirklich ab — dort ist
+    dieser Frostschutz die einzige Rückfallebene, die HEMS selbst kennt.
+    """
+
+    id: str
+    name: str
+    # Freigabe/Sperre: switch (SG-Ready, EVU-Kontakt) oder climate (Gerät selbst).
+    switch_entity: str
+    # Nur für climate: HVAC-Modus, der „heizen" bedeutet (siehe entity_domain).
+    mode_heat_option: str | None = None
+    power_entity: str | None = None
+    # Außentemperatur. Ohne eigenen Sensor nimmt HEMS die der global
+    # konfigurierten Wetter-Entität.
+    outdoor_temp_entity: str | None = None
+    # Vorlauf-Sollwert (number). Ohne diese Entität bleibt die Heizkurve reine
+    # Anzeige — HEMS schaltet dann nur frei und sperrt.
+    flow_setpoint_entity: str | None = None
+
+    min_on_min: int = 20
+    min_off_min: int = 10
+    max_block_min: int = 120
+    priority: int = 1
+
+    frost_on_c: float = DEFAULT_FROST_ON_C
+    frost_off_c: float = DEFAULT_FROST_OFF_C
+    heat_on_c: float = DEFAULT_HEAT_ON_C
+    heat_off_c: float = DEFAULT_HEAT_OFF_C
+
+    curve_base_c: float = DEFAULT_CURVE_BASE_C
+    curve_slope: float = DEFAULT_CURVE_SLOPE
+    vlt_min_c: float = DEFAULT_VLT_MIN_C
+    vlt_max_c: float = DEFAULT_VLT_MAX_C
+
+    heat_lock_from_month: int = DEFAULT_HEAT_LOCK_FROM_MONTH
+    heat_lock_to_month: int = DEFAULT_HEAT_LOCK_TO_MONTH
 
 
 @dataclass
@@ -144,6 +209,7 @@ class DeviceRegistry:
     thermals: list[ThermalStore] = field(default_factory=list)
     switchables: list[SwitchableLoad] = field(default_factory=list)
     modulateds: list[ModulatedLoad] = field(default_factory=list)
+    heatings: list[HeatingSystem] = field(default_factory=list)
 
 
 _ROLE_CLASSES = {
@@ -152,6 +218,7 @@ _ROLE_CLASSES = {
     ROLE_THERMAL: (ThermalStore, "thermals"),
     ROLE_SWITCHABLE: (SwitchableLoad, "switchables"),
     ROLE_MODULATED: (ModulatedLoad, "modulateds"),
+    ROLE_HEATING: (HeatingSystem, "heatings"),
 }
 
 
@@ -169,4 +236,5 @@ def parse_devices(raw: list[dict]) -> DeviceRegistry:
     # Reihe nach abarbeiten können.
     registry.switchables.sort(key=lambda d: d.priority)
     registry.modulateds.sort(key=lambda d: d.priority)
+    registry.heatings.sort(key=lambda d: d.priority)
     return registry

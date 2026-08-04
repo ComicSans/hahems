@@ -2,6 +2,14 @@
 
 DOMAIN = "hems"
 
+# Schema-Version der Optionen. Eine Quelle für beide Seiten: Der Config-Flow
+# legt neue Einträge damit an, die Migration hebt alte darauf. Liefen sie
+# auseinander, migrierte HEMS entweder endlos oder gar nicht.
+#   2: schaltbare Lasten kennen `heat_coupled`
+#   3: Heizkreis und Wärmepumpen-Analyse entfallen
+#   4: Rolle Heizung; `heat_coupled` wird zu ihr migriert
+SCHEMA_VERSION = 4
+
 CONF_METER = "meter_entity"
 CONF_PV_POWER = "pv_power_entity"
 CONF_INVERT = "invert_meter"
@@ -46,6 +54,7 @@ ROLE_STORAGE = "storage"
 ROLE_THERMAL = "thermal"
 ROLE_SWITCHABLE = "switchable_load"
 ROLE_MODULATED = "modulated_load"
+ROLE_HEATING = "heating"
 
 MODE_OBSERVE = "beobachten"  # empfehlen + loggen, nicht schalten
 MODE_AUTO = "auto"  # empfehlen + schalten (Actuator aktiv)
@@ -205,6 +214,36 @@ SWITCH_LEARN_WARMUP_S = 300.0
 # Teillast- oder Taktpause den gelernten Wert nach unten und die Last wird zu
 # früh eingeschaltet.
 SWITCH_LEARN_DECAY = 0.25
+
+# Heizung (Wärmeerzeuger mit Witterungsführung). Die Rolle ist eine schaltbare
+# Last mit drei Zusätzen: Frostschutz, Sommersperre und Heizkurve.
+#
+# Frostschutz: Unterhalb FROST_ON wird Einschalten erzwungen — an Überschuss,
+# Mindestpause und Sommersperre vorbei, notfalls also aus dem Netz. Er endet
+# erst wieder oberhalb FROST_OFF (Hysterese), damit die Anlage am Schwellwert
+# nicht taktet. Die Werte liegen bewusst über 0 °C: Wasser gefriert bei 0, aber
+# ein Heizkreis kühlt nach dem Abschalten weiter aus, und die gemessene
+# Außentemperatur ist nicht die im ungedämmten Nebenraum.
+DEFAULT_FROST_ON_C = 3.0
+DEFAULT_FROST_OFF_C = 5.0
+# Heizgrenze: oberhalb HEAT_OFF braucht das Haus keine Wärme, unterhalb
+# HEAT_ON schon. Dazwischen bleibt es beim vorigen Zustand.
+DEFAULT_HEAT_ON_C = 15.0
+DEFAULT_HEAT_OFF_C = 18.0
+# Heizkurve: Vorlauf = Fußpunkt − Außentemperatur × Steilheit, begrenzt auf
+# [VLT_MIN, VLT_MAX]. Der Fußpunkt ist der Vorlauf bei 0 °C Außentemperatur;
+# die Steilheit sagt, um wie viel Kelvin er je Kelvin Außenkälte steigt. Die
+# Defaults beschreiben eine Fußbodenheizung — ein Heizkörperkreis braucht
+# deutlich höhere Werte.
+DEFAULT_CURVE_BASE_C = 32.0
+DEFAULT_CURVE_SLOPE = 0.6
+DEFAULT_VLT_MIN_C = 25.0
+DEFAULT_VLT_MAX_C = 45.0
+# Sommersperre: In diesen Monaten (einschließlich, 1 = Januar) wird Heizen nie
+# empfohlen — nur der Frostschutz greift weiter. from > to läuft über den
+# Jahreswechsel; gleiche Werte heißt „nur dieser eine Monat". 0 = keine Sperre.
+DEFAULT_HEAT_LOCK_FROM_MONTH = 6
+DEFAULT_HEAT_LOCK_TO_MONTH = 8
 
 # PV-Ertragsfaktor (0–1) je Wetterlage, falls die Vorhersage keinen
 # Bewölkungsgrad liefert. Diffuses Licht bringt auch bedeckt noch Ertrag.

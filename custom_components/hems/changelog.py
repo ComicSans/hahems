@@ -42,6 +42,13 @@ _WARMWASSER_LABEL = {
     "pv_boost": "PV-Boost",
     "basis": "Basis",
 }
+_HEIZUNG_LABEL = {
+    "frostschutz": "Frostschutz (notfalls Netz)",
+    "heizen": "witterungsgeführt",
+    "sommersperre": "Sommersperre",
+    "heizgrenze": "über Heizgrenze",
+    "unbekannt": "keine Außentemperatur",
+}
 
 # key → (Titel, Kategorie). Reihenfolge bestimmt die Ausgabe je Zyklus.
 _DECISION_FIELDS: dict[str, tuple[str, str]] = {
@@ -53,6 +60,7 @@ _DECISION_FIELDS: dict[str, tuple[str, str]] = {
     "warmwasser_status": ("Warmwasser", "ww"),
     "warmwasser_soll": ("Warmwasser-Sollwert", "ww"),
     "warmwasser_quittung": ("Warmwasser-Freigabe gestellt", "ww"),
+    "heizung_status": ("Heizung", "heizung"),
 }
 
 
@@ -100,6 +108,22 @@ def decision_snapshot(mode: str, goal: str, ev_force: bool, plan: Any) -> dict:
         snap["warmwasser_quittung"] = (
             quittiert,
             "angekommen" if quittiert else "Gerät übernimmt die Freigabe nicht",
+        )
+
+    # Heizung: der Statuswechsel je Anlage. Der Frostschutz gehört unbedingt
+    # hierher — er ist neben Warmwasser-Basis und Legionellenschutz der einzige
+    # Fall, in dem HEMS bewusst Strom kauft, und das soll man später nachlesen
+    # können. Der Vorlauf-Sollwert steht bewusst NICHT im Log: Er folgt der
+    # Außentemperatur und änderte sich damit fast jeden Zyklus.
+    heizung = getattr(plan, "heizung", None)
+    if heizung is not None and heizung.anlagen:
+        lagen = [(a.name, a.status) for a in heizung.anlagen]
+        snap["heizung_status"] = (
+            tuple(lagen),
+            ", ".join(
+                f"{name}: {_HEIZUNG_LABEL.get(status, status)}"
+                for name, status in lagen
+            ),
         )
 
     # Die Wallbox-Sofortladung wird bewusst nicht separat geführt: sie folgt

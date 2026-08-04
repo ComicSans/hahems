@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from . import entity_domain
 from .actuation import plan_ww_action
 from .models import DeviceRegistry
 from .strategies.types import PlanResult
@@ -82,6 +83,7 @@ class Actuator:
         await self._guard(self._apply_battery, reg, plan, name="Speicher")
         await self._guard(self._apply_modulated, reg, plan, name="Lasten")
         await self._guard(self._apply_switchable, reg, plan, name="Schaltlasten")
+        await self._guard(self._apply_heating, reg, plan, name="Heizung")
 
     async def release_battery(self, reg: DeviceRegistry) -> None:
         """Akku-Setpoints einmalig auf 0/0 (passiv) setzen — beim Verlassen des
@@ -133,13 +135,21 @@ class Actuator:
         )
         return True
 
-    async def _turn(self, entity: str, on: bool) -> None:
-        """turn_on/turn_off auf der Domain des Entitys (switch/input_boolean …),
-        nur wenn der Zustand nicht schon passt."""
-        want = "on" if on else "off"
-        if self._state(entity) == want:
+    async def _turn(self, entity: str, on: bool, heat_mode: str | None = None) -> None:
+        """Steuer-Entität ein-/ausschalten, nur wenn die Lage nicht schon passt.
+
+        Der Vergleich läuft über `entity_domain.ist_an` statt über den rohen
+        Zustandsstring: Eine `climate`-Entität steht auf `heat`/`auto`/`off`,
+        nie auf `on`. Mit einem `== "on"`-Vergleich wäre die Einschaltrichtung
+        nie deckungsgleich — HEMS würde bei jeder Gelegenheit erneut schalten
+        und dabei ausgerechnet den Service rufen (`climate.turn_on`), den viele
+        Integrationen gar nicht anbieten. Über `ist_an` bleibt außerdem ein
+        Gerät in Ruhe, das schon in einem anderen Heizmodus (`auto`) läuft.
+        """
+        if entity_domain.ist_an(entity, self._state(entity)) == on:
             return
-        await self._call(entity.split(".")[0], f"turn_{want}", entity)
+        domain, service, data = entity_domain.schalt_service(entity, on, heat_mode)
+        await self._call(domain, service, entity, **data)
 
     def _num_state(self, entity: str | None) -> float | None:
         """Zustand einer Number-Entität als float (deren Wert IST der Zustand)."""
@@ -358,8 +368,52 @@ class Actuator:
             if sp is None:
                 continue
             try:
-                await self._turn(s.switch_entity, sp.an)
+                await self._turn(s.switch_entity, sp.an, s.mode_heat_option)
             except Exception as err:  # noqa: BLE001 – eine Last reißt nie die andern
                 _LOGGER.warning(
                     "HEMS-Actuator: Schaltlast %s fehlgeschlagen: %s", s.name, err
+                )
+
+    # --- Heizung ------------------------------------------------------------
+
+    async def _apply_heating(self, reg: DeviceRegistry, plan: PlanResult) -> None:
+        """Wärmeerzeuger stellen: Vorlauf-Sollwert und An/Aus-Lage.
+
+        Bewusst NICHT an `plan.schaltbare` gebunden. Die Überschuss-Empfehlung
+        fehlt, sobald der Netzzähler unerreichbar ist (`saldo_w is None`) — und
+        genau dann liefe eine zuvor abgeschaltete Heizung ohne diesen eigenen
+        Weg unbegrenzt weiter aus. Der Frostschutz hängt allein an der
+        Temperatur, also wird er hier auch allein daraus gestellt.
+
+        Reguläres Ein-/Ausschalten bleibt dagegen Sache der Überschussregelung:
+        liegt keine Empfehlung vor, rührt HEMS die Lage nicht an. Zwischen
+        beiden steht `nicht_abschalten` (keine Außentemperatur bekannt) — dann
+        wird gar nichts geschaltet, in keine Richtung.
+        """
+        rec = plan.heizung
+        if rec is None or not reg.heatings:
+            return
+        empfehlung = (
+            {sp.id: sp for sp in plan.schaltbare.lasten}
+            if plan.schaltbare is not None
+            else {}
+        )
+        for h in reg.heatings:
+            sp = rec.by_id(h.id)
+            if sp is None:
+                continue
+            try:
+                if sp.vorlauf_c is not None:
+                    await self._set_number(h.flow_setpoint_entity, sp.vorlauf_c)
+                if not h.switch_entity:
+                    continue
+                if sp.zwang_an:
+                    await self._turn(h.switch_entity, True, h.mode_heat_option)
+                elif sp.nicht_abschalten:
+                    continue
+                elif (lage := empfehlung.get(h.id)) is not None:
+                    await self._turn(h.switch_entity, lage.an, h.mode_heat_option)
+            except Exception as err:  # noqa: BLE001 – eine Anlage reißt nie die andern
+                _LOGGER.warning(
+                    "HEMS-Actuator: Heizung %s fehlgeschlagen: %s", h.name, err
                 )

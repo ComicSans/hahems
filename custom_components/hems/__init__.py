@@ -14,8 +14,9 @@ from homeassistant.core import HomeAssistant
 
 from .changelog import ChangeLog
 from .config_ws import async_register_ws
-from .const import CONF_DEVICES, DOMAIN, ROLE_SWITCHABLE
+from .const import CONF_DEVICES, DOMAIN, SCHEMA_VERSION
 from .coordinator import HemsCoordinator
+from .migration import migriere_geraete
 from .power_memory import PowerMemory
 
 PLATFORMS = [
@@ -24,11 +25,6 @@ PLATFORMS = [
     Platform.SELECT,
     Platform.SWITCH,
 ]
-
-# Rollen, die es einmal gab und die die Migration aus den Optionen räumt.
-# Als Literale und nicht als Konstanten aus const.py: dort sind sie entfernt,
-# und ein Migrationspfad muss auch dann noch wissen, wie die Altdaten heißen.
-_ENTFALLENE_ROLLEN = ("heating_circuit", "heat_pump_analysis")
 
 FRONTEND_URL = "/hems-frontend"
 FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"
@@ -103,29 +99,17 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Optionen auf das aktuelle Schema heben.
 
-    1 → 2: Schaltbare Lasten kennen `heat_coupled`. Bis dahin galten *alle*
-    schaltbaren Lasten als Wärmepumpe. Bestehende Einträge bekommen das Flag
-    auf True, neue starten auf False. Es markiert heute noch, welche Last im
-    Lastfluss als Wärmeerzeuger erscheint und mit welchem Boden ihre
-    Leistungsaufnahme gelernt wird.
-
-    2 → 3: Die Rollen Heizkreis und Wärmepumpen-Analyse sind entfallen — HEMS
-    regelt Speicher, Warmwasser und Lasten. Ihre Einträge werden aus den
-    Optionen entfernt: sie werden ohnehin nicht mehr gelesen, blieben aber
-    sonst als unbekannte Geräte im Panel stehen. Die dazu angelegten Entitäten
-    verschwinden mit dem nächsten Neustart aus der Registry.
+    Die eigentliche Umschreibung steht in `migration.migriere_geraete` — HA-frei
+    und damit testbar. Hier bleibt nur das Schreiben in den ConfigEntry.
     """
-    if entry.version >= 3:
+    if entry.version >= SCHEMA_VERSION:
         return True
 
-    devices = [dict(d) for d in entry.options.get(CONF_DEVICES, [])]
-    if entry.version < 2:
-        for device in devices:
-            if device.get("role") == ROLE_SWITCHABLE and "heat_coupled" not in device:
-                device["heat_coupled"] = True
-    devices = [d for d in devices if d.get("role") not in _ENTFALLENE_ROLLEN]
+    devices = migriere_geraete(entry.options.get(CONF_DEVICES, []), entry.version)
     hass.config_entries.async_update_entry(
-        entry, options={**entry.options, CONF_DEVICES: devices}, version=3
+        entry,
+        options={**entry.options, CONF_DEVICES: devices},
+        version=SCHEMA_VERSION,
     )
     return True
 

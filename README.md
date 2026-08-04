@@ -38,10 +38,12 @@ hinzufügen, dann installieren und Home Assistant neu starten.
 ## Einrichtung
 
 1. **Einstellungen → Geräte & Dienste → Integration hinzufügen → „HEMS“**
-2. Zähler-Entität und Grundlast angeben.
-3. Über **Konfigurieren** die Geräte als Rollen anlegen: PV-Prognoseflächen,
-   Speicher, Warmwasser, schaltbare und modulierbare Lasten.
-   Alternativ im HEMS-Panel unter **Konfiguration**.
+2. Zähler-Entität und Grundlast angeben. Mehr fragt die Einrichtung nicht ab.
+3. Im **HEMS-Panel** der Seitenleiste unter **Konfiguration** die Geräte als
+   Rollen anlegen: PV-Prognoseflächen, Speicher, Warmwasser, Heizung sowie
+   schaltbare und modulierbare Lasten. Dort stehen sie alle auf einer Seite und
+   lassen sich jederzeit ändern, ergänzen und entfernen. Alternativ über
+   **Konfigurieren** an der Integration.
 4. `binary_sensor.hems_konfiguration` prüfen — er sagt dir, ob die
    Konfiguration für den Auto-Modus taugt.
 
@@ -90,6 +92,8 @@ mit folgenden Ansichten:
 
 - **Übersicht** — Lastfluss- und Entladeplan-Karte
 - **Steuerung** — Betriebsmodus, Optimierungsziel und E-Auto-Zwangsladung
+- **Heizung** — Außentemperatur, Status (Frostschutz, Sommersperre, Heizgrenze),
+  Vorlauf-Sollwert gegen Ist-Wert und die eingestellte Heizkurve
 - **Diagnose** — Fehler, Warnungen und Überlappungen auf einen Blick
 - **Konfiguration** — vollständiger Editor für Grundeinstellungen und alle Rollen
 

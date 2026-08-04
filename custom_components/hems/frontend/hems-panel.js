@@ -32,10 +32,22 @@ function resolveEntity(hass, domain, ...needles) {
 const TABS = [
   { id: "overview", label: "Übersicht" },
   { id: "control", label: "Steuerung" },
+  { id: "heating", label: "Heizung" },
   { id: "diagnostics", label: "Diagnose" },
   { id: "config", label: "Konfiguration" },
   { id: "logs", label: "Logs" },
 ];
+
+// Anzeige je Heizungs-Status (siehe strategies/heating.py). Der Frostschutz
+// sticht bewusst heraus: Er ist der einzige Zustand, in dem HEMS bewusst Strom
+// kauft, und das soll man sehen, ohne die Begründung zu lesen.
+const HEIZ_STATUS = {
+  frostschutz: { label: "Frostschutz", klasse: "bad" },
+  heizen: { label: "Heizen", klasse: "good" },
+  sommersperre: { label: "Sommersperre", klasse: "" },
+  heizgrenze: { label: "Über Heizgrenze", klasse: "" },
+  unbekannt: { label: "Keine Außentemperatur", klasse: "bad" },
+};
 
 // Anzeige-Labels je Segment-Rolle. Die Optionswerte (Slugs) bleiben unberührt;
 // nur die Beschriftung weicht ab, wo die reine Erst-Buchstaben-Großschreibung
@@ -112,6 +124,7 @@ class HemsPanel extends HTMLElement {
         <main>
           <section data-panel="overview" class="grid"></section>
           <section data-panel="control" hidden></section>
+          <section data-panel="heating" hidden></section>
           <section data-panel="diagnostics" hidden></section>
           <section data-panel="config" hidden></section>
           <section data-panel="logs" hidden></section>
@@ -132,6 +145,7 @@ class HemsPanel extends HTMLElement {
     this._sections = {
       overview: root.querySelector('[data-panel="overview"]'),
       control: root.querySelector('[data-panel="control"]'),
+      heating: root.querySelector('[data-panel="heating"]'),
       diagnostics: root.querySelector('[data-panel="diagnostics"]'),
       config: root.querySelector('[data-panel="config"]'),
       logs: root.querySelector('[data-panel="logs"]'),
@@ -293,6 +307,7 @@ class HemsPanel extends HTMLElement {
     this._renderSegmented("goal", this._goalEntity, "select");
     this._renderSegmented("gain", this._gainEntity, "select");
     this._renderForce();
+    this._renderHeating();
     this._renderDiagnostics();
   }
 
@@ -307,6 +322,9 @@ class HemsPanel extends HTMLElement {
     this._gainEntity ||= resolveEntity(this._hass, "select", "hems_regel_aggressivitaet", "aggressiv");
     this._forceEntity ||= resolveEntity(this._hass, "switch", "hems_e_auto_zwangsladung", "zwangsladung");
     this._checkEntity ||= resolveEntity(this._hass, "binary_sensor", "hems_konfiguration", "konfiguration");
+    // Die Heizungsdaten hängen als Attribut am Lastfluss-Sensor — derselben
+    // Quelle, aus der auch die Flow-Karte ihre Schaltlasten liest.
+    this._flowEntity ||= resolveEntity(this._hass, "sensor", "hems_lastfluss", "lastfluss");
     if (!this._overviewReady) this._buildOverview();
   }
 
@@ -355,6 +373,91 @@ class HemsPanel extends HTMLElement {
     this._ctrl.forceHint.textContent = on
       ? "Lädt zwangsweise, Akku wird geschont."
       : "Aus — reguläres Überschussladen.";
+  }
+
+  // --- Heizung -----------------------------------------------------------
+
+  /** Witterungsführung je Wärmeerzeuger.
+   *
+   * Die Zahlen kommen aus dem Attribut `heizungen` des Lastfluss-Sensors; die
+   * Entscheidung selbst fällt im Planner (`strategies/heating.py`). Hier wird
+   * nichts gerechnet außer der Darstellung der Kurve.
+   */
+  _renderHeating() {
+    const s = this._sections.heating;
+    const st = this._flowEntity && this._hass.states[this._flowEntity];
+    const anlagen = (st && st.attributes.heizungen) || [];
+    if (!anlagen.length) {
+      // Signatur, damit der Platzhalter nicht bei jedem Tick neu geschrieben
+      // wird (er enthält keinen Live-Wert).
+      if (s.dataset.sig === "leer") return;
+      s.dataset.sig = "leer";
+      s.innerHTML = `
+        <div class="panel-card">
+          <h2>Keine Heizung eingerichtet</h2>
+          <p class="hint">Eine <b>Heizung</b> ist eine schaltbare Last mit
+          Witterungsführung: Frostschutz, Sommersperre, Heizgrenze und
+          Heizkurve. Anlegen im Reiter <b>Konfiguration</b> unter
+          „Heizung hinzufügen“.</p>
+          <p class="hint">Der Frostschutz schaltet die Anlage unterhalb der
+          eingestellten Außentemperatur zwangsweise ein — notfalls aus dem Netz.
+          Er ersetzt den Frostschutz des Geräts nicht.</p>
+        </div>`;
+      return;
+    }
+    const sig = JSON.stringify(anlagen);
+    if (s.dataset.sig === sig) return;
+    s.dataset.sig = sig;
+    s.innerHTML = anlagen.map((h) => this._heizungsKarte(h)).join("");
+  }
+
+  _heizungsKarte(h) {
+    const status = HEIZ_STATUS[h.status] || { label: h.status || "—", klasse: "" };
+    const num = (v, einheit, stellen = 0) =>
+      v === null || v === undefined ? "—" : `${Number(v).toFixed(stellen)} ${einheit}`;
+    const zeile = (label, wert) =>
+      `<div class="row"><span>${escapeHtml(label)}</span><b>${wert}</b></div>`;
+    // Vorlauf-Soll und -Ist getrennt: Der Sollwert ist, was HEMS schreibt, der
+    // Ist-Wert, was an der Anlage steht. Gehen sie dauerhaft auseinander,
+    // übernimmt das Gerät den Befehl nicht.
+    const vorlauf =
+      h.vorlauf_soll_c === null || h.vorlauf_soll_c === undefined
+        ? `<p class="hint">Kein Vorlauf-Sollwert konfiguriert — die Heizkurve
+           ist reine Anzeige, HEMS gibt nur frei und sperrt.</p>`
+        : zeile(
+            "Vorlauf (Soll → Ist)",
+            `${num(h.vorlauf_soll_c, "°C")} → ${num(h.vorlauf_ist_c, "°C")}`,
+          );
+    return `
+      <div class="panel-card">
+        <div class="banner ${status.klasse}">
+          ${escapeHtml(h.name)}: ${escapeHtml(status.label)}
+          <span class="hint">${escapeHtml(h.grund || "")}</span>
+        </div>
+        ${zeile("Außentemperatur", num(h.t_aussen_c, "°C", 1))}
+        ${zeile("Zustand", h.ist_an ? "läuft" : "aus")}
+        ${zeile(
+          "Empfehlung",
+          h.soll_an === null || h.soll_an === undefined
+            ? "—"
+            : h.soll_an
+              ? "einschalten"
+              : "aus lassen",
+        )}
+        ${zeile("Leistung", num(h.watt, "W"))}
+        ${vorlauf}
+        ${zeile(
+          "Heizkurve",
+          `Fußpunkt ${num(h.kurve_fusspunkt_c, "°C")}, Steilheit ${Number(
+            h.kurve_steilheit,
+          ).toFixed(2)}`,
+        )}
+        ${zeile(
+          "Vorlaufgrenzen",
+          `${num(h.vlt_min_c, "°C")} … ${num(h.vlt_max_c, "°C")}`,
+        )}
+        ${zeile("Frostschutz ab", num(h.frost_on_c, "°C", 1))}
+      </div>`;
   }
 
   _renderDiagnostics() {
@@ -941,6 +1044,17 @@ const STYLE = `
   .banner { font-size: 16px; display: flex; flex-direction: column; gap: 4px; }
   .banner.good { border-left: 4px solid var(--success-color, #4caf50); }
   .banner.bad { border-left: 4px solid var(--error-color, #f44336); }
+  /* Innerhalb einer Karte (Heizungs-Reiter) braucht der Banner eigenes
+     Innenabstand-Verhalten — als eigene Karte bringt ihn .panel-card mit. */
+  .panel-card > .banner { padding-left: 8px; margin-bottom: 8px; }
+  .row {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 4px 0; border-bottom: 1px solid var(--divider-color);
+    font-size: 14px;
+  }
+  .row:last-of-type { border-bottom: none; }
+  .row span { color: var(--secondary-text-color); }
+  .row b { font-variant-numeric: tabular-nums; }
   ul { margin: 4px 0 8px; padding-left: 20px; }
   li { margin: 2px 0; font-size: 13px; }
   .ok-line { color: var(--secondary-text-color); margin: 4px 0 8px; }
@@ -1009,6 +1123,7 @@ const STYLE = `
   .log-row.cat-akku { border-left-color: #4caf50; }
   .log-row.cat-ww { border-left-color: #26a69a; }
   .log-row.cat-wp { border-left-color: #ef6c00; }
+  .log-row.cat-heizung { border-left-color: #ef6c00; }
   .log-row.cat-ev { border-left-color: #9c6ad6; }
   .log-row.cat-ziel { border-left-color: #488fc2; }
 `;

@@ -52,7 +52,8 @@ from .const import (
     SWITCH_LEARN_FLOOR_W,
     WEATHER_CONDITION_FACTORS,
 )
-from .models import DeviceRegistry, parse_devices
+from . import entity_domain
+from .models import DeviceRegistry, HeatingSystem, parse_devices
 from .planner import (
     block_windows,
     compute_plan,
@@ -64,6 +65,7 @@ from .power_memory import PowerMemory
 from .strategies.alerts import evaluate as evaluate_alerts
 from .strategies.switchable import lern_leistung
 from .strategies.types import (
+    HeatingState,
     ModulatedState,
     PlanFlags,
     PlanInput,
@@ -282,6 +284,26 @@ class WeatherClient:
         self._weather_cache: tuple[str | None, float | None] = (None, None)
         self._weather_fetched: datetime | None = None
 
+    def outdoor_c(self) -> float | None:
+        """Aktuelle Außentemperatur aus der Wetter-Entität.
+
+        Jede `weather`-Entität trägt sie als Attribut `temperature`. Kein Cache
+        und kein Service-Aufruf nötig — anders als die Vorhersage steht sie
+        direkt im Zustand. Ohne konfigurierte Wetter-Entität (oder ohne das
+        Attribut) `None`; die Heizung fällt dann auf ihren eigenen
+        Temperatursensor zurück, und ohne beides regelt sie nicht.
+        """
+        entity = self._opt(CONF_WEATHER, None)
+        if not entity:
+            return None
+        state = self._hass.states.get(entity)
+        if state is None:
+            return None
+        try:
+            return float(state.attributes.get("temperature"))
+        except (TypeError, ValueError):
+            return None
+
     async def tomorrow(self) -> tuple[str | None, float | None]:
         """Wetterlage und PV-Ertragsfaktor (0–1) für morgen bestimmen.
 
@@ -363,6 +385,10 @@ class HemsData:
         # Pro-Schaltlast-Momentaufnahme für die Lastfluss-Karte (Name,
         # Priorität, An/Aus, Ist- und erwartete Leistung, Begründung).
         self.schaltlasten: list[dict] = []
+        # Pro-Heizung-Momentaufnahme für den Heizungs-Reiter des Panels:
+        # Außentemperatur, Status (Frostschutz/Sommersperre/…), Vorlauf-Soll
+        # und -Ist sowie die eingestellte Kurve.
+        self.heizungen: list[dict] = []
 
 
 class HemsCoordinator(DataUpdateCoordinator[HemsData]):
@@ -748,18 +774,33 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         return states
 
     def _switchable_states(self, reg: DeviceRegistry, now: datetime) -> list:
-        """Laufzeitzustand der schaltbaren Lasten aus HA-States bauen.
+        """Laufzeitzustand aller schaltbaren Lasten aus HA-States bauen.
 
         Der An/Aus-Zustand und die Zeit seit dem letzten Schaltvorgang kommen aus
-        dem Schalter (min_on/min_off/max_block); die erwartete Leistung wird aus
-        `power_entity` gelernt (nach Anlaufkarenz, asymmetrisch gedämpft — siehe
-        `lern_leistung`), bis dahin greift im Planner der konservative Fallback.
+        der Steuer-Entität (min_on/min_off/max_block); die erwartete Leistung
+        wird aus `power_entity` gelernt (nach Anlaufkarenz, asymmetrisch gedämpft
+        — siehe `lern_leistung`), bis dahin greift im Planner der konservative
+        Fallback.
+
+        Wärmeerzeuger (Rolle Heizung) stehen hier mit drin: sie konkurrieren im
+        selben Überschuss-Budget und derselben Prioritätsreihenfolge wie jede
+        andere Schaltlast. Was sie zusätzlich haben — Frostschutz, Sommersperre,
+        Heizkurve — trägt `_heating_states`.
+
+        „An" ist dabei domänenabhängig: ein `switch` steht auf `on`, eine
+        `climate`-Entität auf ihrem HVAC-Modus (`heat`, `auto`, …). Ohne diese
+        Unterscheidung gälte eine climate-geführte Anlage dauerhaft als aus —
+        dann lernt HEMS ihre Leistung nie, hält `min_on` nie ein und meldet sie
+        im Lastfluss als aus, während sie heizt.
         """
         states = []
-        for s in reg.switchables:
+        for s in [*reg.switchables, *reg.heatings]:
+            ist_heizung = isinstance(s, HeatingSystem)
             power = self._power_w(s.power_entity)
-            st = self.hass.states.get(s.switch_entity)
-            ist_an = bool(st and st.state == "on")
+            st = self.hass.states.get(s.switch_entity) if s.switch_entity else None
+            ist_an = entity_domain.ist_an(
+                s.switch_entity, st.state if st is not None else None
+            )
             seit = (
                 (now - st.last_changed).total_seconds() if st is not None else None
             )
@@ -772,7 +813,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     seit,
                     floor_w=(
                         SWITCH_LEARN_FLOOR_HEAT_W
-                        if s.heat_coupled
+                        if ist_heizung
                         else SWITCH_LEARN_FLOOR_W
                     ),
                 )
@@ -797,7 +838,49 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     max_block_min=s.max_block_min,
                 )
             )
+        # Über beide Rollen hinweg nach Nutzer-Priorität sortieren; sonst käme
+        # jede Heizung pauschal hinter jede Schaltlast, egal wie sie eingestellt
+        # ist. Bei Gleichstand entscheidet die Reihenfolge oben (Schaltlasten
+        # zuerst) — `sorted` ist stabil.
+        states.sort(key=lambda st: st.priority)
         return states
+
+    def _heating_states(self, reg: DeviceRegistry, now: datetime) -> list:
+        """Witterungsführung der Wärmeerzeuger: Außentemperatur und Parameter.
+
+        Die Außentemperatur kommt aus dem eigenen Sensor der Anlage, sonst aus
+        der global konfigurierten Wetter-Entität. Fehlt beides, bleibt sie
+        `None` — `heating_control` schaltet dann nichts ab, statt blind zu
+        regeln.
+        """
+        if not reg.heatings:
+            return []
+        wetter_c = self._weather.outdoor_c()
+        month = dt_util.now().month
+        return [
+            HeatingState(
+                name=h.name,
+                id=h.id,
+                outdoor_temp_c=(
+                    self._num(h.outdoor_temp_entity)
+                    if h.outdoor_temp_entity
+                    else wetter_c
+                ),
+                month=month,
+                hat_vorlauf_entity=bool(h.flow_setpoint_entity),
+                frost_on_c=h.frost_on_c,
+                frost_off_c=h.frost_off_c,
+                heat_on_c=h.heat_on_c,
+                heat_off_c=h.heat_off_c,
+                curve_base_c=h.curve_base_c,
+                curve_slope=h.curve_slope,
+                vlt_min_c=h.vlt_min_c,
+                vlt_max_c=h.vlt_max_c,
+                heat_lock_from_month=h.heat_lock_from_month,
+                heat_lock_to_month=h.heat_lock_to_month,
+            )
+            for h in reg.heatings
+        ]
 
     def _own_entity_id(self, key: str) -> str | None:
         """Entity-ID einer eigenen Entität über die Registry auflösen.
@@ -869,11 +952,11 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             data.pv_power_now_w = round(
                 max(0.0, data.pv_power_now_w - data.batterie_w), 0
             )
-        # Nur die heizungsgekoppelten Lasten sind „die Wärmepumpe"; alle
+        # Nur die Wärmeerzeuger (Rolle Heizung) sind „die Wärmepumpe"; alle
         # übrigen Schaltlasten stehen einzeln in data.schaltlasten (siehe
         # unten) statt anonym in dieser Summe.
         data.waermepumpe_w = self._sum_power(
-            [s.power_entity for s in reg.switchables if s.heat_coupled]
+            [h.power_entity for h in reg.heatings]
         )
         data.wallbox_w = self._sum_power([m.power_entity for m in reg.modulateds])
 
@@ -966,6 +1049,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
 
         modulateds = self._modulated_states(reg, now)
         switchables = self._switchable_states(reg, now)
+        heatings = self._heating_states(reg, now)
 
         night_load_w = await self._load_model.refresh()
 
@@ -1023,6 +1107,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 else 200,
                 modulateds=modulateds,
                 switchables=switchables,
+                heatings=heatings,
                 flags=self._plan_flags,
             )
         )
@@ -1036,6 +1121,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             if data.plan.schaltbare is not None
             else {}
         )
+        heizungs_ids = {h.id for h in reg.heatings}
         data.schaltlasten = [
             {
                 "name": st.name,
@@ -1045,11 +1131,46 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 "erwartet_w": st.erwartet_w,
                 "soll_an": empfehlung[st.id].an if st.id in empfehlung else None,
                 "grund": empfehlung[st.id].grund if st.id in empfehlung else "",
-                "heizung": next(
-                    (s.heat_coupled for s in reg.switchables if s.id == st.id), False
-                ),
+                "heizung": st.id in heizungs_ids,
             }
             for st in switchables
+        ]
+
+        # Heizungs-Zeilen für den eigenen Reiter: Witterungsführung samt
+        # Vorlauf-Sollwert. Sie entsteht ohne Netzsaldo und steht deshalb auch
+        # dann, wenn es gar keine Überschuss-Empfehlung gibt.
+        heiz_plan = (
+            {sp.id: sp for sp in data.plan.heizung.anlagen}
+            if data.plan.heizung is not None
+            else {}
+        )
+        data.heizungen = [
+            {
+                "name": h.name,
+                "id": h.id,
+                "prio": h.priority,
+                "ist_an": next(
+                    (st.ist_an for st in switchables if st.id == h.id), False
+                ),
+                "watt": self._power_w(h.power_entity),
+                "t_aussen_c": heiz_plan[h.id].t_aussen_c if h.id in heiz_plan else None,
+                "status": heiz_plan[h.id].status if h.id in heiz_plan else "",
+                "grund": heiz_plan[h.id].grund if h.id in heiz_plan else "",
+                "frostschutz": (
+                    heiz_plan[h.id].zwang_an if h.id in heiz_plan else False
+                ),
+                "vorlauf_soll_c": (
+                    heiz_plan[h.id].vorlauf_c if h.id in heiz_plan else None
+                ),
+                "vorlauf_ist_c": self._num(h.flow_setpoint_entity),
+                "soll_an": empfehlung[h.id].an if h.id in empfehlung else None,
+                "kurve_fusspunkt_c": h.curve_base_c,
+                "kurve_steilheit": h.curve_slope,
+                "vlt_min_c": h.vlt_min_c,
+                "vlt_max_c": h.vlt_max_c,
+                "frost_on_c": h.frost_on_c,
+            }
+            for h in reg.heatings
         ]
 
         data.ziel = self.goal
@@ -1057,7 +1178,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
 
         # Config-Sanity-Check (speist binary_sensor.hems_konfiguration). Fehler/
         # Überlappungen nur bei Änderung loggen, nicht jeden 60-s-Zyklus.
-        data.config_check = check_config(self.hass, reg)
+        data.config_check = check_config(
+            self.hass, reg, weather=self._opt(CONF_WEATHER, None)
+        )
         self.config_check = data.config_check
         sig = data.config_check.signature()
         if sig != self._check_signature:

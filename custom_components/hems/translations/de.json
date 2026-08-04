@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "HEMS einrichten",
-        "description": "HEMS verteilt deinen PV-Überschuss automatisch auf Warmwasser, Hausakku und flexible Verbraucher.\n\n**So funktioniert es:** Der Zähler am Netzanschluss meldet, ob du gerade einspeist (Überschuss) oder Strom beziehst. Aus PV-Prognose, Speicherstand und deinen Prioritäten entsteht daraus die Empfehlung bzw. Steuerung.\n\nAnschließend führt dich die Einrichtung Schritt für Schritt durch deine Geräte: PV-Prognosen, Speicher, Warmwasser sowie schaltbare und modulierbare Lasten. Jeder Schritt lässt sich überspringen und jeder Eintrag später über **Konfigurieren** jederzeit bearbeiten.",
+        "description": "HEMS verteilt deinen PV-Überschuss automatisch auf Warmwasser, Hausakku und flexible Verbraucher.\n\n**So funktioniert es:** Der Zähler am Netzanschluss meldet, ob du gerade einspeist (Überschuss) oder Strom beziehst. Aus PV-Prognose, Speicherstand und deinen Prioritäten entsteht daraus die Empfehlung bzw. Steuerung.\n\nHier werden nur Zähler und Grundwerte eingetragen. **Deine Geräte legst du anschließend im HEMS-Reiter der Seitenleiste an** — dort stehen sie alle auf einer Seite und lassen sich jederzeit ändern, ergänzen und entfernen.",
         "data": {
           "meter_entity": "Zähler (Leistung am Netzanschluss)",
           "invert_meter": "Vorzeichen invertieren",
@@ -30,190 +30,6 @@
           "free_capacity_kwh": "Der Binärsensor „Kapazität frei“ schaltet ein, wenn diese Energiemenge über die angegebene Dauer verfügbar ist, ohne Reserve und Nachtdeckung anzutasten.",
           "free_capacity_h": "Dauer, über die der Bedarf gedeckt sein muss. PV-Überschuss, der in dieses Zeitfenster fällt, zählt zur freien Kapazität."
         }
-      },
-      "add_forecast": {
-        "title": "PV-Prognosefläche",
-        "description": "Eine **PV-Prognosefläche** liefert die erwartete Solarerzeugung, z.B. aus der Forecast.Solar- oder Solcast-Integration. Mehrere Flächen (etwa Ost- und Westdach) legst du einzeln an – HEMS summiert sie automatisch.",
-        "data": {
-          "name": "Name",
-          "energy_today": "Energie heute (kWh)",
-          "energy_remaining": "Energie heute verbleibend (kWh)",
-          "energy_tomorrow": "Energie morgen (kWh)"
-        },
-        "data_description": {
-          "name": "Eine kurze Bezeichnung für diese Prognosefläche, z. B. die Dachausrichtung (nur zur Anzeige).",
-          "energy_today": "Sensor mit der prognostizierten PV-Gesamtenergie für heute (kWh), aus deiner Prognose-Integration (z. B. Forecast.Solar, Solcast).",
-          "energy_remaining": "Sensor mit der prognostizierten PV-Restenergie für den restlichen heutigen Tag (kWh). Fließt in die Live-Überschuss- und Empfehlungsberechnung ein.",
-          "energy_tomorrow": "Sensor mit der prognostizierten PV-Gesamtenergie für morgen (kWh). Entscheidet, ob der Speicher heute schon voll als Puffer gegen einen schlechten Folgetag geladen wird."
-        }
-      },
-      "add_storage": {
-        "title": "Speicher",
-        "description": "Ein **Speicher** (Hausakku) puffert PV-Überschuss für die Nacht. HEMS berechnet aus Nachtverbrauch und Reserve einen Ziel-Ladestand und plant die Ladung in das Sonnenfenster.",
-        "data": {
-          "name": "Name",
-          "soc_entity": "SoC-Entität (%)",
-          "power_entity": "Leistungs-Entität (W, optional)",
-          "charge_setpoint_entity": "Lade-Sollwert-Entität (W, optional)",
-          "discharge_setpoint_entity": "Entlade-Sollwert-Entität (W, optional)",
-          "capacity_kwh": "Kapazität (kWh)",
-          "reserve_soc": "Reserve-SoC (%)",
-          "max_charge_w": "Max. Ladeleistung (W)",
-          "max_discharge_w": "Max. Entladeleistung (W)",
-          "cold_reserve": "Kaltreserve",
-          "mode_entity": "Richtungs-Select (optional, z. B. Zendure ac_mode)",
-          "mode_charge_option": "Richtungs-Option beim Laden",
-          "mode_discharge_option": "Richtungs-Option beim Entladen",
-          "soc_set_entity": "Ziel-SoC-Entity (soc_set, geräteseitiger Ladedeckel, optional)"
-        },
-        "data_description": {
-          "charge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Ladeleistung setzen kann.",
-          "discharge_setpoint_entity": "Number-Entität, über die HEMS die aktuelle Entladeleistung setzen kann (z. B. „jetzt mit 500 W entladen“).",
-          "reserve_soc": "Unter diesen Ladestand soll der Akku nicht entladen werden (Notreserve).",
-          "max_charge_w": "Begrenzung der Ladeleistung; bestimmt, wie schnell der Akku im Sonnenfenster voll wird.",
-          "max_discharge_w": "Begrenzung der Entladeleistung; mehr kann der Akku nicht ins Haus liefern.",
-          "cold_reserve": "Dieser Speicher nimmt am Entladen erst teil, wenn der mittlere SoC der übrigen Speicher unter die Reserve-Schwelle fällt (mit Hysterese). Geladen wird er immer mit, proportional zur freien Kapazität.",
-          "name": "Eine kurze Bezeichnung für diesen Speicher, z. B. Einbauort oder Gerätename.",
-          "soc_entity": "Sensor mit dem aktuellen Ladestand in Prozent.",
-          "power_entity": "Sensor mit der aktuellen Lade-/Entladeleistung in Watt. Konvention: positiv = Entladen ins Haus, negativ = Laden. Wird für die Lastfluss-Anzeige und die Regelung im Auto-Modus genutzt.",
-          "mode_entity": "Optionaler Select/Input_select, über den HEMS zwischen Lade- und Entladerichtung umschaltet (z. B. Zendures ac_mode). Nur nötig, wenn dein Speicher zusätzlich zum Sollwert einen Modus-Umschalter braucht.",
-          "mode_charge_option": "Der Options-Wert, der den Speicher in den Lademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst.",
-          "mode_discharge_option": "Der Options-Wert, der den Speicher in den Entlademodus versetzt. Muss exakt (Groß-/Kleinschreibung beachten) einer verfügbaren Option des Selects entsprechen — der Config-Check meldet es sonst.",
-          "soc_set_entity": "Optionale Number-Entität, die begrenzt, wie weit der Speicher eigenständig lädt (geräteseitiges Ziel-SoC). Manche Speicher ignorieren ein Lade-Limit von 0 und laden trotzdem bis zu diesem Ziel weiter — setze dies, falls das bei deinem Gerät zutrifft.",
-          "capacity_kwh": "Nutzbare Kapazität dieses Speichers; bestimmt die Verteilung der Lade-/Entladeleistung über mehrere Speicher und die SoC-Prognose."
-        }
-      },
-      "add_thermal": {
-        "title": "Warmwasserspeicher",
-        "description": "Ein **Warmwasserspeicher** speichert Überschuss als Wärme. Das Basis-Soll wird immer gehalten – notfalls mit Netzstrom. Auf das Komfort-Soll wird nur bei PV-Überschuss aufgeheizt.",
-        "data": {
-          "name": "Name",
-          "temp_entity": "Temperatur-Entität (optional)",
-          "base_target": "Basis-Soll (°C)",
-          "comfort_target": "Komfort-Soll (°C)",
-          "block_start": "Sperrzeit ab",
-          "block_end": "Sperrzeit bis",
-          "legionella_weekday": "Legionellenschutz: Wochentag",
-          "legionella_start": "Legionellenschutz: ab",
-          "legionella_end": "Legionellenschutz: bis",
-          "legionella_target": "Legionellenschutz-Soll (°C)",
-          "boost_soc_on": "PV-Boost: Speicher-SoC ab (%)",
-          "boost_soc_off": "PV-Boost: Speicher-SoC Ende (%)",
-          "boost_saldo_on_w": "PV-Boost: Netzsaldo ab (W)",
-          "boost_saldo_off_w": "PV-Boost: Netzsaldo Ende (W)",
-          "control_entity": "Steuer-Entity für Auto-Modus (water_heater oder ein Schalter)",
-          "setpoint_entity": "Sollwert-Number (nur bei einem Schalter)"
-        },
-        "data_description": {
-          "base_target": "Diese Temperatur wird immer gehalten, notfalls mit Netzstrom.",
-          "comfort_target": "Auf diese Temperatur wird nur bei PV-Überschuss aufgeheizt.",
-          "block_start": "Beginn der täglichen Sperrzeit, in der kein Warmwasser bereitet wird. Beide Felder leer lassen heißt keine Sperre.",
-          "block_end": "Ende der Sperrzeit. Liegt das Ende vor dem Anfang, läuft das Fenster über Mitternacht (z. B. 18:00 bis 06:00).",
-          "legionella_weekday": "Wöchentliches Hygiene-Fenster: An diesem Tag wird der Sollwert unabhängig vom Überschuss auf das Legionellenschutz-Soll angehoben — notfalls aus dem Netz. \"Deaktiviert\" schaltet die Funktion ab.",
-          "legionella_start": "Lokale Startzeit des wöchentlichen Legionellen-Fensters.",
-          "legionella_end": "Ende des Fensters. Ein Ende vor dem Anfang läuft über Mitternacht.",
-          "legionella_target": "Solltemperatur während des Legionellen-Fensters.",
-          "boost_soc_on": "Die Komfortladung wird erst empfohlen, wenn der Gesamt-Speicher-SoC dieses Niveau erreicht.",
-          "boost_soc_off": "Die Boost-Empfehlung endet, wenn der SoC unter dieses Niveau fällt (Hysterese).",
-          "boost_saldo_on_w": "Netzsaldo, der zum Start des Boosts erreicht sein muss; negativ = Einspeisung (z. B. -2800 = 2,8 kW Einspeisung).",
-          "boost_saldo_off_w": "Netzsaldo, bei dem der Boost endet (positiv = Bezug).",
-          "name": "Eine kurze Bezeichnung für dieses Warmwassersystem (nur zur Anzeige).",
-          "temp_entity": "Sensor mit der aktuellen Warmwassertemperatur. Ohne ihn empfiehlt HEMS weiterhin einen Sollwert, kann die tatsächliche Temperatur aber weder anzeigen noch prüfen.",
-          "control_entity": "Entität, die HEMS im Auto-Modus ein-/ausschaltet. Ein water_heater trägt zusätzlich den Sollwert selbst; ein Schalter schaltet nur ein/aus — den Sollwert dann über die Number unten stellen.",
-          "setpoint_entity": "Number, auf die HEMS den Soll-Temperaturwert schreibt, wenn das Steuer-Entity ein Schalter ist (z. B. eine Modbus-Wärmepumpe mit getrenntem Freigabe-Schalter und Soll-Temperatur-Number). Bei einem water_heater leer lassen."
-        }
-      },
-      "add_switchable": {
-        "title": "Schaltbare Last",
-        "description": "**Schaltbare (abschaltbare) Lasten** sind Geräte, die HEMS nur ein- oder ausschalten kann – ihre Leistung lässt sich nicht stufenlos regeln. Beispiele: Wärmepumpe (SG-Ready/Sperrkontakt), Heizstab, Poolpumpe. Mindestlaufzeit und Mindestpause schützen das Gerät vor häufigem Takten.",
-        "data": {
-          "name": "Name",
-          "switch_entity": "Schalter/Climate-Entität",
-          "power_entity": "Leistungs-Entität (W, optional)",
-          "min_on_min": "Mindestlaufzeit (min)",
-          "min_off_min": "Mindestpause (min)",
-          "max_block_min": "Max. Sperrdauer pro Tag (min)",
-          "priority": "Priorität",
-          "heat_coupled": "Heizungsgekoppelt (Wärmepumpe, Heizstab)"
-        },
-        "data_description": {
-          "min_on_min": "Ist das Gerät einmal an, bleibt es mindestens so lange eingeschaltet.",
-          "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
-          "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
-          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
-          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet.",
-          "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. in Empfehlung und Lastfluss-Karte).",
-          "switch_entity": "Schalter- (oder Climate-)Entität, die HEMS abhängig vom Überschuss ein- und ausschaltet.",
-          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. HEMS lernt daraus die erwartete Leistung, während die Last läuft, und nutzt sie, um zu entscheiden, ob der Überschuss sie deckt."
-        }
-      },
-      "add_modulated": {
-        "title": "Modulierbare Last",
-        "description": "**Modulierbare Lasten** können ihre Leistungsaufnahme stufenlos anpassen. Typisches Beispiel ist eine Wallbox, deren Ladestrom (in Ampere) sich zwischen Minimum und Maximum regeln lässt. HEMS führt den Sollwert laufend dem verfügbaren Überschuss nach.",
-        "data": {
-          "name": "Name",
-          "current_entity": "Strom-Sollwert-Entität (A)",
-          "switch_entity": "Schalter-Entität (optional)",
-          "power_entity": "Leistungs-Entität (W, optional)",
-          "min_a": "Minimalstrom (A)",
-          "max_a": "Maximalstrom (A)",
-          "phases": "Phasen",
-          "min_on_min": "Mindestlaufzeit (min)",
-          "min_off_min": "Mindestpause (min)",
-          "priority": "Priorität"
-        },
-        "data_description": {
-          "current_entity": "Number-Entität, über die der Strom-Sollwert gesetzt wird.",
-          "switch_entity": "Optionaler Schalter, über den HEMS das Gerät zusätzlich komplett ein- und ausschalten kann (z. B. Ladefreigabe der Wallbox).",
-          "min_on_min": "Einmal gestartet, läuft das Gerät mindestens so lange, bevor HEMS es stoppt (z. B. E-Auto mindestens 10 Minuten laden).",
-          "min_a": "Unterhalb dieses Stroms kann das Gerät nicht arbeiten (Wallbox-Minimum meist 6 A).",
-          "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
-          "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. der Wallbox-Name).",
-          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. Wird für die Lastfluss-Anzeige genutzt und um den tatsächlichen Bedarf der Last zu lernen.",
-          "max_a": "Das Gerät wird nie über diesen Strom hinaus angesteuert.",
-          "phases": "Anzahl der angeschlossenen Phasen; wird zur Umrechnung zwischen Strom (A) und Leistung (W) genutzt.",
-          "min_off_min": "Nachdem HEMS das Gerät gestoppt hat, bleibt es mindestens so lange aus, bevor es wieder starten kann."
-        }
-      },
-      "forecast_menu": {
-        "title": "PV-Prognoseflächen (Schritt 2 von 7)",
-        "description": "Eine **PV-Prognosefläche** liefert die erwartete Solarerzeugung, z.B. aus der Forecast.Solar- oder Solcast-Integration. Mehrere Flächen (etwa Ost- und Westdach) legst du einzeln an – HEMS summiert sie automatisch.\n\nBisher angelegt: {count}",
-        "menu_options": {
-          "add_forecast": "PV-Prognosefläche hinzufügen",
-          "storage_menu": "Weiter zu Speicher"
-        }
-      },
-      "storage_menu": {
-        "title": "Speicher / Batterie (Schritt 3 von 7)",
-        "description": "Ein **Speicher** (Hausakku) puffert PV-Überschuss für die Nacht. HEMS berechnet aus Nachtverbrauch und Reserve einen Ziel-Ladestand und plant die Ladung in das Sonnenfenster.\n\nBisher angelegt: {count}",
-        "menu_options": {
-          "add_storage": "Speicher (Akku) hinzufügen",
-          "thermal_menu": "Weiter zu Warmwasser"
-        }
-      },
-      "thermal_menu": {
-        "title": "Warmwasser (Schritt 4 von 7)",
-        "description": "Ein **Warmwasserspeicher** speichert Überschuss als Wärme. Das Basis-Soll wird immer gehalten – notfalls mit Netzstrom. Auf das Komfort-Soll wird nur bei PV-Überschuss aufgeheizt.\n\nBisher angelegt: {count}",
-        "menu_options": {
-          "add_thermal": "Warmwasserspeicher hinzufügen",
-          "switchable_menu": "Weiter zu schaltbaren Lasten"
-        }
-      },
-      "switchable_menu": {
-        "title": "Schaltbare Lasten (Schritt 6 von 7)",
-        "description": "**Schaltbare (abschaltbare) Lasten** sind Geräte, die HEMS nur ein- oder ausschalten kann – ihre Leistung lässt sich nicht stufenlos regeln. Beispiele: Wärmepumpe (SG-Ready/Sperrkontakt), Heizstab, Poolpumpe. Mindestlaufzeit und Mindestpause schützen das Gerät vor häufigem Takten.\n\nBisher angelegt: {count}",
-        "menu_options": {
-          "add_switchable": "Schaltbare Last hinzufügen (z.B. Wärmepumpe)",
-          "modulated_menu": "Weiter zu modulierbaren Lasten"
-        }
-      },
-      "modulated_menu": {
-        "title": "Modulierbare Lasten (Schritt 7 von 8)",
-        "description": "**Modulierbare Lasten** können ihre Leistungsaufnahme stufenlos anpassen. Typisches Beispiel ist eine Wallbox, deren Ladestrom (in Ampere) sich zwischen Minimum und Maximum regeln lässt. HEMS führt den Sollwert laufend dem verfügbaren Überschuss nach.\n\nBisher angelegt: {count}",
-        "menu_options": {
-          "add_modulated": "Modulierbare Last hinzufügen (z.B. Wallbox)",
-          "finish": "Einrichtung abschließen"
-        }
       }
     },
     "abort": {
@@ -231,6 +47,7 @@
           "add_thermal": "Warmwasserspeicher hinzufügen",
           "add_switchable": "Schaltbare Last hinzufügen (z.B. Wärmepumpe)",
           "add_modulated": "Modulierbare Last hinzufügen (z.B. Wallbox)",
+          "add_heating": "Heizung hinzufügen",
           "edit_device": "Gerät bearbeiten",
           "remove_device": "Gerät entfernen",
           "general": "Grundwerte & Prioritäten ändern"
@@ -339,17 +156,17 @@
           "min_off_min": "Mindestpause (min)",
           "max_block_min": "Max. Sperrdauer pro Tag (min)",
           "priority": "Priorität",
-          "heat_coupled": "Heizungsgekoppelt (Wärmepumpe, Heizstab)"
+          "mode_heat_option": "Heiz-Modus (nur bei Climate-Entität)"
         },
         "data_description": {
           "min_on_min": "Ist das Gerät einmal an, bleibt es mindestens so lange eingeschaltet.",
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
           "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
-          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet.",
           "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. in Empfehlung und Lastfluss-Karte).",
           "switch_entity": "Schalter- (oder Climate-)Entität, die HEMS abhängig vom Überschuss ein- und ausschaltet.",
-          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. HEMS lernt daraus die erwartete Leistung, während die Last läuft, und nutzt sie, um zu entscheiden, ob der Überschuss sie deckt."
+          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. HEMS lernt daraus die erwartete Leistung, während die Last läuft, und nutzt sie, um zu entscheiden, ob der Überschuss sie deckt.",
+          "mode_heat_option": "Nur bei einer climate-Entität: der HVAC-Modus, der „heizen\" bedeutet (meist „heat\", bei manchen Anlagen „auto\"). HEMS stellt ihn per set_hvac_mode, statt turn_on zu rufen — das bieten viele Integrationen gar nicht an. Leer = „heat\". Läuft die Anlage bereits in einem anderen Modus, lässt HEMS sie in Ruhe."
         }
       },
       "add_modulated": {
@@ -493,17 +310,17 @@
           "min_off_min": "Mindestpause (min)",
           "max_block_min": "Max. Sperrdauer pro Tag (min)",
           "priority": "Priorität",
-          "heat_coupled": "Heizungsgekoppelt (Wärmepumpe, Heizstab)"
+          "mode_heat_option": "Heiz-Modus (nur bei Climate-Entität)"
         },
         "data_description": {
           "min_on_min": "Ist das Gerät einmal an, bleibt es mindestens so lange eingeschaltet.",
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
           "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
-          "heat_coupled": "Nur für Lasten, deren Verbrauch der Außentemperatur folgt (Wärmepumpe, Heizstab). Nur diese fließen in das Heizgradstunden-Modell für die Bedarfsprognose ein. Überschussgesteuerte Lasten wie Pool oder Luftentfeuchter bleiben ausgeschaltet.",
           "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. in Empfehlung und Lastfluss-Karte).",
           "switch_entity": "Schalter- (oder Climate-)Entität, die HEMS abhängig vom Überschuss ein- und ausschaltet.",
-          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. HEMS lernt daraus die erwartete Leistung, während die Last läuft, und nutzt sie, um zu entscheiden, ob der Überschuss sie deckt."
+          "power_entity": "Sensor mit der aktuellen Leistungsaufnahme in Watt. HEMS lernt daraus die erwartete Leistung, während die Last läuft, und nutzt sie, um zu entscheiden, ob der Überschuss sie deckt.",
+          "mode_heat_option": "Nur bei einer climate-Entität: der HVAC-Modus, der „heizen\" bedeutet (meist „heat\", bei manchen Anlagen „auto\"). HEMS stellt ihn per set_hvac_mode, statt turn_on zu rufen — das bieten viele Integrationen gar nicht an. Leer = „heat\". Läuft die Anlage bereits in einem anderen Modus, lässt HEMS sie in Ruhe."
         }
       },
       "edit_modulated": {
@@ -572,6 +389,102 @@
           "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ sichert bei knappem Ertrag zuerst den Akku für die Nacht ab, bei reichlich Ertrag darf das E-Auto zuerst laden. Die Warmwasser-Basisladung hat immer Vorrang.",
           "free_capacity_kwh": "Der Binärsensor „Kapazität frei“ schaltet ein, wenn diese Energiemenge über die angegebene Dauer verfügbar ist, ohne Reserve und Nachtdeckung anzutasten.",
           "free_capacity_h": "Dauer, über die der Bedarf gedeckt sein muss. PV-Überschuss, der in dieses Zeitfenster fällt, zählt zur freien Kapazität."
+        }
+      },
+      "add_heating": {
+        "title": "Heizung",
+        "description": "Eine **Heizung** (Wärmepumpe, Heizstab) ist eine schaltbare Last mit Witterungsführung. Sie läuft im selben Überschuss-Budget wie jede andere Last, hat aber drei Zusätze: Der **Frostschutz** erzwingt das Einschalten, sobald es draußen kalt wird — an Überschuss und Mindestpause vorbei, notfalls also aus dem Netz. In den **Sperrmonaten** und oberhalb der **Heizgrenze** wird nicht geheizt. Ist ein Vorlauf-Sollwert hinterlegt, schreibt HEMS ihn aus der **Heizkurve**.\n\nHEMS ist dabei keine Sicherheitseinrichtung und ersetzt den Frostschutz des Geräts nicht.",
+        "data": {
+          "name": "Name",
+          "switch_entity": "Schalter- oder Climate-Entität",
+          "mode_heat_option": "Heiz-Modus (nur bei Climate-Entität)",
+          "power_entity": "Leistungs-Entität (W, optional)",
+          "outdoor_temp_entity": "Außentemperatur-Sensor (optional)",
+          "flow_setpoint_entity": "Vorlauf-Sollwert (optional)",
+          "frost_on_c": "Frostschutz ein unter (°C)",
+          "frost_off_c": "Frostschutz aus ab (°C)",
+          "heat_on_c": "Heizen ein unter (°C)",
+          "heat_off_c": "Heizen aus ab (°C)",
+          "curve_base_c": "Heizkurve: Fußpunkt (°C)",
+          "curve_slope": "Heizkurve: Steilheit",
+          "vlt_min_c": "Vorlauf-Minimum (°C)",
+          "vlt_max_c": "Vorlauf-Maximum (°C)",
+          "heat_lock_from_month": "Sommersperre ab Monat",
+          "heat_lock_to_month": "Sommersperre bis Monat",
+          "min_on_min": "Mindestlaufzeit (min)",
+          "min_off_min": "Mindestpause (min)",
+          "max_block_min": "Max. Sperrdauer (min)",
+          "priority": "Priorität"
+        },
+        "data_description": {
+          "name": "Kurze Bezeichnung, nur für die Anzeige.",
+          "switch_entity": "Womit HEMS die Anlage freigibt oder sperrt. Ein **switch** ist typischerweise der SG-Ready- oder EVU-Sperrkontakt: HEMS sperrt dann nur, und die geräteeigene Regelung samt Frostschutz bleibt aktiv. Eine **climate**-Entität schaltet den Wärmeerzeuger wirklich ab — dort ist der Frostschutz von HEMS die einzige Rückfallebene, die HEMS kennt.",
+          "mode_heat_option": "Nur bei einer climate-Entität: der HVAC-Modus, der „heizen\" bedeutet (meist „heat\", bei manchen Anlagen „auto\"). HEMS stellt ihn per set_hvac_mode, statt turn_on zu rufen — das bieten viele Integrationen gar nicht an. Leer = „heat\". Läuft die Anlage bereits in einem anderen Modus, lässt HEMS sie in Ruhe.",
+          "power_entity": "Aus ihr lernt HEMS die Leistungsaufnahme im Betrieb und weiß dann, wie viel Überschuss die Anlage braucht. Ohne sie rechnet HEMS mit einem konservativ hohen Pauschalwert.",
+          "outdoor_temp_entity": "Steuert Frostschutz, Heizgrenze und Heizkurve. Ohne eigenen Sensor nimmt HEMS die Temperatur der global konfigurierten Wetter-Entität. Fehlt beides, regelt HEMS nicht: Es schaltet die Anlage dann weder ein noch aus, sondern lässt sie in Ruhe.",
+          "flow_setpoint_entity": "Number-Entität für die Vorlauf-Solltemperatur. Ohne sie bleibt die Heizkurve reine Anzeige — HEMS gibt dann nur frei und sperrt.",
+          "frost_on_c": "Fällt die Außentemperatur auf diesen Wert, wird Einschalten erzwungen — unabhängig von Überschuss, Mindestpause und Sommersperre, notfalls also aus dem Netz. 0 schaltet den Frostschutz nicht ab, sondern setzt die Schwelle auf den Gefrierpunkt; das ist knapp, weil ein Heizkreis nach dem Abschalten weiter auskühlt.",
+          "frost_off_c": "Erst oberhalb dieses Werts endet der Frostschutz wieder. Der Abstand zur Ein-Schwelle ist die Hysterese — ohne sie würde die Anlage am Schwellwert im Minutentakt takten.",
+          "heat_on_c": "Unterhalb dieser Außentemperatur braucht das Haus Wärme.",
+          "heat_off_c": "Oberhalb dieser Außentemperatur wird nicht mehr geheizt (Heizgrenze, mit Hysterese zur Ein-Schwelle). Zwischen beiden Werten bleibt es beim vorigen Zustand.",
+          "curve_base_c": "Der Vorlauf-Sollwert bei 0 °C Außentemperatur. Der Standard passt zu einer Fußbodenheizung; ein Heizkörperkreis braucht deutlich mehr.",
+          "curve_slope": "Um wie viel Kelvin der Vorlauf je Kelvin Außenkälte steigt. Vorlauf = Fußpunkt − Außentemperatur × Steilheit.",
+          "vlt_min_c": "Unter diesen Wert fällt der Vorlauf-Sollwert nie.",
+          "vlt_max_c": "Über diesen Wert steigt der Vorlauf-Sollwert nie.",
+          "heat_lock_from_month": "Erster Monat der Sommersperre (1 = Januar, einschließlich). In den Sperrmonaten wird nie geheizt — nur der Frostschutz greift weiter. Ist der Anfangsmonat größer als der Endmonat, läuft die Sperre über den Jahreswechsel. 0 in einem der beiden Felder = keine Sperre.",
+          "heat_lock_to_month": "Letzter Monat der Sommersperre (einschließlich).",
+          "min_on_min": "Ist die Anlage einmal an, läuft sie mindestens so lange.",
+          "min_off_min": "Nach dem Abschalten bleibt die Anlage mindestens so lange aus. Der Frostschutz geht daran vorbei.",
+          "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat.",
+          "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge."
+        }
+      },
+      "edit_heating": {
+        "title": "Heizung bearbeiten",
+        "description": "Eine **Heizung** (Wärmepumpe, Heizstab) ist eine schaltbare Last mit Witterungsführung. Sie läuft im selben Überschuss-Budget wie jede andere Last, hat aber drei Zusätze: Der **Frostschutz** erzwingt das Einschalten, sobald es draußen kalt wird — an Überschuss und Mindestpause vorbei, notfalls also aus dem Netz. In den **Sperrmonaten** und oberhalb der **Heizgrenze** wird nicht geheizt. Ist ein Vorlauf-Sollwert hinterlegt, schreibt HEMS ihn aus der **Heizkurve**.\n\nHEMS ist dabei keine Sicherheitseinrichtung und ersetzt den Frostschutz des Geräts nicht.",
+        "data": {
+          "name": "Name",
+          "switch_entity": "Schalter- oder Climate-Entität",
+          "mode_heat_option": "Heiz-Modus (nur bei Climate-Entität)",
+          "power_entity": "Leistungs-Entität (W, optional)",
+          "outdoor_temp_entity": "Außentemperatur-Sensor (optional)",
+          "flow_setpoint_entity": "Vorlauf-Sollwert (optional)",
+          "frost_on_c": "Frostschutz ein unter (°C)",
+          "frost_off_c": "Frostschutz aus ab (°C)",
+          "heat_on_c": "Heizen ein unter (°C)",
+          "heat_off_c": "Heizen aus ab (°C)",
+          "curve_base_c": "Heizkurve: Fußpunkt (°C)",
+          "curve_slope": "Heizkurve: Steilheit",
+          "vlt_min_c": "Vorlauf-Minimum (°C)",
+          "vlt_max_c": "Vorlauf-Maximum (°C)",
+          "heat_lock_from_month": "Sommersperre ab Monat",
+          "heat_lock_to_month": "Sommersperre bis Monat",
+          "min_on_min": "Mindestlaufzeit (min)",
+          "min_off_min": "Mindestpause (min)",
+          "max_block_min": "Max. Sperrdauer (min)",
+          "priority": "Priorität"
+        },
+        "data_description": {
+          "name": "Kurze Bezeichnung, nur für die Anzeige.",
+          "switch_entity": "Womit HEMS die Anlage freigibt oder sperrt. Ein **switch** ist typischerweise der SG-Ready- oder EVU-Sperrkontakt: HEMS sperrt dann nur, und die geräteeigene Regelung samt Frostschutz bleibt aktiv. Eine **climate**-Entität schaltet den Wärmeerzeuger wirklich ab — dort ist der Frostschutz von HEMS die einzige Rückfallebene, die HEMS kennt.",
+          "mode_heat_option": "Nur bei einer climate-Entität: der HVAC-Modus, der „heizen\" bedeutet (meist „heat\", bei manchen Anlagen „auto\"). HEMS stellt ihn per set_hvac_mode, statt turn_on zu rufen — das bieten viele Integrationen gar nicht an. Leer = „heat\". Läuft die Anlage bereits in einem anderen Modus, lässt HEMS sie in Ruhe.",
+          "power_entity": "Aus ihr lernt HEMS die Leistungsaufnahme im Betrieb und weiß dann, wie viel Überschuss die Anlage braucht. Ohne sie rechnet HEMS mit einem konservativ hohen Pauschalwert.",
+          "outdoor_temp_entity": "Steuert Frostschutz, Heizgrenze und Heizkurve. Ohne eigenen Sensor nimmt HEMS die Temperatur der global konfigurierten Wetter-Entität. Fehlt beides, regelt HEMS nicht: Es schaltet die Anlage dann weder ein noch aus, sondern lässt sie in Ruhe.",
+          "flow_setpoint_entity": "Number-Entität für die Vorlauf-Solltemperatur. Ohne sie bleibt die Heizkurve reine Anzeige — HEMS gibt dann nur frei und sperrt.",
+          "frost_on_c": "Fällt die Außentemperatur auf diesen Wert, wird Einschalten erzwungen — unabhängig von Überschuss, Mindestpause und Sommersperre, notfalls also aus dem Netz. 0 schaltet den Frostschutz nicht ab, sondern setzt die Schwelle auf den Gefrierpunkt; das ist knapp, weil ein Heizkreis nach dem Abschalten weiter auskühlt.",
+          "frost_off_c": "Erst oberhalb dieses Werts endet der Frostschutz wieder. Der Abstand zur Ein-Schwelle ist die Hysterese — ohne sie würde die Anlage am Schwellwert im Minutentakt takten.",
+          "heat_on_c": "Unterhalb dieser Außentemperatur braucht das Haus Wärme.",
+          "heat_off_c": "Oberhalb dieser Außentemperatur wird nicht mehr geheizt (Heizgrenze, mit Hysterese zur Ein-Schwelle). Zwischen beiden Werten bleibt es beim vorigen Zustand.",
+          "curve_base_c": "Der Vorlauf-Sollwert bei 0 °C Außentemperatur. Der Standard passt zu einer Fußbodenheizung; ein Heizkörperkreis braucht deutlich mehr.",
+          "curve_slope": "Um wie viel Kelvin der Vorlauf je Kelvin Außenkälte steigt. Vorlauf = Fußpunkt − Außentemperatur × Steilheit.",
+          "vlt_min_c": "Unter diesen Wert fällt der Vorlauf-Sollwert nie.",
+          "vlt_max_c": "Über diesen Wert steigt der Vorlauf-Sollwert nie.",
+          "heat_lock_from_month": "Erster Monat der Sommersperre (1 = Januar, einschließlich). In den Sperrmonaten wird nie geheizt — nur der Frostschutz greift weiter. Ist der Anfangsmonat größer als der Endmonat, läuft die Sperre über den Jahreswechsel. 0 in einem der beiden Felder = keine Sperre.",
+          "heat_lock_to_month": "Letzter Monat der Sommersperre (einschließlich).",
+          "min_on_min": "Ist die Anlage einmal an, läuft sie mindestens so lange.",
+          "min_off_min": "Nach dem Abschalten bleibt die Anlage mindestens so lange aus. Der Frostschutz geht daran vorbei.",
+          "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat.",
+          "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge."
         }
       }
     },

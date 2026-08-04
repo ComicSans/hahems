@@ -57,6 +57,7 @@ der Zähler.
 | Warmwasser | 0..n | Temperatur, Basis- und Komfort-Soll, Sperrzeiten, Legionellenschutz |
 | Schaltbare Last | 0..n | An/Aus mit Mindestlauf- und Mindestpausenzeit |
 | Modulierbare Last | 0..n | stufenlos regelbar, etwa eine Wallbox |
+| Heizung | 0..n | schaltbare Last plus Frostschutz, Sommersperre, Heizgrenze, Heizkurve |
 
 Mehrere Speicher werden zu einem virtuellen Gesamtspeicher aggregiert;
 Sollwerte verteilt der Regler proportional zu freier Kapazität und Leistung.
@@ -107,6 +108,27 @@ und möglichst wenig Zeit bei 100 % verbringt.
 zuerst der Ladestrom heruntergeregelt, erst danach hilft der Akku. Sonst
 finanzierte der Speicher das Laden.
 
+**Der Frostschutz hängt an nichts als der Temperatur.** Die Überschussregelung
+steigt ohne Netzsaldo aus — kein Zähler, nichts zu verteilen. Für die
+Verteilung ist das richtig, für den Frostschutz wäre es fatal: Eine zuvor
+abgeschaltete Heizung bliebe genau in der Störung aus, in der keiner hinsieht.
+Deshalb entscheidet die Witterungsführung vor jeder Saldo-Frage, und der
+Actuator stellt sie auf einem eigenen Weg. Der Preis ist bewusst: Frostschutz
+kauft Wärme aus dem Netz.
+
+**Wer nicht messen kann, regelt nicht.** Fehlt einer Heizung die
+Außentemperatur, erzwingt HEMS nichts, sperrt nichts — und schaltet vor allem
+nichts ab. Abschalten wäre die einzige Entscheidung, die sich nicht
+zurücknehmen lässt, bevor das Haus kalt ist. Ein bereits aktiver Frostschutz
+bleibt dabei aktiv: Fällt der Sensor mitten im Frost aus, wäre sein Wegfall
+die gefährlichste Auslegung des fehlenden Messwerts.
+
+**„An" ist domänenabhängig.** Ein `switch` steht auf `on`, eine
+`climate`-Entität auf ihrem HVAC-Modus. Beide Rollen lesen und schreiben über
+denselben Helfer (`entity_domain.py`), damit eine climate-geführte Anlage
+überall gleich verstanden wird — sie galt sonst dauerhaft als aus, obwohl sie
+lief.
+
 ## Was bewusst fehlt
 
 - **Eigene PV-Prognose.** Siehe oben.
@@ -117,10 +139,15 @@ finanzierte der Speicher das Laden.
   das; eine Kopie davon wäre eine zweite Wahrheit.
 - **Automatische Erkennung von Geräten.** Welche Entity welche Rolle spielt,
   weiß nur, wer die Anlage kennt. Geraten wäre schlimmer als gefragt.
-- **Steuerung und Analyse von Wärmeerzeugern.** War einmal da und ist mit
-  Version 3 gegangen: HEMS konzentriert sich auf das Akku-Management, und ein
-  witterungsgeführter Heizkreis ist eine eigene Disziplin mit eigener
-  Sensorik. Eine Wärmepumpe lässt sich weiter als schaltbare Last führen.
+- **Analyse von Wärmeerzeugern.** Effizienzmessung, Heizkurven-Regression aus
+  dem Betrieb, Taktschutz, Taupunkt-Untergrenze im Kühlbetrieb: War einmal da
+  und ist mit Version 3 gegangen. Die Rolle Heizung holt davon bewusst nichts
+  zurück — sie führt eine **konfigurierte** Kurve aus, sie misst keine. Eine
+  Kurve, die sich aus dem Betrieb selbst nachführt, den HEMS mit der vorigen
+  Kurve erzeugt hat, ist eine Rückkopplung: Jeder Schritt sähe begründet aus,
+  bis das Haus kalt ist.
+- **Kühlen.** Die Heizung kennt Heizen und Aus. Ein Kühlbetrieb bräuchte eigene
+  Schwellen und eine Taupunkt-Untergrenze, sonst schwitzt der Estrich.
 
 ## Standortannahmen
 
@@ -139,9 +166,16 @@ durchrechnet (Autarkiegrad, Eigenverbrauchsquote, vermiedener Netzbezug) — die
 Rechenkerne dafür stehen in `tests/simulate.py`, ein Dienst darum herum nicht.
 
 Mit Version 3 sind die Rollen **Heizkreis** und **Wärmepumpen-Analyse**
-entfallen. HEMS steuert keine Wärmeerzeuger mehr und misst ihre Effizienz
-nicht; eine Wärmepumpe bleibt als schaltbare Last regelbar. Was das für die
+entfallen; die Effizienzmessung kommt nicht zurück. Was das für die
 Bedarfsprognose bedeutet, steht oben unter „Prognose".
+
+Mit Version 4 gibt es die Rolle **Heizung** — bewusst schmaler als der alte
+Heizkreis: Frostschutz, Sommersperre, Heizgrenze und eine konfigurierte
+Heizkurve, mehr nicht. Sie hat einen eigenen Panel-Reiter und genau eine
+Berührung zum Planner: Sie entscheidet Zwang und Sperre und meldet einen
+Vorlauf-Sollwert. Alles Weitere — Priorität, Budget, Anti-Takt — läuft über
+die Schaltlast-Regelung, in der sie mitläuft. Diese eine Grenze ist der
+Unterschied zum alten Heizkreis, dessen Rückbau 38 Dateien berührte.
 
 ## Referenzinstallation
 

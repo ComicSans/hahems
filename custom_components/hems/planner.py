@@ -25,6 +25,7 @@ from .strategies import coordination
 from .strategies.battery import _lade_deckel_soc, _storage_control
 from .strategies.demand import _profile_covers, _window_load_kwh
 from .strategies.forecast import _discharge_plan, _pv_curve, _soc_forecast
+from .strategies.heating import heating_control
 from .strategies.loads import _modulated_control
 from .strategies.switchable import switchable_control
 from .strategies.types import PlanInput, PlanResult, _latch
@@ -180,8 +181,12 @@ def profile_rows(
 def compute_plan(inp: PlanInput) -> PlanResult:
     result = PlanResult()
     # Trigger-Zustand des Vorlaufs übernehmen und im Ergebnis fortschreiben,
-    # ohne die Eingabe zu verändern.
-    result.flags = replace(inp.flags)
+    # ohne die Eingabe zu verändern. `replace` kopiert flach — die beiden
+    # Heizungs-Dicts müssen einzeln kopiert werden, sonst schriebe die
+    # Fortschreibung in die Flags des Aufrufers zurück.
+    result.flags = replace(
+        inp.flags, frost=dict(inp.flags.frost), heizen=dict(inp.flags.heizen)
+    )
 
     # Sonnenfenster und Nachtdefizit. Ist es bereits Nacht, zeigt inp.sunset
     # schon auf morgen Abend (get_astral_event_next liefert den nächsten noch
@@ -310,6 +315,12 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     # vor der Empfehlungs-Priorisierung laufen, die die WW-Flags nur noch liest.
     water_plan(inp, result)
 
+    # Witterungsführung der Wärmeerzeuger: Frostschutz, Sommersperre,
+    # Heizgrenze, Vorlaufkurve. Muss vor der Schaltlast-Regelung laufen, die
+    # das Ergebnis als Vorgabe über ihre Lasten legt — und hängt bewusst an
+    # keinem Netzsaldo, damit der Frostschutz auch ohne Zähler entsteht.
+    result.heizung = heating_control(inp, result)
+
     # Schaltbare Lasten (nur an/aus) zuerst entscheiden: sie haben Vorrang vor
     # dem Headroom der modulierbaren Lasten. Ihre NEUE Leistung (delta_w) wird
     # unten vom Überschuss der modulierbaren abgezogen, damit diese
@@ -373,6 +384,15 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     keine Sperrzeit läuft; in der Sperrzeit entfallen Basis- und Komfort-
     ladung, der Speicher darf also unter die Basistemperatur auskühlen."""
     prio: list[str] = []
+
+    # Frostschutz zuerst und vor jedem Ausstieg weiter unten: Er läuft notfalls
+    # aus dem Netz, also muss er auch dann in der Empfehlung stehen, wenn es gar
+    # keinen Überschuss gibt. Ohne das meldete HEMS "kein Überschuss", während
+    # es gerade Strom kauft.
+    if res.heizung is not None:
+        for anlage in res.heizung.anlagen:
+            if anlage.zwang_an:
+                prio.append(f"{anlage.name}: {anlage.grund}")
 
     # Die WW-Flags (Basis/Komfort-Thermostat, Sperre, Legionellen, PV-Boost) hat
     # water_plan bereits gesetzt; hier werden sie nur noch für die Reihenfolge

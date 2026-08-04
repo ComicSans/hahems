@@ -4,6 +4,61 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 2.1.0 — Die Heizung bekommt eine eigene Rolle, einen Reiter und Frostschutz
+
+Ein Wärmeerzeuger ist keine Schaltlast mit Häkchen mehr, sondern die **Rolle
+Heizung** mit eigenem Panel-Reiter. Neu darin: **Frostschutz**, **Sommersperre**,
+**Heizgrenze** und **Heizkurve**. Für die Überschussregelung bleibt die Heizung
+eine schaltbare Last — dieselbe Priorität, dasselbe Budget, dieselben
+Anti-Takt-Sperren; die Witterungsführung liegt darüber.
+
+**Der Frostschutz** schaltet die Anlage ein, sobald die Außentemperatur unter
+die eingestellte Schwelle fällt — an Überschuss, Mindestpause und Sommersperre
+vorbei, also notfalls aus dem Netz. Er hängt an nichts als der Temperatur und
+gilt deshalb auch dann, wenn der Netzzähler unerreichbar ist und es gar keine
+Überschuss-Empfehlung mehr gibt. Fehlt die Außentemperatur ganz (weder eigener
+Sensor noch Wetter-Entität), regelt HEMS die Anlage nicht mehr: Es schaltet sie
+weder ein noch aus, statt blind zu entscheiden.
+
+HEMS ist damit keine Sicherheitseinrichtung. Der geräteeigene Frostschutz bleibt
+zuständig und wird nicht ersetzt.
+
+### `climate`-Entitäten wurden angeboten, aber nicht unterstützt
+
+Eine Wärmepumpe ließ sich schon immer über eine `climate`-Entität einbinden —
+der Code dahinter kannte aber nur `switch`. Eine climate-Entität steht auf
+ihrem HVAC-Modus (`heat`, `auto`, `off`) und **nie** auf `on`, galt für HEMS
+also dauerhaft als aus. Die Folgen: `min_on` war wirkungslos, die Hysterese
+benutzte immer die Einschalt-Schwelle, die Leistungsaufnahme wurde nie gelernt
+(es blieb beim 2-kW-Pauschalwert), im Lastfluss stand die Anlage als „aus",
+während sie heizte. Beim Schreiben griff der Idempotenz-Vergleich nur in die
+Aus-Richtung, sodass HEMS alle fünf Minuten erneut `climate.turn_on` rief —
+einen Service, den viele Integrationen gar nicht anbieten.
+
+Lesen und Schreiben sind jetzt domänenbewusst: „an" heißt bei `climate` „irgend­
+ein Modus außer `off`", und geschaltet wird über `set_hvac_mode` mit einem
+konfigurierbaren Heiz-Modus (Standard `heat`). Läuft die Anlage bereits in einem
+anderen Modus, lässt HEMS sie in Ruhe. Das gilt für beide Rollen — auch eine
+Schaltlast an einer climate-Entität ist damit repariert.
+
+**Zu tun:** nichts. Beim ersten Start nach dem Update wird jede als
+„heizungsgekoppelt" markierte Schaltlast zur Rolle Heizung (Schema-Version 4),
+mit unveränderter Geräte-ID, Priorität und Anti-Takt-Einstellung — die gelernte
+Leistungsaufnahme bleibt damit erhalten. Frostschutz und Heizkurve starten auf
+den Vorgabewerten und wollen im neuen Reiter **Heizung** an die eigene Anlage
+angepasst werden; die Vorgaben der Heizkurve beschreiben eine Fußbodenheizung.
+Wer eine `climate`-Entität nutzt, prüft dort außerdem den **Heiz-Modus**.
+
+### Die Einrichtung fragt keine Geräte mehr ab
+
+Der geführte Assistent mit seinen fünf Kategorie-Schritten ist entfallen. Er
+konnte nur anlegen — bearbeiten, entfernen und umsortieren ging ohnehin erst
+danach im HEMS-Reiter der Seitenleiste, wo alles auf einer Seite steht. Die
+Einrichtung fragt jetzt nur noch Zähler und Grundwerte ab; Geräte kommen
+anschließend über die Seitenleiste dazu.
+
+**Zu tun:** nichts. Bestehende Installationen sind nicht betroffen.
+
 ## 2.0.0 — HEMS konzentriert sich auf das Akku-Management
 
 Die Rollen **Heizkreis** und **Wärmepumpen-Analyse** sind entfallen. HEMS
