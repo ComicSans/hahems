@@ -147,6 +147,10 @@ class HeatingSystem:
     • **Heizkurve.** Ist eine `flow_setpoint_entity` konfiguriert, schreibt HEMS
       den witterungsgeführten Vorlauf-Sollwert.
 
+    Alle drei setzen voraus, dass die Anlage überhaupt heizt. Bei einer
+    `climate`-Entität sagen das `mode_heat_option` und `mode_cool_option`; jeder
+    andere Modus bleibt unangetastet (siehe `entity_domain.betriebsart`).
+
     HEMS ist dabei keine Sicherheitseinrichtung: Der geräteeigene Frostschutz
     bleibt zuständig und wird von HEMS nicht ersetzt. Bei einer über einen
     SG-Ready-Kontakt (`switch`) angebundenen Anlage sperrt HEMS ohnehin nur; bei
@@ -160,6 +164,11 @@ class HeatingSystem:
     switch_entity: str
     # Nur für climate: HVAC-Modus, der „heizen" bedeutet (siehe entity_domain).
     mode_heat_option: str | None = None
+    # Nur für climate: HVAC-Modus, der „kühlen" bedeutet. Ohne ihn regelt HEMS
+    # ausschließlich den Heiz-Modus und lässt alles andere in Ruhe. Mit ihm
+    # regelt es die Kühlung über den Überschuss — aber ohne Sommersperre,
+    # Heizgrenze und Heizkurve, die im Kühlbetrieb keinen Sinn ergeben.
+    mode_cool_option: str | None = None
     power_entity: str | None = None
     # Außentemperatur. Ohne eigenen Sensor nimmt HEMS die der global
     # konfigurierten Wetter-Entität.

@@ -47,6 +47,8 @@ const HEIZ_STATUS = {
   sommersperre: { label: "Sommersperre", klasse: "" },
   heizgrenze: { label: "Über Heizgrenze", klasse: "" },
   unbekannt: { label: "Keine Außentemperatur", klasse: "bad" },
+  kuehlen: { label: "Kühlen", klasse: "good" },
+  fremdmodus: { label: "Modus nicht zugeordnet", klasse: "" },
 };
 
 // Anzeige-Labels je Segment-Rolle. Die Optionswerte (Slugs) bleiben unberührt;

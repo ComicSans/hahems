@@ -48,6 +48,8 @@ _HEIZUNG_LABEL = {
     "sommersperre": "Sommersperre",
     "heizgrenze": "über Heizgrenze",
     "unbekannt": "keine Außentemperatur",
+    "kuehlen": "Kühlbetrieb (nur Überschuss)",
+    "fremdmodus": "Modus nicht zugeordnet",
 }
 
 # key → (Titel, Kategorie). Reihenfolge bestimmt die Ausgabe je Zyklus.
@@ -61,6 +63,7 @@ _DECISION_FIELDS: dict[str, tuple[str, str]] = {
     "warmwasser_soll": ("Warmwasser-Sollwert", "ww"),
     "warmwasser_quittung": ("Warmwasser-Freigabe gestellt", "ww"),
     "heizung_status": ("Heizung", "heizung"),
+    "heizung_quittung": ("Heizung geschaltet", "heizung"),
 }
 
 
@@ -124,6 +127,17 @@ def decision_snapshot(mode: str, goal: str, ev_force: bool, plan: Any) -> dict:
                 f"{name}: {_HEIZUNG_LABEL.get(status, status)}"
                 for name, status in lagen
             ),
+        )
+        # Wie bei der Warmwasser-Freigabe beide Lagen führen, damit es zur
+        # Meldung auch eine Entwarnung gibt. Am 04.08.2026 nahm eine LG Therma V
+        # `set_hvac_mode: off` entgegen und kühlte weiter — im Log stand die
+        # Empfehlung, nicht das, was die Anlage tat.
+        offen = tuple(getattr(plan, "heizung_nicht_uebernommen", ()))
+        snap["heizung_quittung"] = (
+            offen,
+            "angekommen"
+            if not offen
+            else f"Anlage übernimmt die Lage nicht: {', '.join(offen)}",
         )
 
     # Die Wallbox-Sofortladung wird bewusst nicht separat geführt: sie folgt

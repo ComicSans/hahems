@@ -302,6 +302,10 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             ]
             if d.plan.schaltbare
             else [],
+            # Wärmeerzeuger, die eine geschriebene Lage nicht angenommen haben.
+            # Ohne das stünde hier eine Empfehlung, die scheinbar gilt, während
+            # die Anlage etwas anderes tut.
+            "heizung_nicht_uebernommen": d.plan.heizung_nicht_uebernommen,
             "prioritaeten": d.plan.prioritaeten,
             "speicher_bedarf_kwh": d.plan.speicher_bedarf_kwh,
             "speicher_kapazitaet_kwh": d.plan.speicher_kapazitaet_kwh,

@@ -130,6 +130,7 @@ def heating(
     vlt_max_c: float = 45.0,
     heat_lock_from_month: int = 6,
     heat_lock_to_month: int = 8,
+    betriebsart: str = "heizen",
 ) -> P.HeatingState:
     """Witterungsführung einer Heizung. Die `id` deckt sich absichtlich mit dem
     Default von `switchable()` — Heizung und Schaltlast sind dasselbe Gerät in
@@ -139,6 +140,7 @@ def heating(
         id=id,
         outdoor_temp_c=outdoor_temp_c,
         month=month,
+        betriebsart=betriebsart,
         hat_vorlauf_entity=hat_vorlauf_entity,
         frost_on_c=frost_on_c,
         frost_off_c=frost_off_c,

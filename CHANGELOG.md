@@ -4,6 +4,50 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 2.2.0 — Eine Anlage, die kühlt, ist keine Heizung
+
+Am 4. August 2026 nahm die **Sommersperre** eine Wärmepumpe weg, die bei 39 °C
+Außentemperatur kühlte. Für HEMS war sie „an", und alles Weitere entschieden
+Regeln, die vom Kühlen nichts wissen: Sommersperre und Heizgrenze sagen im
+Kühlbetrieb das Gegenteil dessen aus, wofür sie gedacht sind — je heißer es
+wird, desto nötiger ist die Anlage. Aus derselben Wurzel wuchsen zwei weitere
+Fehler: Auch „Überschuss zu klein" hätte die Kühlung abgeschaltet, und beim
+Wiedereinschalten hätte HEMS `set_hvac_mode: heat` geschrieben.
+
+**Der neue Kühl-Modus.** Die Rolle Heizung hat neben dem Heiz-Modus jetzt einen
+**Kühl-Modus**. Was er benennt, regelt HEMS über den Überschuss — mit Priorität,
+Mindestlauf- und Mindestpausenzeit, aber **ohne** Sommersperre, Heizgrenze und
+Heizkurve. Der Frostschutz gilt weiter und schaltet dann samt Modus auf Heizen
+um: Unter der Frostschwelle kühlt niemand absichtlich.
+
+**Was HEMS gar nicht mehr anfasst.** Ein HVAC-Modus, der weder als Heiz- noch
+als Kühl-Modus eingetragen ist, bleibt unangetastet — typisch `heat_cool` und
+`auto`. Dort entscheidet die Anlage selbst, ob sie heizt oder kühlt, und HEMS
+kann nicht beurteilen, was ein Abschalten anrichtet. Der Schutz sitzt in der
+Aktuierung und gilt deshalb für beide Rollen, auch für eine Schaltlast an einer
+climate-Entität. Er wirkt nur in die Aus-Richtung: Eingeschaltet wird immer in
+einen zugeordneten Modus.
+
+**Der Rückweg.** HEMS merkt sich die zuletzt gesehene Betriebsart und schaltet
+in genau die zurück, aus der es abgeschaltet hat. Ohne das käme eine im
+Kühlbetrieb weggenommene Anlage als Heizung wieder hoch. Nach einem Neustart ist
+das Gedächtnis leer; dann gilt wieder „heizen".
+
+**Ein Aus, das nicht ankommt, wird gemeldet.** Dieselbe Anlage nahm
+`set_hvac_mode: off` entgegen und kühlte weiter — Verdichter und Außeneinheit
+liefen, 784 W. Zeigt ein Wärmeerzeuger die geschriebene Lage nach zwei Minuten
+nicht, steht das im Log und im Attribut `heizung_nicht_uebernommen` der
+Empfehlung. HEMS schreibt **nicht** nach: Wer einen Befehl entgegennimmt und
+ignoriert, tut es beim zweiten Mal auch, und ein Schaltbefehl je Zyklus wäre für
+den Verdichter das Gegenteil von Anti-Takt.
+
+**Zu tun:** Wer eine `climate`-Entität nutzt, die kühlen kann, trägt im Reiter
+**Heizung** den **Kühl-Modus** ein (meist `cool`). Ohne ihn regelt HEMS nur den
+Heiz-Modus und lässt die Anlage in jedem anderen Modus in Ruhe — sicher, aber
+die Kühlung läuft dann auch bei Netzbezug durch. Bestehende Konfigurationen
+werden nicht verändert; ein Hinweis im Konfigurations-Check weist auf den
+fehlenden Kühl-Modus hin.
+
 ## 2.1.0 — Die Heizung bekommt eine eigene Rolle, einen Reiter und Frostschutz
 
 Ein Wärmeerzeuger ist keine Schaltlast mit Häkchen mehr, sondern die **Rolle

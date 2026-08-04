@@ -56,6 +56,17 @@ _EPS = 1.0
 # diese Bedingung nie erfüllt.
 WARMWASSER_QUITTUNG_FRIST = timedelta(minutes=2)
 
+# Dieselbe Frist für den Wärmeerzeuger. Am 04.08.2026 an einer LG Therma V
+# gemessen: HEMS schrieb `set_hvac_mode: off`, die climate-Entität übernahm es,
+# und die Anlage kühlte trotzdem weiter — Verdichter und Außeneinheit liefen,
+# 784 W. Ein Aus, das die Anlage nicht ausführt, ist eine Falschmeldung im
+# Lastfluss und ein Rätsel für den, der davorsteht.
+#
+# Gemeldet, nicht wiederholt: Nachtreten hilft einem Gerät nicht, das den
+# Befehl entgegennimmt und ignoriert, und ein Schaltbefehl je Zyklus wäre für
+# den Verdichter das Gegenteil von Anti-Takt.
+HEIZUNG_QUITTUNG_FRIST = timedelta(minutes=2)
+
 # Throttle für identische, wiederholte Service-Aufrufe. Alle Aufrufer prüfen
 # den Ist-Zustand vor jedem Aufruf (siehe Klassendoc) — _call wird also nur
 # dann Zyklus für Zyklus mit denselben Parametern erneut erreicht, wenn das
@@ -73,6 +84,12 @@ class Actuator:
         # Nur was tatsächlich rausging, siehe _apply_ww. Nach einem Neustart
         # leer: dann verhält sich die Aktuierung wie vor dieser Buchführung.
         self._last_ww: dict[str, tuple[bool, datetime]] = {}
+        # Steuer-Entity → (zuletzt geschriebene An/Aus-Lage, Zeitpunkt) für
+        # Wärmeerzeuger. Der Eintrag verfällt, sobald die Anlage die Lage zeigt.
+        self._last_heizung: dict[str, tuple[bool, datetime]] = {}
+        # Entitäten, deren Nicht-Übernahme bereits im Log steht — die Meldung
+        # gehört einmal je Vorfall ins Log, nicht in jeden Zyklus.
+        self._heizung_gemeldet: set[str] = set()
 
     async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Reihenfolge WW → Akku → modulierbare Lasten. Jedes Gerät
@@ -135,7 +152,14 @@ class Actuator:
         )
         return True
 
-    async def _turn(self, entity: str, on: bool, heat_mode: str | None = None) -> None:
+    async def _turn(
+        self,
+        entity: str,
+        on: bool,
+        heat_mode: str | None = None,
+        cool_mode: str | None = None,
+        art: str = entity_domain.BETRIEBSART_HEIZEN,
+    ) -> None:
         """Steuer-Entität ein-/ausschalten, nur wenn die Lage nicht schon passt.
 
         Der Vergleich läuft über `entity_domain.ist_an` statt über den rohen
@@ -143,12 +167,28 @@ class Actuator:
         nie auf `on`. Mit einem `== "on"`-Vergleich wäre die Einschaltrichtung
         nie deckungsgleich — HEMS würde bei jeder Gelegenheit erneut schalten
         und dabei ausgerechnet den Service rufen (`climate.turn_on`), den viele
-        Integrationen gar nicht anbieten. Über `ist_an` bleibt außerdem ein
-        Gerät in Ruhe, das schon in einem anderen Heizmodus (`auto`) läuft.
+        Integrationen gar nicht anbieten.
+
+        **Nicht abschalten, was HEMS nicht einordnen kann.** Läuft eine
+        `climate`-Entität in einem Modus, den die Konfiguration weder als Heizen
+        noch als Kühlen ausweist (typisch `heat_cool`/`auto`), bleibt sie in
+        Ruhe. Das gilt hier und damit für beide Rollen — auch für eine
+        Schaltlast, die gar keine Witterungsführung hat und deren Planungspfad
+        den Unterschied nie zu sehen bekäme. Die Aus-Richtung ist die einzige,
+        die Schaden anrichtet: Einschalten trifft immer einen zugeordneten
+        Modus, weil `schalt_service` genau die konfigurierten schreibt.
         """
-        if entity_domain.ist_an(entity, self._state(entity)) == on:
+        ist = self._state(entity)
+        if entity_domain.ist_an(entity, ist) == on:
             return
-        domain, service, data = entity_domain.schalt_service(entity, on, heat_mode)
+        if not on and (
+            entity_domain.betriebsart(entity, ist, heat_mode, cool_mode)
+            == entity_domain.BETRIEBSART_FREMD
+        ):
+            return
+        domain, service, data = entity_domain.schalt_service(
+            entity, on, heat_mode, cool_mode, art
+        )
         await self._call(domain, service, entity, **data)
 
     def _num_state(self, entity: str | None) -> float | None:
@@ -368,6 +408,9 @@ class Actuator:
             if sp is None:
                 continue
             try:
+                # Eine Schaltlast kennt keine Betriebsart; ein climate-Modus,
+                # den `mode_heat_option` nicht abdeckt, bleibt darum
+                # unangetastet (siehe _turn).
                 await self._turn(s.switch_entity, sp.an, s.mode_heat_option)
             except Exception as err:  # noqa: BLE001 – eine Last reißt nie die andern
                 _LOGGER.warning(
@@ -375,6 +418,59 @@ class Actuator:
                 )
 
     # --- Heizung ------------------------------------------------------------
+
+    async def _turn_heizung(self, h, on: bool, art: str, plan: PlanResult) -> None:
+        """Wärmeerzeuger schalten — mit Übernahme-Kontrolle.
+
+        Wie `_turn`, plus die Buchführung darüber, ob der Befehl gewirkt hat.
+        Sie liegt hier und nicht in `_turn`, weil nur der Wärmeerzeuger einen
+        Verdichter hat, den wiederholtes Schalten beschädigt — eine Steckdose
+        darf ein verlorenes „aus" jederzeit neu bekommen.
+
+        Zeigt die Anlage die geschriebene Lage nach `HEIZUNG_QUITTUNG_FRIST`
+        immer noch nicht, wird das gemeldet und **nicht** nachgeschrieben. Wer
+        einen Befehl entgegennimmt und ignoriert, tut es beim zweiten Mal auch.
+        """
+        ent = h.switch_entity
+        ist = self._state(ent)
+        if entity_domain.ist_an(ent, ist) == on:
+            # Lage erreicht — Buchung und Meldung sind erledigt.
+            self._last_heizung.pop(ent, None)
+            self._heizung_gemeldet.discard(ent)
+            return
+        if not on and (
+            entity_domain.betriebsart(
+                ent, ist, h.mode_heat_option, h.mode_cool_option
+            )
+            == entity_domain.BETRIEBSART_FREMD
+        ):
+            return
+
+        now = dt_util.utcnow()
+        letzt = self._last_heizung.get(ent)
+        if letzt is not None and letzt[0] == on:
+            if now - letzt[1] < HEIZUNG_QUITTUNG_FRIST:
+                return
+            if ent not in self._heizung_gemeldet:
+                self._heizung_gemeldet.add(ent)
+                _LOGGER.warning(
+                    "HEMS-Actuator: %s hat '%s' nicht übernommen (zeigt weiter "
+                    "'%s') — HEMS schreibt nicht erneut",
+                    ent,
+                    "an" if on else "aus",
+                    ist,
+                )
+            if h.name not in plan.heizung_nicht_uebernommen:
+                plan.heizung_nicht_uebernommen.append(h.name)
+            return
+
+        domain, service, data = entity_domain.schalt_service(
+            ent, on, h.mode_heat_option, h.mode_cool_option, art
+        )
+        # Nur buchen, was tatsächlich rausging: ein gedrosselter Aufruf darf
+        # keine Nicht-Übernahme melden, die niemand geschrieben hat.
+        if await self._call(domain, service, ent, **data):
+            self._last_heizung[ent] = (on, now)
 
     async def _apply_heating(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Wärmeerzeuger stellen: Vorlauf-Sollwert und An/Aus-Lage.
@@ -408,11 +504,11 @@ class Actuator:
                 if not h.switch_entity:
                     continue
                 if sp.zwang_an:
-                    await self._turn(h.switch_entity, True, h.mode_heat_option)
+                    await self._turn_heizung(h, True, sp.betriebsart, plan)
                 elif sp.nicht_abschalten:
                     continue
                 elif (lage := empfehlung.get(h.id)) is not None:
-                    await self._turn(h.switch_entity, lage.an, h.mode_heat_option)
+                    await self._turn_heizung(h, lage.an, sp.betriebsart, plan)
             except Exception as err:  # noqa: BLE001 – eine Anlage reißt nie die andern
                 _LOGGER.warning(
                     "HEMS-Actuator: Heizung %s fehlgeschlagen: %s", h.name, err

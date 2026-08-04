@@ -206,6 +206,7 @@ HEATING_SCHEMA = vol.Schema(
             ["switch", "input_boolean", "climate"]
         ),
         vol.Optional("mode_heat_option"): selector.TextSelector(),
+        vol.Optional("mode_cool_option"): selector.TextSelector(),
         vol.Optional("power_entity"): _entity(device_class="power"),
         vol.Optional("outdoor_temp_entity"): _entity(device_class="temperature"),
         vol.Optional("flow_setpoint_entity"): _entity(["number", "input_number"]),

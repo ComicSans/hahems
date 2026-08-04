@@ -286,10 +286,31 @@ def check_config(
                 f"{ctx}: Vorlauf-Maximum ({h.vlt_max_c:.0f} °C) liegt nicht über "
                 f"dem Minimum ({h.vlt_min_c:.0f} °C) — die Heizkurve ist damit flach"
             )
-        if h.switch_entity.split(".")[0] == "climate" and not h.mode_heat_option:
-            c.info.append(
-                f"{ctx}: climate-Entität ohne Heiz-Modus — HEMS schaltet auf 'heat'"
-            )
+        if h.switch_entity.split(".")[0] == "climate":
+            if not h.mode_heat_option:
+                c.info.append(
+                    f"{ctx}: climate-Entität ohne Heiz-Modus — HEMS schaltet auf 'heat'"
+                )
+            if not h.mode_cool_option:
+                c.info.append(
+                    f"{ctx}: kein Kühl-Modus angegeben — HEMS regelt nur den "
+                    f"Heiz-Modus '{h.mode_heat_option or 'heat'}' und lässt die "
+                    f"Anlage in jedem anderen Modus unangetastet"
+                )
+            elif h.mode_cool_option == (h.mode_heat_option or "heat"):
+                c.warnings.append(
+                    f"{ctx}: Kühl- und Heiz-Modus sind derselbe "
+                    f"('{h.mode_cool_option}') — HEMS wendet dort die "
+                    f"Heizungsregeln an, auch wenn die Anlage kühlt"
+                )
+            if h.mode_heat_option in ("heat_cool", "auto"):
+                c.warnings.append(
+                    f"{ctx}: Heiz-Modus '{h.mode_heat_option}' überlässt der "
+                    f"Anlage, ob sie heizt oder kühlt — HEMS wendet darauf "
+                    f"trotzdem Sommersperre und Heizgrenze an und schaltet sie "
+                    f"im Hochsommer ab, während sie kühlt. Wer beides regeln "
+                    f"will, trägt 'heat' und den Kühl-Modus ein"
+                )
         if not h.power_entity:
             c.warnings.append(
                 f"{ctx}: keine Leistungsmessung — HEMS rechnet dauerhaft mit "

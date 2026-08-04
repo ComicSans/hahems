@@ -16,12 +16,27 @@ entschieden und vom Actuator auf einem eigenen Weg gestellt.
 
 **Rangfolge der Entscheidung:**
 
+0. **Betriebsart** — alles Folgende ist Heizungs-Semantik und gilt nur, wenn
+   die Anlage auch heizt. Siehe unten.
 1. **Frostschutz** — unter `frost_on_c` wird eingeschaltet, an Überschuss,
    Mindestpause und Sommersperre vorbei. Er kauft die Wärme notfalls aus dem
    Netz; das ist der Preis und hier die richtige Wahl.
 2. **Sommersperre** — in den Sperrmonaten wird nicht geheizt.
 3. **Heizgrenze** — oberhalb `heat_off_c` braucht das Haus keine Wärme.
 4. Sonst entscheidet der Überschuss (in `switchable_control`).
+
+**Betriebsart.** Eine Anlage, die kühlt, ist keine Heizung: Sommersperre und
+Heizgrenze sagen über sie das Gegenteil dessen aus, wofür sie gedacht sind —
+je heißer es wird, desto nötiger ist sie. Im Kühlbetrieb schweigt dieses Modul
+deshalb vollständig (kein Zwang, keine Sperre, keine Kurve); es bleibt bei der
+Überschussregelung in `switchable_control`, die von Temperaturen nichts weiß.
+Ist der Modus gar nicht zugeordnet (`fremd`, typisch `heat_cool`/`auto`), weiß
+HEMS nicht einmal, in welche Richtung die Anlage arbeitet — dann wird sie wie
+bei fehlender Außentemperatur behandelt: nicht abschalten.
+
+Das ist keine Vorsichtsmaßnahme auf Verdacht. Am 04.08.2026 schaltete die
+Sommersperre eine Anlage ab, die im Modus `heat_cool` bei 39 °C
+Außentemperatur kühlte.
 
 **Wenn die Außentemperatur fehlt**, kann HEMS keine dieser vier Fragen
 beantworten. Es erzwingt dann nichts, verbietet nichts — und schaltet vor allem
@@ -30,6 +45,7 @@ blind wegzunehmen. Wer nicht messen kann, soll nicht regeln.
 """
 from __future__ import annotations
 
+from ..entity_domain import BETRIEBSART_FREMD, BETRIEBSART_KUEHLEN
 from .types import HeatingResult, HeatingSetpoint, PlanInput, PlanResult, _latch
 
 # Mindestabstand zwischen Ein- und Aus-Schwelle, den `_ordnung` notfalls
@@ -88,8 +104,60 @@ def heating_control(inp: PlanInput, res: PlanResult) -> HeatingResult | None:
 
     anlagen: list[HeatingSetpoint] = []
     for h in inp.heatings:
-        sp = HeatingSetpoint(name=h.name, id=h.id, t_aussen_c=h.outdoor_temp_c)
+        sp = HeatingSetpoint(
+            name=h.name,
+            id=h.id,
+            t_aussen_c=h.outdoor_temp_c,
+            betriebsart=h.betriebsart,
+        )
         t = h.outdoor_temp_c
+
+        if h.betriebsart == BETRIEBSART_KUEHLEN:
+            # Die Anlage kühlt: Sommersperre, Heizgrenze und Heizkurve haben
+            # hier keine Bedeutung — es bleibt bei der Überschussregelung.
+            #
+            # Der Frostschutz gilt trotzdem, und zwar mitsamt Moduswechsel: Er
+            # steht laut Rangfolge über allem, und unter `frost_on_c` kühlt
+            # niemand absichtlich. Steht eine Anlage dort auf Kühlen, ist das
+            # ein Fehler — dann ist Umschalten die richtige Antwort und nicht
+            # Zusehen.
+            frost_ein, frost_aus = _ordnung(h.frost_on_c, h.frost_off_c)
+            frost = (
+                _latch(inp.flags.frost.get(h.id, False), t, on=frost_ein, off=frost_aus)
+                if t is not None
+                else inp.flags.frost.get(h.id, False)
+            )
+            res.flags.frost[h.id] = frost
+            # Der Heiz-Latch wird eingefroren statt neu gerechnet: Er beschreibt
+            # den Heizbetrieb, und der findet gerade nicht statt.
+            res.flags.heizen[h.id] = inp.flags.heizen.get(h.id, False)
+            if frost:
+                sp.zwang_an = True
+                sp.betriebsart = "heizen"
+                sp.status = "frostschutz"
+                sp.grund = (
+                    f"Frostschutz ({t:.0f} °C, aus dem Kühlbetrieb)"
+                    if t is not None
+                    else "Frostschutz (Außentemperatur unbekannt)"
+                )
+                if h.hat_vorlauf_entity:
+                    sp.vorlauf_c = float(round(h.vlt_min_c))
+            else:
+                sp.status = "kuehlen"
+                sp.grund = "Kühlbetrieb — nur Überschussregelung"
+            anlagen.append(sp)
+            continue
+
+        if h.betriebsart == BETRIEBSART_FREMD:
+            # Modus nicht zugeordnet (`heat_cool`/`auto`): HEMS weiß nicht, ob
+            # die Anlage heizt oder kühlt, und lässt eine laufende in Ruhe.
+            sp.status = "fremdmodus"
+            sp.nicht_abschalten = True
+            sp.grund = "Betriebsart nicht zugeordnet"
+            res.flags.frost[h.id] = inp.flags.frost.get(h.id, False)
+            res.flags.heizen[h.id] = inp.flags.heizen.get(h.id, False)
+            anlagen.append(sp)
+            continue
 
         if t is None:
             # Blind: nichts erzwingen, nichts sperren — aber auch nichts

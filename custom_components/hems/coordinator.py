@@ -428,6 +428,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             hass, self._opt, lambda: self.registry, self._own_entity_id
         )
         self._weather = WeatherClient(hass, self._opt)
+        # Zuletzt gesehene Betriebsart je Wärmeerzeuger (id → "heizen"/"kuehlen"/
+        # "fremd"). Überbrückt das Abschalten, in dem die climate-Entität nur
+        # noch `off` sagt — siehe _betriebsart.
+        self._letzte_betriebsart: dict[str, str] = {}
         self._unit_warned: set[str] = set()
         # Cooldown-Zeitpunkt für die Sprung-Erkennung (async_setup_saldo_jump_tracking).
         self._last_jump_refresh: datetime | None = None
@@ -845,6 +849,45 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         states.sort(key=lambda st: st.priority)
         return states
 
+    def _betriebsart(self, h) -> str:
+        """Betriebsart einer Anlage — mit Gedächtnis über das Abschalten hinweg.
+
+        Eine ausgeschaltete `climate`-Entität steht auf `off` und sagt nicht
+        mehr, was sie vorher tat. Ohne Gedächtnis fiele sie damit auf „heizen"
+        zurück, und HEMS würde eine Anlage, die es selbst aus dem Kühlbetrieb
+        genommen hat, nach der Sommersperre beurteilen — also nie wieder
+        einschalten und beim Einschalten den falschen Modus schreiben.
+
+        Gemerkt wird nur der zuletzt *gesehene* aktive Modus, nicht der
+        geschriebene: Was am Gerät steht, ist die Wahrheit, auch wenn jemand
+        anders es umgestellt hat. Nach einem Neustart ist das Gedächtnis leer —
+        dann gilt wieder „heizen", das Verhalten vor dieser Buchführung.
+
+        **`fremd` wird nicht gemerkt.** Diese Betriebsart heißt „HEMS lässt die
+        Anlage in Ruhe" und beschreibt immer eine laufende: Ausgeschaltet steht
+        eine climate-Entität auf `off`, nie auf `heat_cool`. Käme sie aus dem
+        Gedächtnis, träfe sie eine abgeschaltete Anlage — und die bekäme dann
+        keinen Frostschutz mehr, weil die Witterungsführung im Fremdmodus gar
+        nicht erst rechnet. Bei einer climate-Entität ist dieser Frostschutz die
+        einzige Rückfallebene, die HEMS kennt; ihn an einem Modus zu verlieren,
+        in dem die Anlage vor Wochen einmal lief, wäre der teuerste denkbare
+        Nebeneffekt dieser Buchführung.
+        """
+        if not h.switch_entity:
+            return entity_domain.BETRIEBSART_HEIZEN
+        st = self.hass.states.get(h.switch_entity)
+        state = st.state if st is not None else None
+        art = entity_domain.betriebsart(
+            h.switch_entity, state, h.mode_heat_option, h.mode_cool_option
+        )
+        if entity_domain.ist_an(h.switch_entity, state):
+            if art == entity_domain.BETRIEBSART_FREMD:
+                self._letzte_betriebsart.pop(h.id, None)
+            else:
+                self._letzte_betriebsart[h.id] = art
+            return art
+        return self._letzte_betriebsart.get(h.id, art)
+
     def _heating_states(self, reg: DeviceRegistry, now: datetime) -> list:
         """Witterungsführung der Wärmeerzeuger: Außentemperatur und Parameter.
 
@@ -867,6 +910,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     else wetter_c
                 ),
                 month=month,
+                betriebsart=self._betriebsart(h),
                 hat_vorlauf_entity=bool(h.flow_setpoint_entity),
                 frost_on_c=h.frost_on_c,
                 frost_off_c=h.frost_off_c,

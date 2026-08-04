@@ -13,7 +13,14 @@ from __future__ import annotations
 
 import pytest
 
-from hems.entity_domain import ist_an, schalt_service
+from hems.entity_domain import (
+    BETRIEBSART_FREMD,
+    BETRIEBSART_HEIZEN,
+    BETRIEBSART_KUEHLEN,
+    betriebsart,
+    ist_an,
+    schalt_service,
+)
 
 
 # --- Lesen --------------------------------------------------------------------
@@ -78,3 +85,79 @@ def test_input_boolean_wird_wie_ein_switch_behandelt():
         "turn_on",
         {},
     )
+
+
+# --- Betriebsart --------------------------------------------------------------
+#
+# Zweiter Teil derselben Geschichte: „an" zu erkennen reichte nicht. Am
+# 04.08.2026 nahm die Sommersperre eine Anlage weg, die im Modus `heat_cool` bei
+# 39 °C kühlte — für HEMS war sie schlicht „an", und alles Weitere entschieden
+# Heizungsregeln, die vom Kühlen nichts wissen.
+def test_switch_hat_immer_die_betriebsart_heizen():
+    """Eine Steckdose oder ein SG-Ready-Kontakt kennt keinen Modus."""
+    assert betriebsart("switch.wp", "on") == BETRIEBSART_HEIZEN
+    assert betriebsart("switch.wp", "off") == BETRIEBSART_HEIZEN
+
+
+def test_heiz_modus_ist_heizen():
+    assert betriebsart("climate.wp", "heat", "heat", "cool") == BETRIEBSART_HEIZEN
+
+
+def test_kuehl_modus_ist_kuehlen():
+    assert betriebsart("climate.wp", "cool", "heat", "cool") == BETRIEBSART_KUEHLEN
+
+
+@pytest.mark.parametrize("modus", ["heat_cool", "auto", "dry", "fan_only"])
+def test_nicht_zugeordneter_modus_ist_fremd(modus: str):
+    """Dort entscheidet die Anlage selbst, ob sie heizt oder kühlt."""
+    assert betriebsart("climate.wp", modus, "heat", "cool") == BETRIEBSART_FREMD
+
+
+def test_ohne_kuehl_modus_ist_cool_fremd():
+    """Wer keinen Kühl-Modus angibt, bekommt die vorsichtige Auslegung: HEMS
+    regelt dann nur das Heizen und lässt die Kühlung unangetastet."""
+    assert betriebsart("climate.wp", "cool", "heat") == BETRIEBSART_FREMD
+
+
+def test_off_gilt_als_heizen():
+    """Sonst könnten Frostschutz und Heizgrenze eine abgeschaltete Anlage nicht
+    mehr beurteilen. Wer den zuletzt aktiven Modus kennt, reicht ihn statt `off`
+    herein — das tut der Coordinator."""
+    assert betriebsart("climate.wp", "off", "heat", "cool") == BETRIEBSART_HEIZEN
+
+
+@pytest.mark.parametrize("zustand", ["unavailable", "unknown", None])
+def test_nicht_erreichbar_gilt_als_heizen(zustand):
+    assert betriebsart("climate.wp", zustand, "heat", "cool") == BETRIEBSART_HEIZEN
+
+
+# --- Einschalten in die richtige Betriebsart ----------------------------------
+def test_einschalten_im_kuehlbetrieb_trifft_den_kuehl_modus():
+    """Ohne das käme eine im Kühlbetrieb abgeschaltete Anlage als Heizung
+    wieder hoch — bei 39 °C Außentemperatur die Umkehr dessen, was gebraucht
+    wird."""
+    _, _, daten = schalt_service(
+        "climate.wp", True, "heat", "cool", BETRIEBSART_KUEHLEN
+    )
+    assert daten == {"hvac_mode": "cool"}
+
+
+def test_einschalten_im_heizbetrieb_trifft_den_heiz_modus():
+    _, _, daten = schalt_service(
+        "climate.wp", True, "heat", "cool", BETRIEBSART_HEIZEN
+    )
+    assert daten == {"hvac_mode": "heat"}
+
+
+def test_kuehlbetrieb_ohne_kuehl_modus_faellt_auf_den_heiz_modus():
+    """Kann nur auftreten, wenn die Konfiguration nachträglich geleert wurde —
+    dann ist der Heiz-Modus die einzige belegte Angabe."""
+    _, _, daten = schalt_service("climate.wp", True, "heat", None, BETRIEBSART_KUEHLEN)
+    assert daten == {"hvac_mode": "heat"}
+
+
+def test_ausschalten_ignoriert_die_betriebsart():
+    _, _, daten = schalt_service(
+        "climate.wp", False, "heat", "cool", BETRIEBSART_KUEHLEN
+    )
+    assert daten == {"hvac_mode": "off"}

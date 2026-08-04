@@ -220,6 +220,13 @@ class HeatingState:
     `outdoor_temp_c` ist `None`, wenn weder ein eigener Temperatursensor noch
     die Wetter-Entität einen Wert liefert. Dann kann HEMS weder Frost erkennen
     noch die Kurve rechnen — siehe `heating_control`.
+
+    `betriebsart` sagt, was die Anlage laut ihrem Zustand gerade tut —
+    `heizen`, `kuehlen` oder `fremd` (Modus nicht zugeordnet, typisch
+    `heat_cool`/`auto`). Die Zuordnung Modus → Betriebsart trifft
+    `entity_domain`; hier steht nur ihr Ergebnis, damit dieses Modul HA-frei
+    bleibt. Alles, was diese Klasse sonst trägt, ist Heizungs-Semantik und gilt
+    ausschließlich für `heizen`.
     """
 
     name: str
@@ -227,6 +234,7 @@ class HeatingState:
     outdoor_temp_c: float | None = None
     month: int = 1
     hat_vorlauf_entity: bool = False
+    betriebsart: str = "heizen"
     frost_on_c: float = 3.0
     frost_off_c: float = 5.0
     heat_on_c: float = 15.0
@@ -255,10 +263,15 @@ class HeatingSetpoint:
     zwang_an: bool = False
     sperre: bool = False
     nicht_abschalten: bool = False
+    # Betriebsart, aus der die Empfehlung entstanden ist. Der Actuator schaltet
+    # damit in denselben Modus zurück, aus dem er abgeschaltet hat — sonst käme
+    # eine im Kühlbetrieb abgeschaltete Anlage als Heizung wieder hoch.
+    betriebsart: str = "heizen"
     # Witterungsgeführter Vorlauf-Sollwert (°C); None heißt „nicht schreiben".
     vorlauf_c: float | None = None
     t_aussen_c: float | None = None
     # "frostschutz" | "heizen" | "sommersperre" | "heizgrenze" | "unbekannt"
+    # | "kuehlen" | "fremdmodus"
     status: str = ""
     grund: str = ""
 
@@ -480,6 +493,11 @@ class PlanResult:
     # Wird nicht geplant, sondern vom Actuator eingetragen — die Planung kennt
     # den Ist-Zustand der Steuer-Entität nicht.
     warmwasser_nicht_uebernommen: bool = False
+    # Wärmeerzeuger, die eine geschriebene An/Aus-Lage nicht übernommen haben
+    # (Namen). Wie oben vom Actuator eingetragen, nicht geplant. Eine Anlage,
+    # die ein „aus" quittiert und weiterläuft, stünde sonst im Lastfluss als
+    # abgeschaltet, während sie Strom zieht.
+    heizung_nicht_uebernommen: list[str] = field(default_factory=list)
     # Empfehlung der Saldo-Regelung über alle Speicher (None ohne Daten).
     regelung: ControlResult | None = None
     # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).

@@ -287,3 +287,107 @@ def test_flags_des_aufrufers_bleiben_unveraendert():
 
 def test_keine_heizung_keine_empfehlung():
     assert _plan(switchables=[switchable("Pumpe")]).heizung is None
+
+
+# --- Betriebsart: Kühlen und nicht zugeordnete Modi ---------------------------
+#
+# Am 04.08.2026 schaltete die Sommersperre eine Anlage ab, die im Modus
+# `heat_cool` bei 39 °C Außentemperatur kühlte. Die Heizungsregeln sagen im
+# Kühlbetrieb das Gegenteil dessen aus, wofür sie gedacht sind: je heißer, desto
+# nötiger ist die Anlage.
+def test_kuehlbetrieb_wird_von_der_sommersperre_nicht_abgeschaltet():
+    r = _plan(
+        switchables=[switchable("Wärmepumpe", erwartet_w=1500, ist_an=True)],
+        heatings=[heating(outdoor_temp_c=35.0, month=8, betriebsart="kuehlen")],
+        saldo_w=-6000,
+    )
+    assert _anlage(r).status == "kuehlen"
+    assert _anlage(r).sperre is False
+    assert _an(r) is True
+
+
+def test_kuehlbetrieb_wird_von_der_heizgrenze_nicht_abgeschaltet():
+    """Die Heizgrenze ist bei 35 °C sicher überschritten — sie meint aber das
+    Heizen. Ohne diese Trennung nähme sie die Kühlung genau dann weg, wenn sie
+    gebraucht wird."""
+    r = _plan(
+        switchables=[switchable("Wärmepumpe", erwartet_w=1500, ist_an=True)],
+        heatings=[
+            heating(outdoor_temp_c=35.0, month=1, betriebsart="kuehlen")
+        ],
+        saldo_w=-6000,
+    )
+    assert _anlage(r).sperre is False
+    assert _an(r) is True
+
+
+def test_kuehlbetrieb_bleibt_der_ueberschussregelung_unterworfen():
+    """„In Ruhe lassen" gilt für die Heizungsregeln, nicht für den Überschuss —
+    sonst liefe die Kühlung den ganzen Abend aus dem Netz."""
+    r = _plan(
+        switchables=[switchable("Wärmepumpe", erwartet_w=1500, ist_an=True)],
+        heatings=[heating(outdoor_temp_c=35.0, month=8, betriebsart="kuehlen")],
+        saldo_w=2000,  # Netzbezug
+    )
+    assert _an(r) is False
+
+
+def test_kuehlbetrieb_schreibt_keine_heizkurve():
+    r = _plan(
+        switchables=[switchable("Wärmepumpe", erwartet_w=1500, ist_an=True)],
+        heatings=[heating(outdoor_temp_c=35.0, month=8, betriebsart="kuehlen")],
+        saldo_w=-6000,
+    )
+    assert _anlage(r).vorlauf_c is None
+
+
+def test_frostschutz_gilt_auch_aus_dem_kuehlbetrieb():
+    """Unter der Frostschwelle kühlt niemand absichtlich. Steht die Anlage dort
+    auf Kühlen, ist Umschalten die richtige Antwort — deshalb trägt die
+    Empfehlung dann die Betriebsart „heizen"."""
+    r = _plan(
+        switchables=[switchable("Wärmepumpe", erwartet_w=1500)],
+        heatings=[heating(outdoor_temp_c=1.0, betriebsart="kuehlen")],
+        saldo_w=2000,
+    )
+    a = _anlage(r)
+    assert a.zwang_an is True
+    assert a.betriebsart == "heizen"
+    assert _an(r) is True
+
+
+def test_nicht_zugeordneter_modus_wird_nicht_abgeschaltet():
+    """`heat_cool`/`auto`: HEMS weiß nicht einmal, in welche Richtung die Anlage
+    arbeitet. Eine laufende bleibt laufen."""
+    r = _plan(
+        switchables=[switchable("Wärmepumpe", erwartet_w=1500, ist_an=True)],
+        heatings=[heating(outdoor_temp_c=35.0, month=8, betriebsart="fremd")],
+        saldo_w=2000,  # Netzbezug — ohne den Schutz ginge sie aus
+    )
+    a = _anlage(r)
+    assert a.status == "fremdmodus"
+    assert a.nicht_abschalten is True
+    assert _an(r) is True
+
+
+def test_nicht_zugeordneter_modus_wird_nicht_eingeschaltet():
+    """Der Schutz gilt nur der Aus-Richtung: Eine ausgeschaltete Anlage steht auf
+    `off`, nicht auf `heat_cool` — die Betriebsart `fremd` beschreibt also immer
+    eine laufende. Ist sie trotzdem aus, wird sie nicht angeworfen."""
+    r = _plan(
+        switchables=[switchable("Wärmepumpe", erwartet_w=1500, ist_an=False)],
+        heatings=[heating(outdoor_temp_c=35.0, month=8, betriebsart="fremd")],
+        saldo_w=2000,
+    )
+    assert _an(r) is False
+
+
+def test_heizbetrieb_bleibt_unveraendert():
+    """Der Regelfall darf sich durch die Betriebsart nicht verschoben haben."""
+    r = _plan(
+        switchables=[switchable("Wärmepumpe", erwartet_w=1500, ist_an=True)],
+        heatings=[heating(outdoor_temp_c=35.0, month=8, betriebsart="heizen")],
+        saldo_w=-6000,
+    )
+    assert _anlage(r).status == "sommersperre"
+    assert _an(r) is False
