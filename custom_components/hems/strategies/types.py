@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from ..const import (
+    DEFAULT_BOOST_MIN_HOLD_MIN,
     DEFAULT_BOOST_SALDO_OFF_W,
     DEFAULT_BOOST_SALDO_ON_W,
     DEFAULT_BOOST_SOC_OFF,
@@ -307,6 +308,12 @@ class PlanFlags:
     # Einspeisung, jeweils mit eigener Ein-/Aus-Schwelle.
     warmwasser_boost_soc: bool = False
     warmwasser_boost_saldo: bool = False
+    # Der gehaltene Boost-Zustand samt Zeitpunkt seines letzten Wechsels — die
+    # Kriterien oben dürfen kippen, der Boost folgt ihnen erst nach Ablauf des
+    # Mindestabstands. `None` heißt „noch nie gewechselt" und gibt den nächsten
+    # Wechsel frei; sonst wäre der Boost nach jedem Neustart eine Stunde stumm.
+    warmwasser_boost: bool = False
+    warmwasser_boost_seit: datetime | None = None
     # Kaltreserve der Saldo-Regelung: Reserve-Speicher entladen mit, solange
     # der mittlere SoC der übrigen unten ist.
     kaltreserve: bool = False
@@ -415,6 +422,8 @@ class PlanInput:
     thermal_boost_soc_off: float = DEFAULT_BOOST_SOC_OFF
     thermal_boost_saldo_on_w: float = DEFAULT_BOOST_SALDO_ON_W
     thermal_boost_saldo_off_w: float = DEFAULT_BOOST_SALDO_OFF_W
+    # Mindestabstand zwischen zwei Boost-Wechseln (Minuten), siehe water_plan.
+    thermal_boost_min_hold_min: int = DEFAULT_BOOST_MIN_HOLD_MIN
     # Modulierbare Lasten (Wallboxen …) für die Überschussregelung. Leer =
     # keine Wallbox konfiguriert; dann bleibt die alte, ungeprüfte Empfehlung.
     modulateds: list[ModulatedState] = field(default_factory=list)
@@ -485,6 +494,10 @@ class PlanResult:
     warmwasser_soll_c: float | None = None
     warmwasser_status: str = ""  # "aus" | "legionellenschutz" | "pv_boost" | "basis"
     warmwasser_legionelle_aktiv: bool = False
+    # Ab wann der PV-Boost wieder wechseln darf (Mindestabstand); None heißt
+    # „jederzeit". Reine Anzeige: erklärt einen Boost, der steht, obwohl seine
+    # Kriterien schon wieder aus sind (und umgekehrt).
+    warmwasser_boost_frei_ab: datetime | None = None
     warmwasser_legionellen_fenster: list[tuple[datetime, datetime]] = field(
         default_factory=list
     )

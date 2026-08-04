@@ -4,8 +4,13 @@ Priorität: Sperrzeit (aus) > Legionellenschutz > PV-Boost (Komfort) > Basis.
 `water_plan` setzt alle WW-Flags (Sperre, Legionellen, PV-Boost, Basis/Komfort-
 Thermostat) und den Sollwert direkt im Ergebnis. Muss vor der Empfehlungs-
 Priorisierung laufen — die liest die Basis/Komfort-Flags nur noch.
+
+Der Boost selbst ist zusätzlich zeitgesperrt: zwischen zwei Wechseln liegt ein
+Mindestabstand, damit der Sollwert nicht zwischen Basis und Komfort springt.
 """
 from __future__ import annotations
+
+from datetime import timedelta
 
 from .types import PlanInput, PlanResult, _latch
 
@@ -69,8 +74,37 @@ def water_plan(inp: PlanInput, res: PlanResult) -> None:
         off=inp.thermal_comfort,
     )
 
+    # Mindestabstand zwischen zwei Boost-Wechseln. Die Kriterien oben sind
+    # bereits hysteresebehaftet, das reicht hier aber nicht: Der Boiler zieht die
+    # Einspeisung, die ihn eingeschaltet hat, selbst weg — der Boost hebelt sein
+    # eigenes Kriterium aus und fiele Minuten später zurück. Gehalten wird
+    # deshalb der Boost-Zustand selbst, in beide Richtungen: ein Wechsel gilt
+    # erst, wenn der letzte lange genug her ist. Ohne Zeitstempel (erster Lauf
+    # nach einem Neustart) darf sofort gewechselt werden.
+    boost_roh = (
+        res.flags.warmwasser_komfort
+        and res.flags.warmwasser_boost_soc
+        and res.flags.warmwasser_boost_saldo
+    )
+    seit = inp.flags.warmwasser_boost_seit
+    haltezeit = timedelta(minutes=inp.thermal_boost_min_hold_min)
+    frei = seit is None or inp.now - seit >= haltezeit
+    # Ohne Wechsel bleiben Zustand und Zeitstempel stehen — sie stehen bereits
+    # aus der Fortschreibung in `res.flags`.
+    if boost_roh != inp.flags.warmwasser_boost and frei:
+        res.flags.warmwasser_boost = boost_roh
+        res.flags.warmwasser_boost_seit = inp.now
+    if res.flags.warmwasser_boost_seit is not None:
+        frei_ab = res.flags.warmwasser_boost_seit + haltezeit
+        # Nur solange die Sperre läuft: ein längst vergangener Zeitpunkt stünde
+        # sonst stundenlang als „frei ab" da, obwohl der Boost frei ist.
+        res.warmwasser_boost_frei_ab = frei_ab if frei_ab > inp.now else None
+
     # Empfohlener Sollwert nach Priorität: Sperrzeit (aus) > Legionellenschutz >
     # PV-Boost > Basis. Ohne WW-Gerät bleibt warmwasser_soll_c None, Status leer.
+    # Sperre und Legionellenschutz überstimmen den Boost sofort — sie ändern nur
+    # den Status, nicht den gehaltenen Boost-Zustand; ihre Fenster sind Stunden
+    # lang, der Mindestabstand ist an ihrem Ende ohnehin abgelaufen.
     if not inp.thermal_present:
         return
     if res.warmwasser_gesperrt:
@@ -79,11 +113,7 @@ def water_plan(inp: PlanInput, res: PlanResult) -> None:
     elif res.warmwasser_legionelle_aktiv:
         res.warmwasser_soll_c = inp.thermal_legionella_target
         res.warmwasser_status = "legionellenschutz"
-    elif (
-        res.flags.warmwasser_komfort
-        and res.flags.warmwasser_boost_soc
-        and res.flags.warmwasser_boost_saldo
-    ):
+    elif res.flags.warmwasser_boost:
         res.warmwasser_soll_c = inp.thermal_comfort
         res.warmwasser_status = "pv_boost"
     else:

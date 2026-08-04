@@ -80,6 +80,14 @@ DEFAULT_BOOST_SOC_ON = 80  # Speicher-SoC (%), ab dem der Boost starten darf
 DEFAULT_BOOST_SOC_OFF = 75  # ... und unter dem er wieder endet
 DEFAULT_BOOST_SALDO_ON_W = -2800  # Netzsaldo, ab dem der Boost starten darf
 DEFAULT_BOOST_SALDO_OFF_W = 200  # ... und ab dem er wieder endet
+# Mindestabstand zwischen zwei Boost-Wechseln. Die Hysterese oben bremst den
+# Boost gegen Messrauschen, nicht gegen die eigene Wirkung: Der Boiler zieht die
+# Einspeisung selbst weg, die ihn eingeschaltet hat, und am Abend kommt sie
+# nicht wieder. Am 04.08.2026 lief der Boost deshalb genau zwölf Minuten
+# (18:14 an, 18:26 aus) — ein Sollwertsprung 48 → 60 → 48, den die Anlage als
+# Takten sieht. Der Abstand gilt in beide Richtungen; nur den Rückweg zu
+# bremsen, hieße bloß, das Takten um eine halbe Periode zu verschieben.
+DEFAULT_BOOST_MIN_HOLD_MIN = 60
 
 # Saldo-Regelung der Speicher: Proportionalregler auf den Netzsaldo mit
 # Prioritaet "Bezug minimieren". Asymmetrische Gains (schnell gegen teuren

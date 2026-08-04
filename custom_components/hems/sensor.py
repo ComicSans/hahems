@@ -246,6 +246,14 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             ],
             "boost_speicher_ok": d.plan.flags.warmwasser_boost_soc,
             "boost_einspeisung_ok": d.plan.flags.warmwasser_boost_saldo,
+            # Der Boost hält seinen Zustand einen Mindestabstand lang. Ohne
+            # diesen Zeitpunkt läse sich ein laufender Boost mit bereits
+            # abgefallenen Kriterien (oder umgekehrt) wie ein Widerspruch.
+            "boost_wechsel_frei_ab": (
+                dt_util.as_local(d.plan.warmwasser_boost_frei_ab).isoformat()
+                if d.plan.warmwasser_boost_frei_ab is not None
+                else None
+            ),
             # Steht das an, hat HEMS die Freigabe gestellt und das Gerät zeigt
             # sie danach immer noch nicht — der Befehl kommt nicht an. HEMS
             # schreibt weiter dagegen; ohne dieses Attribut sähe man nur eine
