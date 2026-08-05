@@ -383,6 +383,31 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         # min_on-gehaltener Lasten.
         ev_target_w = result.ev_regelung.soll_summe_w
 
+    # Das EV-Target ist für den Speicher-Regler eine Vorsteuerung über die
+    # Aktuierungs-Totzeit: Er soll den Saldo sehen, der sich mit dem GLEICH
+    # geschriebenen Sollwert ergibt, statt einen Takt zu spät zu reagieren.
+    # Solange HEMS denselben Sollwert nur wiederholt, steht keine Änderung mehr
+    # bevor — dann gilt die Realität. Sonst hielte eine Last, die ihrem Sollwert
+    # nicht folgt (ein Auto, das an seiner Ladekurve hängt), den Regler dauerhaft
+    # auf einem zu niedrigen Sollpunkt: Er sähe weniger Bezug als real anliegt,
+    # bliebe im Totband stehen und ließe HEMS die Differenz kaufen — derselbe
+    # Fehlermodus, den die Schaltlasten-Vorsteuerung am 05.08.2026 zeigte.
+    #
+    # Die Wiederholung erkennt der Vergleich mit dem Sollwert des Vorlaufs
+    # (`flags`, wie alle Zustände zwischen zwei Planläufen). Drosselt HEMS aktiv
+    # weiter, ist der Wert jedes Mal neu und die Vorsteuerung wirkt wie bisher;
+    # steht sie still (typisch: die Last hängt an ihrem Mindeststrom), fällt sie
+    # weg. Der Zwangsladungs-Fall bleibt unberührt — dort rechnet der
+    # Speicher-Regler die Wallbox absichtlich dauerhaft heraus.
+    vorlauf = inp.flags.ev_soll_w
+    result.flags.ev_soll_w = ev_target_w
+    if (
+        ev_target_w is not None
+        and vorlauf is not None
+        and abs(ev_target_w - vorlauf) < 1.0
+    ):
+        ev_target_w = None
+
     # Saldo-Regelung: Zuteilungsempfehlung über alle Speicher. schaltbar_delta
     # (oben) ist die Feedforward-Korrektur für gerade zu-/abschaltende Lasten
     # (z. B. WP) — der Regler reagiert so schon in diesem Zyklus, statt erst,

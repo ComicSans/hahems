@@ -160,6 +160,46 @@ def test_akku_laedt_nicht_gegen_netzbezug_wenn_wallbox_gedrosselt_wird():
     assert all(z.watt == 0 for z in r.regelung.zuteilung)
 
 
+def test_wallbox_die_ihrem_sollwert_nicht_folgt_haelt_den_akku_nicht_dauerhaft_an():
+    """Fortsetzung des Falls darüber, einen Zyklus später. HEMS hat die Wallbox
+    bereits auf 0 kommandiert und kommandiert erneut 0 — das Auto zieht aber
+    weiter 1,8 kW. Damit steht keine Änderung mehr bevor, für die vorzusteuern
+    wäre: Die bereinigte Sicht wäre ab hier ein Dauer-Offset, der HEMS 1,5 kW
+    kaufen ließe, während die Akkus danebenstehen. Der zweite Lauf sieht deshalb
+    den echten Saldo und entlädt."""
+    wb = load(
+        "WB", min_a=6, max_a=16, phases=1, power_w=1841.0,
+        ist_an=True, an_seit_s=3600.0, nachfrage=True,
+    )
+
+    def _lauf(flags):
+        return P.compute_plan(
+            plan_input(
+                storage_states=[
+                    storage(f"L{i+1}", 60.0, power_w=0.0) for i in range(3)
+                ],
+                saldo_w=1573.0,
+                wallbox_w=1841.0,
+                modulateds=[wb],
+                priority_mode="auto",
+                gain_level="max",
+                flags=flags,
+            )
+        )
+
+    erst = _lauf(None)
+    # Erster Lauf unverändert: die Drosselung steht bevor, der Akku wartet sie ab.
+    assert erst.regelung.modus != "laden"
+    assert erst.flags.ev_soll_w == erst.ev_regelung.soll_summe_w
+
+    zweit = _lauf(erst.flags)
+    # Derselbe Sollwert noch einmal — die Vorsteuerung ist verbraucht.
+    assert zweit.ev_regelung.soll_summe_w == erst.ev_regelung.soll_summe_w
+    assert zweit.regelung.modus == "entladen"
+    assert zweit.regelung.fehler_w == 1598.0  # roher Saldo + 25 W Zieloffset
+    assert sum(zuteilung(zweit).values()) > 0
+
+
 def test_lade_asymmetrie_ist_noop_ohne_wallbox():
     """Ohne Wallbox-Herausrechnung (inp.saldo_w == saldo_w) greift die
     Asymmetrie nicht — bei Netzbezug entlädt der Regler unverändert normal."""

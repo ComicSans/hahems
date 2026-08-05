@@ -328,6 +328,13 @@ class PlanFlags:
     # Start konservativ False, damit der erste Lauf nach einem Neustart nicht
     # sofort "E-Auto laden" meldet, ohne den Momentanüberschuss zu kennen.
     ev_bereit: bool = False
+    # Zuletzt kommandierte Soll-Leistung der modulierbaren Lasten. Nur dazu da,
+    # eine Wiederholung von einer echten Änderung zu unterscheiden: Die
+    # Vorsteuerung des Speicher-Reglers gilt der Aktuierungs-Totzeit und darf
+    # sich nicht in einen Dauer-Offset verwandeln, wenn eine Last ihrem Sollwert
+    # nicht folgt. `None` heißt „noch nichts kommandiert" (erster Lauf, oder
+    # Zwangsladung/keine Empfehlung) und lässt die Vorsteuerung voll wirken.
+    ev_soll_w: float | None = None
     # Heizung: je Anlagen-ID ein eigener Schmitt-Trigger, weil mehrere
     # Wärmeerzeuger unterschiedliche Schwellen (und Sensoren) haben können.
     # Anders als die flachen Flags oben müssen diese beiden beim Fortschreiben
