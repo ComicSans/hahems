@@ -10,9 +10,10 @@ Leistung deckt, und aus, wenn er fehlt. Prioritätsreihenfolge bei knappem
 
 Umsetzung: die Schaltentscheidung bekommt den Überschuss VOR dem Headroom der
 modulierbaren Lasten (nur deren Minima sind geschützt). Die daraus folgende
-Leistungs-Differenz (`delta_w`) wird dem modulierbaren Regler vom Überschuss
-abgezogen — er drosselt entsprechend herunter und gibt so die Leistung frei,
-die die schaltbaren Lasten ziehen.
+Leistungs-Differenz (`delta_w` — was in diesem Zyklus zu- oder abgeschaltet
+wird) wird dem modulierbaren Regler vom Überschuss abgezogen — er drosselt
+entsprechend herunter und gibt so die Leistung frei, die die schaltbaren Lasten
+ziehen.
 
 Anti-Takt: Mindestlaufzeit (`min_on`) hält eine Last an, Mindestpause
 (`min_off`) hält sie aus, `max_block` erzwingt ein Einschalten, wenn HEMS sie
@@ -107,7 +108,12 @@ def switchable_control(inp: PlanInput, res: PlanResult) -> SwitchableResult | No
         return None
 
     mess_mod = sum(m.power_w or 0.0 for m in inp.modulateds)
-    mess_sw = sum(s.power_w or 0.0 for s in loads)
+    # Nur die Leistung EINGESCHALTETER Lasten ist abschaltbar. Was eine als
+    # "aus" geführte Last noch zieht (Standby einer Wärmepumpe, Umwälzpumpe,
+    # oder eine Anlage, die das Aus entgegengenommen und ignoriert hat), nimmt
+    # HEMS niemand weg — es ist Grundlast. Zählte es hier mit, hielte sich der
+    # Überschuss um genau diesen Betrag zu hoch und HEMS schaltete zu früh ein.
+    mess_sw = sum(s.power_w or 0.0 for s in loads if s.ist_an)
     bat_ist = sum(s.power_w for s in inp.storages if s.power_w is not None)
     # Überschuss, wenn alle steuerbaren Lasten aus wären und der Akku ruht.
     frei = -(inp.saldo_w - mess_mod - mess_sw + bat_ist)
@@ -140,6 +146,7 @@ def switchable_control(inp: PlanInput, res: PlanResult) -> SwitchableResult | No
 
     lasten: list[SwitchableSetpoint] = []
     soll_w = 0.0
+    delta_w = 0.0
     for s in reihenfolge:
         erwartet = _erwartet_w(s)
         # Vorgaben einer übergeordneten Domäne stehen vor allem anderen —
@@ -178,8 +185,25 @@ def switchable_control(inp: PlanInput, res: PlanResult) -> SwitchableResult | No
         if an:
             budget -= erwartet
             soll_w += erwartet
+        # Vorsteuerung NUR aus tatsächlichen Lagewechseln: Was gleich dazukommt
+        # (mit seiner erwarteten Leistung) und was gleich wegfällt (mit seiner
+        # gemessenen). Eine Last, die ihre Lage behält, trägt nichts bei — ihre
+        # Leistung steht bereits im Saldo, den der Speicher-Regler ohnehin
+        # sieht.
+        #
+        # Vorher stand hier die Bilanz über den ganzen Bestand
+        # (`soll_w - mess_sw`), und die geht dauerhaft daneben, sobald Erwartung
+        # und Messung auseinanderliegen. Am 05.08.2026 gemessen: die Heizung lag
+        # unter Sommersperre, zog aber weiter 181 W Standby — Bestandsbilanz
+        # −181 W, dauerhaft. Der Speicher-Regler zog das von einem realen Bezug
+        # von 145 W ab, sah −36 W (Einspeisung), blieb im Totband stehen und
+        # ließ den Bezug laufen, während drei volle Akkus danebenstanden.
+        if an and not s.ist_an:
+            delta_w += erwartet
+        elif not an and s.ist_an:
+            delta_w -= s.power_w or 0.0
         lasten.append(SwitchableSetpoint(name=s.name, an=an, id=s.id, grund=grund))
 
     return SwitchableResult(
-        lasten=lasten, soll_w=round(soll_w), delta_w=round(soll_w - mess_sw)
+        lasten=lasten, soll_w=round(soll_w), delta_w=round(delta_w)
     )

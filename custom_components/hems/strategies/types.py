@@ -202,8 +202,11 @@ class SwitchableResult:
     Lasten: reicht er nicht, drosseln die modulierbaren Lasten herunter (geben
     Überschuss frei), bevor eine schaltbare Last abgeschaltet wird. `soll_w` ist
     die erwartete Leistung aller empfohlen-eingeschalteten Lasten, `delta_w` die
-    Differenz zur aktuell gemessenen Schaltlast (neue/wegfallende Last), mit der
-    der modulierbare Regler seinen Überschuss bereinigt.
+    Leistung, die in diesem Zyklus dazukommt oder wegfällt — die Vorsteuerung
+    für den modulierbaren und den Speicher-Regler. Nur Lagewechsel zählen: eine
+    Last, die ihre Lage behält, steht bereits im gemessenen Saldo, und ihre
+    Erwartung dort noch einmal gegenzurechnen verschöbe den Regel-Sollpunkt
+    dauerhaft.
     """
 
     lasten: list[SwitchableSetpoint]

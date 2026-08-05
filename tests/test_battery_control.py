@@ -149,6 +149,31 @@ def test_schaltlast_abschaltung_bremst_ladung_aber_echter_saldo_bleibt_geschuetz
     assert r.regelung.soll_w == 0.0
 
 
+def test_standby_einer_ausgeschalteten_last_verschiebt_den_sollpunkt_nicht():
+    # Am 05.08.2026 gemessen: Die Heizung lag unter Sommersperre (aus, bleibt
+    # aus), zog aber weiter 181 W Standby. Die alte Bestandsbilanz
+    # (soll_w − mess_sw) machte daraus eine dauerhafte Feedforward-Korrektur von
+    # −181 W; der Regler sah bei 145 W realem Bezug −36 W (Einspeisung), blieb
+    # im Totband und ließ den Bezug laufen, während drei volle Akkus danebenstanden.
+    r = P.compute_plan(
+        plan_input(
+            socs=[93, 93, 94],
+            saldo_w=145,
+            switchables=[
+                switchable(
+                    "Heizung", erwartet_w=826.0, ist_an=False, power_w=181.0,
+                    aus_seit_s=3600,
+                )
+            ],
+        )
+    )
+    assert r.schaltbare.lasten[0].an is False
+    assert r.schaltbare.delta_w == 0
+    assert r.regelung.fehler_w == 170.0
+    assert r.regelung.modus == "entladen"
+    assert sum(zuteilung(r).values()) > 0
+
+
 # --- Totband ------------------------------------------------------------------
 def test_kleiner_saldo_pausiert():
     r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=-20))
