@@ -103,6 +103,30 @@ def test_modulierbare_last_drosselt_fuer_schaltlast():
     assert _an(mit, "Pumpe") is True
 
 
+def test_standby_einer_ausgeschalteten_last_blaeht_das_budget_nicht_auf():
+    # Eine abgeschaltete Last mit Standby (Sommersperre, aber 400 W) galt als
+    # "wird frei, wenn alles aus ist" — dabei ist sie schon aus, die 400 W nimmt
+    # ihr niemand weg. Das Budget stand damit um genau diesen Betrag zu hoch
+    # (900 statt 500 W) und schaltete die wartende Last ein, deren Schwelle
+    # (600 + 200 W Marge) der echte Überschuss gar nicht deckt.
+    r = _plan(
+        [
+            switchable(
+                "Gesperrt", id="sw1", priority=1, erwartet_w=3000.0,
+                ist_an=False, power_w=400.0, aus_seit_s=3600,
+            ),
+            switchable(
+                "Wartend", id="sw2", priority=2, erwartet_w=600.0,
+                ist_an=False, aus_seit_s=3600,
+            ),
+        ],
+        socs=[60, 60, 60],
+        saldo_w=-500,
+    )
+    assert _an(r, "Gesperrt") is False
+    assert _an(r, "Wartend") is False
+
+
 # --- delta_w ------------------------------------------------------------------
 def test_delta_neue_last_reserviert_bereits_laufende_nicht():
     # Neue Last: delta = volle erwartete Leistung.
