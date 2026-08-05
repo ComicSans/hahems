@@ -18,6 +18,15 @@ DAY = datetime(2026, 7, 22, tzinfo=UTC)
 NOON = DAY.replace(hour=11)
 SUNSET = DAY.replace(hour=19)
 SUNRISE = DAY.replace(hour=5)
+# Lokalzeit des Referenztags ist MESZ (UTC+2) — NOON ist damit 13:00 lokal,
+# Sonnenuntergang 21:00 lokal. Nur die Uhrzeit-Regeln der Ladestrategie
+# (Ladefenster, Mittagspause) werten den Offset aus.
+UTC_OFFSET_H = 2.0
+
+
+def lokal(stunde: int, minute: int = 0) -> datetime:
+    """UTC-Zeitpunkt des Referenztags zur lokalen Uhrzeit `stunde:minute`."""
+    return DAY.replace(hour=stunde, minute=minute) - timedelta(hours=UTC_OFFSET_H)
 
 
 def storage(
@@ -186,6 +195,7 @@ def plan_input(
     thermal_legionella_windows: list[tuple[datetime, datetime]] | None = None,
     thermal_legionella_target: float = 60.0,
     load_profile_w: dict[tuple[int, int], float] | None = None,
+    utc_offset_h: float = UTC_OFFSET_H,
 ) -> P.PlanInput:
     if storage_states is None:
         storage_states = storages(socs if socs is not None else [60, 60, 60])
@@ -222,6 +232,7 @@ def plan_input(
         switchables=switchables if switchables is not None else [],
         heatings=heatings if heatings is not None else [],
         load_profile_w=load_profile_w,
+        utc_offset_h=utc_offset_h,
         horizon_start=now.replace(hour=0, minute=0),
         horizon_end=(now + timedelta(days=1)).replace(hour=0, minute=0),
         today_sunrise=sunrise,

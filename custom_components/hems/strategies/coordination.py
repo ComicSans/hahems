@@ -40,8 +40,13 @@ def akku_ladereservierung(inp: PlanInput, res: PlanResult) -> float:
     er keinen Vorrang, wird nichts reserviert und die Wallbox bekommt den vollen
     Überschuss. Der Lasten-Regler deckelt diese Reservierung zusätzlich so, dass
     ein bereits laufendes Auto sein Minimum behält (siehe loads).
+
+    In der Mittags-Ladepause (11:00–14:00) reserviert der Akku nichts: die
+    Mittagsspitze gehört den Lasten, unabhängig vom eingestellten Vorrang. Er
+    geht dabei nicht leer aus — was die Lasten nicht nehmen, holt sich die
+    Saldo-Regelung anschließend über ihr Residuum, statt es einzuspeisen.
     """
-    if not inp.modulateds or not akku_hat_vorrang(inp):
+    if not inp.modulateds or res.lade_pause or not akku_hat_vorrang(inp):
         return 0.0
     deckel = res.lade_deckel_soc if res.lade_deckel_soc is not None else 100.0
     return sum(

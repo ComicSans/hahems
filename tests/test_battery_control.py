@@ -25,7 +25,10 @@ def test_laden_verteilt_parallel_gleichmaessig():
 def test_laden_moderat_immer_noch_parallel():
     r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=-1000))
     z = zuteilung(r)
-    assert z["L1"] == z["L2"] == z["L3"] == 162
+    # Gleiche SoCs, gleiche freie Kapazität: jeder Speicher bekommt denselben
+    # Anteil am gedämpften Regelziel (487,5 W, auf ganze Watt gerundet).
+    assert z["L1"] == z["L2"] == z["L3"]
+    assert abs(sum(z.values()) - 487.5) <= 1.5
 
 
 def test_laden_proportional_zur_freien_kapazitaet():

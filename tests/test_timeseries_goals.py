@@ -8,9 +8,11 @@ skaliert+gerundet). Der Simulator (tests/simulate.py) treibt compute_plan im
 Hauslast und Speicherleistung ab.
 
 Erwartete Semantik der Ziele:
-- eigenverbrauch: Akku-Schonung greift — tagsüber Halt am Ladedeckel (~78 %),
-  Vollladung erst zum Abend. Midday-Überschuss wird eingespeist statt den Akku
-  bei hohem SoC zu halten.
+- eigenverbrauch: Der Tagesdeckel (~95 %) ordnet den Vorrang, verschenkt aber
+  nichts: Läuft — wie in diesem Profil — kein anderer Abnehmer mit, lädt der
+  Akku auch über den Deckel hinaus, statt einzuspeisen. Der Deckel wird erst
+  dort sichtbar, wo eine Last um denselben Überschuss konkurriert
+  (tests/test_coordination.py, tests/test_charge_deckel.py).
 - nulleinspeisung: der Akku saugt den Überschuss auf, solange er Platz hat;
   Einspeisung nur bei vollem Akku (Deckel aufgehoben).
 - vollladen: Akku wird voll geladen (Deckel aufgehoben), sonst wie
@@ -65,12 +67,14 @@ def test_akku_entlaedt_bei_defizit(sims, goal):
     assert any(s.modus == "entladen" and s.bat_w > 0 for s in st)
 
 
-# --- eigenverbrauch: Akku-Schonung (Tagesdeckel) ------------------------------
-def test_eigenverbrauch_haelt_tagsueber_am_deckel(sims):
+# --- eigenverbrauch: laden statt einspeisen -----------------------------------
+def test_eigenverbrauch_laedt_lieber_als_einzuspeisen(sims):
     st = sims["eigenverbrauch"]
-    # Mittags NICHT voll — der Ladedeckel (~78 %) hält den SoC zurück.
-    assert st[NOON].soc < 88, f"Midday-SoC {st[NOON].soc} zu hoch (Deckel greift nicht)"
-    # Zum Abend hin wird nachgeladen.
+    # Kein konkurrierender Abnehmer im Profil: Der Deckel hält den Akku nicht
+    # zurück, wenn der Überschuss sonst ins Netz ginge.
+    assert st[NOON].soc > 90, f"Midday-SoC {st[NOON].soc} zu niedrig (speist ein)"
+    assert export_kwh_below(st, 99) < 4.0
+    # Und die Nacht beginnt voll.
     assert st[ABEND].soc > 90
 
 
@@ -94,12 +98,13 @@ def test_vollladen_erreicht_100(sims):
 # --- Ziele klar unterscheidbar (robuste Vergleiche) ---------------------------
 def test_ziele_unterscheiden_sich(sims):
     eig, null, voll = sims["eigenverbrauch"], sims["nulleinspeisung"], sims["vollladen"]
-    # Schonung: eigenverbrauch hält mittags deutlich niedriger als die anderen.
-    assert eig[NOON].soc < null[NOON].soc - 5
-    assert eig[NOON].soc < voll[NOON].soc - 5
-    # Nulleinspeisung speist bei freiem Akku deutlich weniger ein als der
-    # schonende Eigenverbrauch (der den Tagesüberschuss lieber exportiert).
-    assert export_kwh_below(null, 99) < export_kwh_below(eig, 99) * 0.5
+    # Nulleinspeisung und Vollladen heben den Deckel ganz auf und laden deshalb
+    # etwas früher durch als der eigenverbrauchsgeführte Tag, der ihn nur
+    # überfährt, soweit sonst eingespeist würde.
+    assert eig[NOON].soc <= null[NOON].soc
+    assert eig[NOON].soc <= voll[NOON].soc
+    # Und speisen bei freiem Akku nicht mehr ein als dieser.
+    assert export_kwh_below(null, 99) <= export_kwh_below(eig, 99)
 
 
 # --- Fixture-Integrität -------------------------------------------------------

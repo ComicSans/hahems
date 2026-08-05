@@ -107,6 +107,10 @@ class ControlResult:
     zuteilung: list[StorageSetpoint] = field(default_factory=list)
     reserve_aktiv: bool = False
     reserve_namen: list[str] = field(default_factory=list)
+    # „Laden statt einspeisen": alle Speicher stehen am Ladedeckel, es bliebe
+    # aber Überschuss übrig, den auch die Lasten nicht nehmen. Dann wird über
+    # den Deckel hinaus geladen — Einspeisen ist die schlechtere Verwendung.
+    laden_statt_einspeisen: bool = False
 
 
 @dataclass
@@ -397,6 +401,15 @@ class PlanInput:
     # ganze Profil), greift die gleiche Stunde im anderen Tagtyp, sonst
     # night_load_w als Fallback.
     load_profile_w: dict[tuple[int, int], float] | None = None
+    # Verschiebung der lokalen Zeit gegen UTC in Stunden (z. B. 2.0 für MESZ),
+    # vom Coordinator geliefert. Der Planner rechnet weiter ausschließlich in
+    # UTC und kennt keine Zeitzone; für die Uhrzeit-Regeln der Ladestrategie
+    # (Ladefenster, Mittagspause) braucht er aber die lokale Uhrzeit — sonst
+    # verschöbe sich das Fenster mit dem Sommerzeit-Offset. Ein einzelner
+    # Skalar reicht, weil die Regeln über den Planungshorizont von höchstens
+    # zwei Tagen ausgewertet werden; eine Zeitumstellung darin verschiebt die
+    # Fenster für einen Tag um eine Stunde, was folgenlos ist.
+    utc_offset_h: float = 0.0
     # Darstellungshorizont der Plankarte: lokal 00:00 heute bis 00:00 über-
     # morgen, vom Coordinator als UTC übergeben (der Planner kennt keine
     # Zeitzone). Kurven werden darauf beschnitten.
@@ -474,10 +487,17 @@ class PlanResult:
     speicher_kapazitaet_kwh: float = 0.0
     speicher_ziel_soc: float | None = None
     speicher_bedarf_kwh: float = 0.0
-    # Ladedeckel jetzt (Akku-Schonung): SoC-Obergrenze, bis zu der die
-    # Saldo-Regelung gerade laden darf. Tagsüber < 100 %, zum Abend hin per
-    # Rampe auf 100 % — außer Nachtdeckung geht vor Schonung (dann 100 %).
+    # Ladedeckel jetzt: SoC-Obergrenze, bis zu der die Saldo-Regelung gerade
+    # laden darf. Tagsüber das Tagesziel (~95 %), ab 14:00 per Rampe auf 100 %
+    # für die Nacht — außer Nachtdeckung geht vor Schonung (dann sofort 100 %).
+    # Der Wert ist der WIRKSAME Deckel: er steht auch dann auf 100 %, wenn statt
+    # einer Einspeisung weitergeladen wird (regelung.laden_statt_einspeisen).
+    # Der Actuator schreibt ihn auf den geräteseitigen Ziel-SoC.
     lade_deckel_soc: float | None = None
+    # Mittags-Ladepause (11:00–14:00 lokal): der Akku reserviert keinen
+    # Überschuss vor den Lasten. Aufgehoben, wenn der Deckel ohnehin aufgehoben
+    # ist (Nachtdeckung vor Schonung).
+    lade_pause: bool = False
     sonnenfenster_h: float = 0.0
     morgen_knapp: bool = False
     kapazitaet_frei: bool = False

@@ -1,11 +1,11 @@
-"""Speicher-Domäne: Saldo-Regelung und Akku-Schonung (Ladedeckel).
+"""Speicher-Domäne: Saldo-Regelung und Ladestrategie über den Tag (Ladedeckel).
 
 Live-Zuteilung der Lade-/Entladeleistung je Speicher. Laden verteilt parallel
 (proportional zur freien Kapazität), Entladen greedy mit Auswahl-Hysterese.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..const import (
     CONTROL_DEADBAND_W,
@@ -20,8 +20,10 @@ from ..const import (
     GOAL_ZERO_FEEDIN,
     RESERVE_SOC_OFF,
     RESERVE_SOC_ON,
-    STORAGE_DAY_HOLD_SOC,
-    STORAGE_FULL_CHARGE_LEAD_H,
+    STORAGE_AFTERNOON_FROM_H,
+    STORAGE_DAY_TARGET_SOC,
+    STORAGE_MORNING_UNTIL_H,
+    STORAGE_NIGHT_FULL_FROM_H,
 )
 from .types import (
     ControlResult,
@@ -45,29 +47,57 @@ def _ziel_offset(inp: PlanInput) -> float:
     )
 
 
-def _lade_deckel_soc(inp: PlanInput, voll_noetig: bool, t: datetime) -> float:
-    """Zeitabhängiger Ladedeckel (SoC-%) zum Zeitpunkt t — Akku-Schonung.
+def _lokale_stunde(inp: PlanInput, t: datetime) -> float:
+    """Lokale Tageszeit von t als Dezimalstunde (0.0 … 24.0).
 
-    Tagsüber wird nur bis STORAGE_DAY_HOLD_SOC geladen (kalendarische Alterung
-    ist bei hohem SoC am größten). Erst in den letzten STORAGE_FULL_CHARGE_LEAD_H
-    vor Sonnenuntergang steigt der Deckel linear auf 100 %, sodass der Speicher
-    ~zum Sonnenuntergang voll für die Nacht ist und möglichst wenig Zeit bei
-    100 % verbringt. `voll_noetig` (Ziel/morgen knapp/heute zu wenig Ertrag zum
-    späteren Nachladen — sowie Nacht, dann ohnehin kein Überschuss) hebt den
-    Deckel sofort auf 100 %: Nachtdeckung geht vor Schonung.
+    Der Planner rechnet in UTC; die Ladefenster sind aber Uhrzeiten, die der
+    Nutzer lokal meint. `utc_offset_h` liefert der Coordinator.
+    """
+    lokal = t + timedelta(hours=inp.utc_offset_h)
+    return lokal.hour + lokal.minute / 60 + lokal.second / 3600
+
+
+def _ist_ladepause(inp: PlanInput, voll_noetig: bool, t: datetime) -> bool:
+    """Mittags-Ladepause (11:00–14:00 lokal): der Akku tritt beim Überschuss
+    hinter die Lasten zurück, die Mittagsspitze gehört Warmwasser, Wallbox und
+    Wärmepumpe. Er lädt in der Pause weiter, aber nur noch aus dem, was die
+    Lasten übrig lassen — statt es einzuspeisen (siehe `_storage_control`).
+
+    `voll_noetig` hebt die Pause auf: wer heute noch voll werden muss, hat
+    keine drei Stunden zu verschenken.
+    """
+    if voll_noetig:
+        return False
+    return STORAGE_MORNING_UNTIL_H <= _lokale_stunde(inp, t) < STORAGE_AFTERNOON_FROM_H
+
+
+def _lade_deckel_soc(inp: PlanInput, voll_noetig: bool, t: datetime) -> float:
+    """Zeitabhängiger Ladedeckel (SoC-%) zum Zeitpunkt t.
+
+    Über den Tag gilt STORAGE_DAY_TARGET_SOC (~95 %) — Akku-Schonung, denn
+    kalendarische Alterung ist bei hohem SoC am größten. Ab
+    STORAGE_AFTERNOON_FROM_H steigt der Deckel linear auf 100 % und steht ab
+    STORAGE_NIGHT_FULL_FROM_H dort: voll vor der Nacht. `voll_noetig`
+    (Ziel/morgen knapp/heute zu wenig Ertrag zum späteren Nachladen — sowie
+    Nacht, dann ohnehin kein Überschuss) hebt den Deckel sofort auf 100 %:
+    Nachtdeckung geht vor Schonung.
 
     Nur eine Ladeobergrenze, kein Entladebefehl — liegt der SoC bereits über dem
-    Deckel, bleibt er stehen (die Regelung lädt ihn nur nicht weiter).
+    Deckel, bleibt er stehen (die Regelung lädt ihn nur nicht weiter). Und keine
+    harte Grenze gegen die Einspeisung: bliebe der Überschuss sonst ungenutzt,
+    lädt `_storage_control` auch darüber hinaus.
     """
     if voll_noetig:
         return 100.0
-    h_bis_sonnenuntergang = (inp.sunset - t).total_seconds() / 3600
-    if h_bis_sonnenuntergang <= 0:
+    h = _lokale_stunde(inp, t)
+    if h >= STORAGE_NIGHT_FULL_FROM_H:
         return 100.0
-    if h_bis_sonnenuntergang >= STORAGE_FULL_CHARGE_LEAD_H:
-        return STORAGE_DAY_HOLD_SOC
-    anteil = 1.0 - h_bis_sonnenuntergang / STORAGE_FULL_CHARGE_LEAD_H
-    return STORAGE_DAY_HOLD_SOC + anteil * (100.0 - STORAGE_DAY_HOLD_SOC)
+    if h <= STORAGE_AFTERNOON_FROM_H:
+        return STORAGE_DAY_TARGET_SOC
+    anteil = (h - STORAGE_AFTERNOON_FROM_H) / (
+        STORAGE_NIGHT_FULL_FROM_H - STORAGE_AFTERNOON_FROM_H
+    )
+    return STORAGE_DAY_TARGET_SOC + anteil * (100.0 - STORAGE_DAY_TARGET_SOC)
 
 
 def _storage_control(
@@ -313,14 +343,33 @@ def _storage_control(
         ctrl.zuteilung = _verteile(anteile, soll, laden=False)
     elif soll < -CONTROL_DEADBAND_W:
         ctrl.modus = "laden"
-        # Freie Kapazität bis zum Ladedeckel (Akku-Schonung: tagsüber < 100 %,
-        # zum Abend voll) — wer mehr Platz hat, bekommt mehr. Speicher über dem
-        # Deckel bekommen 0 (kein Zwangsentladen; Überschuss geht ggf. ins Netz).
+        # Freie Kapazität bis zum Ladedeckel (tagsüber < 100 %, zum Abend voll)
+        # — wer mehr Platz hat, bekommt mehr. Speicher über dem Deckel bekommen
+        # 0 (kein Zwangsentladen).
         deckel = res.lade_deckel_soc if res.lade_deckel_soc is not None else 100.0
-        anteile = [
-            (s, max(0.0, (deckel - s.soc) / 100 * s.capacity_kwh)) for s in known
-        ]
-        ctrl.zuteilung = _verteile(anteile, -soll, laden=True)
+
+        def _anteile(grenze: float) -> list[tuple[StorageState, float]]:
+            return [
+                (s, max(0.0, (grenze - s.soc) / 100 * s.capacity_kwh)) for s in known
+            ]
+
+        ctrl.zuteilung = _verteile(_anteile(deckel), -soll, laden=True)
+        # "Bevor eingespeist wird, immer Akkus laden": Der Deckel ordnet den
+        # Vorrang (erst die Lasten, dann der Akku), er verschenkt aber keine
+        # Energie. An dieser Stelle steht der Saldo, der NACH den Lasten übrig
+        # bleibt — bekommt der Deckel davon nicht alles unter, ginge der Rest
+        # ins Netz. Dann wird bis 100 % geladen: einspeisen ist die schlechtere
+        # Verwendung. Betrifft auch gemischte Stände (ein Speicher am Deckel,
+        # ein anderer an seiner Ladegrenze). Der wirksame Deckel zieht mit,
+        # sonst hielte der geräteseitige Ziel-SoC (den der Actuator daraus
+        # schreibt) dagegen.
+        gestellt = sum(z.watt for z in ctrl.zuteilung)
+        if deckel < 100.0 and gestellt < -soll - CONTROL_MIN_SETPOINT_W:
+            ohne_deckel = _verteile(_anteile(100.0), -soll, laden=True)
+            if sum(z.watt for z in ohne_deckel) > gestellt:
+                ctrl.zuteilung = ohne_deckel
+                ctrl.laden_statt_einspeisen = True
+                res.lade_deckel_soc = 100.0
     else:
         ctrl.zuteilung = [StorageSetpoint(name=s.name, watt=0.0) for s in known]
     return ctrl

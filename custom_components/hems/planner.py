@@ -22,7 +22,7 @@ from .const import (
     PRIORITY_EV_FIRST,
 )
 from .strategies import coordination
-from .strategies.battery import _lade_deckel_soc, _storage_control
+from .strategies.battery import _ist_ladepause, _lade_deckel_soc, _storage_control
 from .strategies.demand import _profile_covers, _window_load_kwh
 from .strategies.forecast import _discharge_plan, _pv_curve, _soc_forecast
 from .strategies.heating import heating_control
@@ -284,6 +284,8 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         result.lade_deckel_soc = round(
             _lade_deckel_soc(inp, voll_noetig, inp.now), 1
         )
+        # Mittags-Ladepause: nur der Vorrang ruht, nicht das Laden selbst.
+        result.lade_pause = _ist_ladepause(inp, voll_noetig, inp.now)
 
     # Kapazität frei: Kann ein zusätzlicher Verbraucher free_kwh über free_h
     # ziehen, ohne Reserve und Nachtdeckung anzutasten? Anrechenbar sind der
@@ -484,14 +486,16 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
             prio.append(akku)
     elif akku is not None and auto is not None:
         if inp.priority_mode == PRIORITY_BATTERY_FIRST:
-            prio.extend([akku, auto])
+            akku_zuerst = True
         elif inp.priority_mode == PRIORITY_EV_FIRST:
-            prio.extend([auto, akku])
+            akku_zuerst = False
         else:
             # Automatik: Reicht der Restertrag nicht für Akku UND Auto, bekommt der
             # Akku Vorrang, damit die Nacht gedeckt ist. Bei reichlich Ertrag darf
             # das Auto zuerst, der Akku wird dann trotzdem noch voll. Mit Totband
             # um das Verhältnis, sonst tauschen Akku und Auto laufend die Plätze.
+            # Der Latch läuft auch in der Mittagspause weiter (sonst stünde er
+            # drei Stunden still und käme um 14:00 mit einem alten Wert zurück).
             res.flags.knapp = _latch(
                 inp.flags.knapp,
                 res.ueberschuss_rest_kwh / res.speicher_bedarf_kwh
@@ -500,7 +504,13 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
                 on=KNAPP_ON,
                 off=KNAPP_OFF,
             )
-            prio.extend([akku, auto] if res.flags.knapp else [auto, akku])
+            akku_zuerst = res.flags.knapp
+        # Mittags-Ladepause: die Reservierung ruht (coordination), also muss
+        # auch die Empfehlung die Last vor den Akku stellen — sonst zeigte die
+        # Zeile eine Reihenfolge, nach der HEMS gerade nicht verteilt.
+        if res.lade_pause:
+            akku_zuerst = False
+        prio.extend([akku, auto] if akku_zuerst else [auto, akku])
     elif akku is not None:
         prio.append(akku)
     elif auto is not None:

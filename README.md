@@ -85,6 +85,33 @@ es den Befehl nicht.
 Eine Einschränkung: **Warmwasser bleibt ohne Sperrfenster rund um die Uhr an.**
 HEMS meldet Warmwasser nur während des konfigurierten Fensters als „aus“.
 
+## Akku-Ladestrategie über den Tag
+
+Der Speicher hat zwei Ladefenster und dazwischen eine Pause (Ortszeit):
+
+| Zeit | Ladedeckel | Verhalten |
+|---|---|---|
+| **bis 11:00** | 95 % | Vormittags-Ladefenster: der Akku soll vor Mittag im Wesentlichen voll sein und hat dabei den eingestellten Vorrang vor den Lasten. |
+| **11:00–14:00** | 95 % | Mittags-Ladepause: der Akku reserviert **keinen** Überschuss mehr vor Warmwasser, Wallbox und Wärmepumpe. Die Mittagsspitze gehört den Verbrauchern. |
+| **14:00–16:00** | 95 → 100 % | Nachmittags-Ladefenster, der Deckel rampt linear hoch. |
+| **ab 16:00** | 100 % | Voll für die Nacht. |
+
+**Bevor eingespeist wird, wird geladen.** Der Deckel ordnet den *Vorrang*, er
+verschenkt keine Energie: Bleibt nach den Lasten Überschuss übrig, den sonst
+niemand nimmt, lädt der Akku auch über den Deckel hinaus bis 100 % — auch in der
+Mittagspause. Das Attribut `laden_statt_einspeisen` an
+`sensor.hems_speicher_regelung` zeigt diesen Fall an, `lade_deckel_soc` und
+`lade_pause` daneben den gerade wirksamen Deckel und die Pause. Ohne
+konkurrierende Verbraucher greift der Deckel deshalb praktisch nie — er wird
+erst dort sichtbar, wo eine Last um denselben Überschuss konkurriert.
+
+Der Zwischenstand tagsüber ist Akku-Schonung: kalendarische Alterung ist bei
+hohem SoC am größten. Deshalb steht der Deckel unter 100 %, solange die Nacht
+noch anders gedeckt werden kann. Muss der Speicher heute ohnehin voll werden —
+Ziel *Nulleinspeisung* oder *Vollladen*, morgen wenig Ertrag, oder der Restertrag
+heute reicht nicht mehr zum späteren Nachladen —, entfallen Deckel **und**
+Mittagspause sofort: Nachtdeckung geht vor Schonung.
+
 ## HEMS-Panel
 
 Die Integration registriert einen eigenen Eintrag **HEMS** in der Seitenleiste

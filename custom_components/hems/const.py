@@ -154,18 +154,33 @@ RESERVE_SOC_OFF = 45.0
 CONTROL_LEAD_HYST_SOC = 12.0
 CONTROL_LEAD_POWER_W = 30.0
 
-# Akku-Schonung: Ladedeckel über den Tag. Kalendarische Alterung ist bei hohem
-# SoC am größten — ein bei 100 % dösender Akku altert schneller als einer bei
-# ~78 %. Deshalb wird tagsüber nur bis STORAGE_DAY_HOLD_SOC geladen; erst in den
-# letzten STORAGE_FULL_CHARGE_LEAD_H vor Sonnenuntergang steigt der Deckel linear
-# auf 100 %, sodass der Speicher ~zum Sonnenuntergang voll für die Nacht ist und
-# möglichst wenig Zeit bei 100 % verbringt. Der Deckel begrenzt nur das Laden
-# (kein Zwangsentladen, wenn der SoC schon darüber liegt) und wird sofort auf
-# 100 % aufgehoben, sobald Nachtdeckung vor Schonung geht: Ziel verlangt
-# Vollladung (Nulleinspeisung/Vollladen), morgen wird es knapp, oder der
-# Restertrag heute reicht nicht mehr, um später von HOLD auf 100 % nachzuladen.
-STORAGE_DAY_HOLD_SOC = 78.0
-STORAGE_FULL_CHARGE_LEAD_H = 3.0
+# Akku-Ladestrategie über den Tag (Ladedeckel, alle Zeiten LOKAL). Der Tag hat
+# zwei Ladefenster und dazwischen eine Pause:
+#
+#   bis 11:00   Vormittags-Ladefenster — Deckel STORAGE_DAY_TARGET_SOC (~95 %),
+#               der Akku soll vor Mittag im Wesentlichen voll sein.
+#   11:00–14:00 Mittags-Ladepause — derselbe Deckel, aber der Akku reserviert
+#               keinen Überschuss mehr vor den Lasten (Warmwasser, Wallbox,
+#               Wärmepumpe). Die Mittagsspitze gehört den Verbrauchern.
+#   ab 14:00    Nachmittags-Ladefenster, Deckel rampt linear auf 100 %, …
+#   ab 16:00    … und steht dort für die Nacht.
+#
+# Der Zwischenstand tagsüber ist Akku-Schonung: kalendarische Alterung ist bei
+# hohem SoC am größten, ein bei 100 % dösender Akku altert schneller. Der Deckel
+# begrenzt nur das Laden (kein Zwangsentladen, wenn der SoC schon darüber liegt)
+# und wird auf 100 % aufgehoben, sobald Nachtdeckung vor Schonung geht: Ziel
+# verlangt Vollladung (Nulleinspeisung/Vollladen), morgen wird es knapp, es ist
+# Nacht, oder der Restertrag heute reicht nicht mehr zum späteren Nachladen.
+# Dieselbe Aufhebung setzt auch die Mittagspause aus.
+#
+# Über allem steht: Bevor eingespeist wird, wird geladen. Bleibt nach den Lasten
+# Überschuss übrig, den sonst niemand nimmt, lädt der Akku auch über den Deckel
+# hinaus weiter (siehe `_storage_control`) — der Deckel ordnet also den Vorrang,
+# er verschenkt keine Energie ans Netz.
+STORAGE_DAY_TARGET_SOC = 95.0
+STORAGE_MORNING_UNTIL_H = 11.0
+STORAGE_AFTERNOON_FROM_H = 14.0
+STORAGE_NIGHT_FULL_FROM_H = 16.0
 
 # E-Auto: Die "E-Auto laden"-Empfehlung setzt voraus, dass der Überschuss die
 # physikalische Mindestladeleistung der Wallbox erreicht (min_a × Phasen ×

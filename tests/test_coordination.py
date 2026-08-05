@@ -7,18 +7,24 @@ echt greift — und dass ein laufendes Auto nie abgeregelt wird.
 """
 from __future__ import annotations
 
-from factories import load, plan_input, storage, zuteilung
+from factories import load, lokal, plan_input, storage, zuteilung
 from hems import planner as P
 from hems.strategies.types import PlanFlags
 
+# Vormittags-Ladefenster (09:00 lokal): dort gilt der Tagesdeckel und der
+# eingestellte Vorrang. In der Mittagspause (11:00–14:00) reserviert der Akku
+# grundsätzlich nichts — das prüft test_charge_deckel.py.
+VORMITTAG = lokal(9)
 
-def _run(mode, *, wb_on, socs=(60, 60, 60), saldo=-6000.0, knapp=True):
+
+def _run(mode, *, wb_on, socs=(60, 60, 60), saldo=-6000.0, knapp=True, now=VORMITTAG):
     wb_w = 4200.0 if wb_on else 0.0
     wb = load("WB", power_w=wb_w, ist_an=wb_on, an_seit_s=3600, nachfrage=wb_on)
     flags = PlanFlags()
     flags.knapp = knapp
     r = P.compute_plan(
         plan_input(
+            now=now,
             socs=list(socs),
             saldo_w=saldo,
             modulateds=[wb],
@@ -57,12 +63,16 @@ def test_battery_first_haelt_ausgeschaltetes_auto_zurueck():
 
 
 def test_am_ladedeckel_bekommt_auto_alles():
-    # Akku am Tagesdeckel (78 %) reserviert nichts mehr — die Wallbox bekommt den
-    # vollen Überschuss, auch bei battery_first.
-    bf = _run("battery_first", wb_on=True, socs=(78, 78, 78))
-    ef = _run("ev_first", wb_on=True, socs=(78, 78, 78))
+    # Akku am Tagesdeckel (95 %) reserviert nichts mehr — die Wallbox bekommt den
+    # vollen Überschuss, auch bei battery_first. Und weil sie ihn wirklich nimmt,
+    # bleibt nichts übrig, das der Akku statt einer Einspeisung laden müsste.
+    bf = _run("battery_first", wb_on=True, socs=(96, 96, 96))
+    ef = _run("ev_first", wb_on=True, socs=(96, 96, 96))
     assert bf.ev_regelung.soll_summe_w == ef.ev_regelung.soll_summe_w
-    assert sum(zuteilung(bf).values()) == 0
+    # Der Akku bekommt nur noch, was die Wallbox in ihren Ampere-Stufen übrig
+    # lässt — und das lädt er über den Deckel hinaus, statt es einzuspeisen.
+    assert bf.regelung.laden_statt_einspeisen
+    assert 0 < sum(zuteilung(bf).values()) < bf.ev_regelung.soll_summe_w / 10
 
 
 def test_ev_first_unveraendert():

@@ -1071,6 +1071,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # die PV-Glocken. Der Planner rechnet ausschließlich in UTC.
         today_local = dt_util.now().date()
         tomorrow_local = today_local + timedelta(days=1)
+        # Lokale Uhrzeit als Offset gegen UTC: Die Ladefenster der Speicher-
+        # Strategie sind Uhrzeiten, der Planner rechnet in UTC (und kennt keine
+        # Zeitzone). `utcoffset()` fehlt nur bei naiven Zeiten — dt_util liefert
+        # immer aware, der Fallback ist reine Vorsicht.
+        offset = dt_util.now().utcoffset()
+        utc_offset_h = offset.total_seconds() / 3600 if offset is not None else 0.0
         horizon_start = dt_util.as_utc(dt_util.start_of_local_day())
         horizon_end = dt_util.as_utc(
             dt_util.start_of_local_day(today_local + timedelta(days=2))
@@ -1126,6 +1132,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 free_h=float(self._opt(CONF_FREE_H, DEFAULT_FREE_H)),
                 next_sunrise=next_sunrise,
                 load_profile_w=self._load_model.load_profile,
+                utc_offset_h=utc_offset_h,
                 horizon_start=horizon_start,
                 horizon_end=horizon_end,
                 today_sunrise=get_astral_event_date(self.hass, "sunrise", today_local),
