@@ -540,6 +540,9 @@
     "switch": {
       "ev_force": {
         "name": "E-Auto Zwangsladung"
+      },
+      "notstromreserve": {
+        "name": "Speicher als Notstromreserve"
       }
     }
   },

@@ -20,9 +20,16 @@ from .const import (
     GOAL_ZERO_FEEDIN,
     PRIORITY_BATTERY_FIRST,
     PRIORITY_EV_FIRST,
+    STORAGE_NIGHT_MARGIN_SOC,
 )
 from .strategies import coordination
-from .strategies.battery import _ist_ladepause, _lade_deckel_soc, _storage_control
+from .strategies.battery import (
+    _ist_ladepause,
+    _lade_deckel_soc,
+    _ladeplan,
+    _lokale_uhrzeit,
+    _storage_control,
+)
 from .strategies.demand import _profile_covers, _window_load_kwh
 from .strategies.forecast import _discharge_plan, _pv_curve, _soc_forecast
 from .strategies.heating import heating_control
@@ -233,16 +240,18 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     result.speicher_kapazitaet_kwh = round(cap, 2)
     known = [s for s in inp.storages if s.soc is not None]
     speicher_frei_kwh = 0.0
-    # Voll laden, wenn morgen wenig kommt ODER das Ziel es verlangt:
-    # Nulleinspeisung braucht maximale Aufnahmekapazität gegen Export,
-    # Vollladen hält das Ziel ohnehin dauerhaft auf 100 %. Getrennt vom
-    # Ladedeckel weiter unten: ziel_voll steuert das Nacht-Ziel (ziel_kwh),
-    # der Deckel nur die Tages-Ladeobergrenze.
-    ziel_voll = result.morgen_knapp or inp.goal in (
-        GOAL_ZERO_FEEDIN,
-        GOAL_FULL_CHARGE,
+    # Voll laden, wenn morgen wenig kommt, das Ziel es verlangt oder der
+    # Speicher als Notstromreserve bereitstehen soll: Nulleinspeisung braucht
+    # maximale Aufnahmekapazität gegen Export, Vollladen hält das Ziel ohnehin
+    # dauerhaft auf 100 %, und eine Notstromreserve ist nur voll eine Reserve.
+    # ziel_voll setzt das Nacht-Ziel (ziel_kwh) auf die volle Kapazität; der
+    # Ladedeckel weiter unten fährt dieses Ziel dann sofort statt just in time.
+    ziel_voll = (
+        result.morgen_knapp
+        or inp.emergency_reserve
+        or inp.goal in (GOAL_ZERO_FEEDIN, GOAL_FULL_CHARGE)
     )
-    voll_noetig = ziel_voll
+    rampe = None
     if known and cap > 0:
         available = sum(s.soc / 100 * s.capacity_kwh for s in known)
         reserve = sum(s.reserve_soc / 100 * s.capacity_kwh for s in inp.storages)
@@ -265,27 +274,42 @@ def compute_plan(inp: PlanInput) -> PlanResult:
         max(0.0, inp.pv_remaining_kwh - expected_day_kwh), 2
     )
 
-    # Ladedeckel jetzt (Akku-Schonung): tagsüber HOLD, zum Abend per Rampe auf
-    # 100 %. Aufgehoben, sobald Nachtdeckung vor Schonung geht — Ziel/morgen
-    # knapp (ziel_voll), es ist Nacht (kein Überschuss zu erwarten), oder der
-    # Restertrag heute reicht nicht mehr, um später nachzuladen (dann sofort
-    # voll laden, statt zu leer in die Nacht zu gehen). Der noch fehlende
-    # Rest bemisst sich am TATSÄCHLICHEN Speicherstand (`available`), nicht am
-    # HOLD-Niveau: steht der Speicher schon über HOLD (z. B. weil er die Nacht
-    # kaum entladen hat), ist der reale Nachlade-Bedarf kleiner als angenommen
-    # — der Deckel darf dann länger warten. Steht er dagegen ungewöhnlich tief
-    # unter HOLD, ist der reale Bedarf größer als die feste 22-%-Annahme; ohne
-    # diese Korrektur hätte der Check das übersehen und riskiert, die Nacht
-    # nicht mehr voll abzudecken.
+    # Ladeplan: Der Speicher soll abends auf dem Nachtbedarf stehen (ziel_kwh)
+    # plus einer Marge gegen Prognosefehler — nicht pauschal auf 100 %. Für die
+    # kalendarische Alterung zählt die Zeit bei hohem SoC, also wird so spät
+    # geladen, wie der erwartete Überschuss es zulässt (`_ladeplan` rechnet
+    # rückwärts). Sofort statt just in time, sobald Deckung vor Schonung geht:
+    # Ziel/morgen knapp/Notstromreserve (ziel_voll), es ist Nacht (kein
+    # Überschuss zu erwarten), oder der Restertrag heute reicht nicht einmal
+    # mehr für das Nacht-Ziel. Der Fehlbetrag bemisst sich dabei am
+    # TATSÄCHLICHEN Speicherstand (`available`), nicht an einem Pauschalniveau:
+    # steht der Speicher schon hoch, ist der reale Bedarf kleiner als angenommen
+    # — der Deckel darf dann länger warten; steht er ungewöhnlich tief, ist er
+    # größer, und ohne diese Korrektur riskierte der Check die Nachtdeckung.
     if known and cap > 0:
-        topup_kwh = max(0.0, cap - available)
-        heute_knapp = result.ueberschuss_rest_kwh < topup_kwh
-        voll_noetig = ziel_voll or heute_knapp or ist_nacht
-        result.lade_deckel_soc = round(
-            _lade_deckel_soc(inp, voll_noetig, inp.now), 1
+        ziel_soc = min(100.0, result.speicher_ziel_soc + STORAGE_NIGHT_MARGIN_SOC)
+        fehlend_kwh = max(0.0, ziel_soc / 100 * cap - available)
+        heute_knapp = result.ueberschuss_rest_kwh < fehlend_kwh
+        sofort_voll = ziel_voll or heute_knapp or ist_nacht
+        rampe = _ladeplan(
+            inp,
+            result,
+            soc_jetzt=result.speicher_soc,
+            cap_kwh=cap,
+            ziel_soc=ziel_soc,
+            sofort_voll=sofort_voll,
+        )
+        result.lade_deckel_soc = round(_lade_deckel_soc(rampe, inp.now), 1)
+        result.lade_ziel_soc = round(rampe.ziel_soc, 1)
+        # Rampenstart nur melden, solange er noch bevorsteht — ein Start in der
+        # Vergangenheit heißt schlicht "läuft".
+        result.lade_start = (
+            rampe.start
+            if rampe.start is not None and rampe.start > inp.now
+            else None
         )
         # Mittags-Ladepause: nur der Vorrang ruht, nicht das Laden selbst.
-        result.lade_pause = _ist_ladepause(inp, voll_noetig, inp.now)
+        result.lade_pause = _ist_ladepause(inp, sofort_voll, inp.now)
 
     # Kapazität frei: Kann ein zusätzlicher Verbraucher free_kwh über free_h
     # ziehen, ohne Reserve und Nachtdeckung anzutasten? Anrechenbar sind der
@@ -370,9 +394,7 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     # SoC-Prognose ab jetzt bis zum Horizontende. Bewusst nicht rückwirkend:
     # bekannt ist nur der aktuelle Stand, alles davor wäre erfunden.
     if known and cap > 0:
-        result.soc_prognose = _soc_forecast(
-            inp, result, available, reserve, cap, voll_noetig
-        )
+        result.soc_prognose = _soc_forecast(inp, result, available, reserve, cap, rampe)
 
     result.prioritaeten = _priorities(inp, result)
     result.empfehlung = (
@@ -445,7 +467,18 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     if res.ev_regelung is None:
         res.flags.ev_bereit = True
 
-    grund = " – morgen wenig Ertrag" if res.morgen_knapp else ""
+    # Begründung der Akku-Zeile, in der Reihenfolge, in der sie das Verhalten
+    # erklärt: Notstromreserve schlägt alles, dann die Vollladung wegen morgen,
+    # zuletzt der Hinweis, dass die Ladung bewusst noch wartet (just in time) —
+    # ohne ihn läse sich ein pausierter Akku bei Sonne wie ein Fehler.
+    if inp.emergency_reserve:
+        grund = " – Notstromreserve"
+    elif res.morgen_knapp:
+        grund = " – morgen wenig Ertrag"
+    elif res.lade_start is not None:
+        grund = f" – ab {_lokale_uhrzeit(inp, res.lade_start)}"
+    else:
+        grund = ""
     akku = (
         f"Akku laden bis {res.speicher_ziel_soc:.0f} %"
         f" (+{res.speicher_bedarf_kwh} kWh{grund})"

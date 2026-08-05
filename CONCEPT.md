@@ -99,18 +99,22 @@ System: ein Kelvin Speicherhub kostet nichts an Zyklenfestigkeit, ein
 Batteriezyklus schon. Zwei Sollwerte — Basis wird immer gehalten, notfalls aus
 dem Netz; Komfort nur bei Überschuss.
 
-**Der Ladedeckel über den Tag.** Kalendarische Alterung ist bei hohem SoC am
-größten. Tagsüber wird deshalb nur bis zu einem Zwischenstand geladen (95 %);
-ab 14:00 steigt der Deckel und steht ab 16:00 auf 100 %, sodass der Speicher
-vor der Nacht voll ist. Zwischen 11:00 und 14:00 liegt eine Ladepause: dort
-tritt der Akku beim Überschuss hinter die Lasten zurück, die Mittagsspitze
-gehört Warmwasser, Wallbox und Wärmepumpe.
+**Der Ladedeckel folgt dem Bedarf, nicht der Uhr.** Für die kalendarische
+Alterung zählt die Zeit bei hohem SoC, nicht die Spitze. Also wird rückwärts
+gerechnet: Abendziel ist der Nachtbedarf plus Marge (nicht pauschal 100 %),
+fertig eine Stunde vor Sonnenuntergang (nicht zu einer festen Uhrzeit, die im
+Juli fünf Stunden zu früh läge), und die Ladung beginnt so spät, wie der
+erwartete Überschuss es zulässt. Zwischen 11:00 und 14:00 liegt zusätzlich eine
+Ladepause: dort tritt der Akku beim Überschuss hinter die Lasten zurück, denn
+ein Kelvin Speicherhub kostet nichts an Zyklenfestigkeit, ein Batteriezyklus
+schon.
 
 **Der Deckel ordnet den Vorrang, er verschenkt nichts.** Bleibt nach den Lasten
 Überschuss übrig, den sonst niemand nimmt, lädt der Akku auch über den Deckel
 hinaus — einspeisen ist die schlechtere Verwendung, und der Deckel ist eine
 Alterungs-Optimierung, kein Selbstzweck. Dieselbe Abwägung hebt Deckel und
-Pause ganz auf, sobald die Nachtdeckung auf dem Spiel steht.
+Pause ganz auf, sobald die Nachtdeckung auf dem Spiel steht — und der Schalter
+„Speicher als Notstromreserve" kehrt sie um: Bereitschaft schlägt Lebensdauer.
 
 **Modulierbare Lasten weichen vor dem Speicher.** Lässt der Ertrag nach, wird
 zuerst der Ladestrom heruntergeregelt, erst danach hilft der Akku. Sonst

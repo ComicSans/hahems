@@ -408,10 +408,11 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._check_signature: tuple | None = None
         # Signatur der zuletzt zugestellten Meldungen (verhindert Zyklus-Lärm).
         self._alert_signature: tuple | None = None
-        # Optimierungsziel und E-Auto-Zwangsladung (von Select bzw. Switch
-        # gesetzt, in RestoreEntity persistiert).
+        # Optimierungsziel, E-Auto-Zwangsladung und Notstromreserve (von
+        # Select bzw. Switch gesetzt, in RestoreEntity persistiert).
         self.goal: str = GOAL_SELF_CONSUMPTION
         self.ev_force: bool = False
+        self.emergency_reserve: bool = False
         # Regel-Aggressivität (min/normal/max), vom Select gesetzt und in
         # RestoreEntity persistiert. Default aggressiv, damit Ladelücken zügig
         # geschlossen werden.
@@ -1126,6 +1127,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 goal=self.goal,
                 gain_level=self.gain_level,
                 ev_force=self.ev_force,
+                emergency_reserve=self.emergency_reserve,
                 wallbox_w=data.wallbox_w,
                 weather_factor_tomorrow=data.wetter_faktor_morgen,
                 free_kwh=float(self._opt(CONF_FREE_KWH, DEFAULT_FREE_KWH)),
@@ -1297,7 +1299,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         """
         if self.changelog is None:
             return
-        snap = decision_snapshot(self.mode, self.goal, self.ev_force, data.plan)
+        snap = decision_snapshot(
+            self.mode, self.goal, self.ev_force, data.plan, self.emergency_reserve
+        )
         prev, self._decisions = self._decisions, snap
         if prev is None:
             return

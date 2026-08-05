@@ -313,9 +313,13 @@ class Actuator:
             # dem Deckel), aber manche Geräte laden im Lademodus nach ihrem
             # EIGENEN Ziel-SoC weiter und ignorieren den 0-W-Setpoint. Erst der
             # auf den Deckel gezogene Ziel-SoC stoppt sie zuverlässig. Der Deckel
-            # rampt abends selbst auf 100 % — die Nachtdeckung bleibt erhalten.
+            # rampt abends selbst auf das Nacht-Ziel — die Deckung bleibt
+            # erhalten. Lädt die Regelung gerade über den Deckel hinaus, weil der
+            # Überschuss sonst eingespeist würde, muss der Ziel-SoC mit auf
+            # 100 % — sonst bremste ausgerechnet das Gerät den Vorrang aus.
             if s.soc_set_entity and plan.lade_deckel_soc is not None:
-                await self._set_number(s.soc_set_entity, plan.lade_deckel_soc)
+                ziel_soc = 100.0 if ctrl.laden_statt_einspeisen else plan.lade_deckel_soc
+                await self._set_number(s.soc_set_entity, ziel_soc)
             if not s.charge_setpoint_entity and not s.discharge_setpoint_entity:
                 continue
             watt = alloc.get(s.name, 0.0) or 0.0

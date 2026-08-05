@@ -32,8 +32,10 @@ def test_laden_moderat_immer_noch_parallel():
 
 
 def test_laden_proportional_zur_freien_kapazitaet():
-    # Leerster Akku bekommt am meisten (SoC-Ausgleich).
-    r = P.compute_plan(plan_input(socs=[40, 60, 70], saldo_w=-2000))
+    # Leerster Akku bekommt am meisten (SoC-Ausgleich). Der Überschuss ist
+    # bewusst größer als die Ladegrenze eines einzelnen Speichers (1200 W):
+    # sonst nähme der leerste ihn allein auf und die Verteilung bliebe ungeprüft.
+    r = P.compute_plan(plan_input(socs=[40, 60, 70], saldo_w=-6000))
     z = zuteilung(r)
     assert z["L1"] > z["L2"] > z["L3"] > 0
 

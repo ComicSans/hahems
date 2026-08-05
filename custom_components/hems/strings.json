@@ -540,6 +540,9 @@
     "switch": {
       "ev_force": {
         "name": "Force EV charging"
+      },
+      "notstromreserve": {
+        "name": "Storage as backup reserve"
       }
     }
   },

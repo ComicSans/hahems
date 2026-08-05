@@ -21,10 +21,14 @@ from .types import PlanInput, PlanResult
 def akku_hat_vorrang(inp: PlanInput) -> bool:
     """Ob der Akku beim Laden Vorrang vor den modulierbaren Lasten hat.
 
-    battery_first immer; auto genau dann, wenn der Tagesertrag knapp ist
-    (knapp-Latch — dieselbe Bedingung, nach der die Empfehlung schon heute den
-    Akku vor das Auto stellt). ev_first nie.
+    Notstromreserve überstimmt die Einstellung: eine Reserve, die hinter dem
+    Auto ansteht, ist im Ausfall keine. Sonst battery_first immer; auto genau
+    dann, wenn der Tagesertrag knapp ist (knapp-Latch — dieselbe Bedingung,
+    nach der die Empfehlung schon heute den Akku vor das Auto stellt);
+    ev_first nie.
     """
+    if inp.emergency_reserve:
+        return True
     if inp.priority_mode == PRIORITY_BATTERY_FIRST:
         return True
     if inp.priority_mode == PRIORITY_AUTO:

@@ -382,6 +382,12 @@ class PlanInput:
     # damit Ladelücken schneller geschlossen werden. Beeinflusst nur die
     # Schrittweite pro Zyklus, nicht die Umschaltrate (bleibt 1×/min).
     gain_level: str = DEFAULT_GAIN_LEVEL
+    # Notstromreserve (Laufzeit-Schalter): Der Speicher soll für einen Ausfall
+    # bereitstehen. Hebt Ladedeckel, Just-in-time-Rampe und Mittagspause auf,
+    # gibt dem Akku den Ladevorrang vor allen Lasten und lädt mit voller
+    # Regel-Schrittweite. Alterung ist dann zweitrangig — ein leerer Speicher
+    # im Ausfall kostet mehr als ein paar Zyklen Lebensdauer.
+    emergency_reserve: bool = False
     # E-Auto-Zwangsladung: lädt unabhängig von Überschuss und Wallbox-
     # Mindestleistung. Die Wallbox-Last wird dann aus dem Saldo herausgerechnet,
     # den die Speicher-Regelung sieht, damit der Hausakku nicht still ins Auto
@@ -479,6 +485,24 @@ class SocPoint:
 
 
 @dataclass
+class ChargeRamp:
+    """Der Ladeplan des Tages als Gerade: von wo, wohin, wann.
+
+    `basis_soc` ist der Stand bei der Planung — bis `start` hält der Deckel
+    dort (der Akku lädt dann nur, was sonst eingespeist würde). Zwischen
+    `start` und `ende` steigt er linear auf `ziel_soc`, danach bleibt er dort.
+    `start is None` heißt "keine Zeit mehr für die Rampe": der Deckel steht
+    sofort auf dem Ziel. Berechnet in `_ladeplan`, ausgewertet in
+    `_lade_deckel_soc` — auch für zukünftige Zeitpunkte der SoC-Prognose.
+    """
+
+    ziel_soc: float
+    basis_soc: float
+    start: datetime | None = None
+    ende: datetime | None = None
+
+
+@dataclass
 class PlanResult:
     nachtdefizit_kwh: float = 0.0
     ueberschuss_rest_kwh: float = 0.0
@@ -487,16 +511,23 @@ class PlanResult:
     speicher_kapazitaet_kwh: float = 0.0
     speicher_ziel_soc: float | None = None
     speicher_bedarf_kwh: float = 0.0
-    # Ladedeckel jetzt: SoC-Obergrenze, bis zu der die Saldo-Regelung gerade
-    # laden darf. Tagsüber das Tagesziel (~95 %), ab 14:00 per Rampe auf 100 %
-    # für die Nacht — außer Nachtdeckung geht vor Schonung (dann sofort 100 %).
-    # Der Wert ist der WIRKSAME Deckel: er steht auch dann auf 100 %, wenn statt
-    # einer Einspeisung weitergeladen wird (regelung.laden_statt_einspeisen).
-    # Der Actuator schreibt ihn auf den geräteseitigen Ziel-SoC.
+    # Ladedeckel jetzt: SoC-Obergrenze, bis zu der die Saldo-Regelung laden
+    # soll. Vor dem Rampenstart der aktuelle Stand (halten), danach die Rampe
+    # auf das Nacht-Ziel — außer Deckung geht vor Schonung (dann sofort das
+    # Ziel). Die geplante Absicht, nicht der Befehl: Überschuss, den sonst
+    # niemand nimmt, lädt der Akku auch darüber hinaus
+    # (regelung.laden_statt_einspeisen). Der Actuator schreibt den Deckel auf
+    # den geräteseitigen Ziel-SoC — und hebt ihn in genau dem Fall auf 100 %.
     lade_deckel_soc: float | None = None
+    # Endwert der Ladekurve: was der Speicher heute Abend haben soll
+    # (Nachtbedarf + Marge, 100 % wenn Vollladung nötig ist).
+    lade_ziel_soc: float | None = None
+    # Wann die Ladung dafür beginnen muss (just in time). None = jetzt, weil
+    # keine Zeit mehr zu verlieren ist oder nichts mehr fehlt.
+    lade_start: datetime | None = None
     # Mittags-Ladepause (11:00–14:00 lokal): der Akku reserviert keinen
     # Überschuss vor den Lasten. Aufgehoben, wenn der Deckel ohnehin aufgehoben
-    # ist (Nachtdeckung vor Schonung).
+    # ist (Deckung vor Schonung).
     lade_pause: bool = False
     sonnenfenster_h: float = 0.0
     morgen_knapp: bool = False

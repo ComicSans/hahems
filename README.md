@@ -87,30 +87,49 @@ HEMS meldet Warmwasser nur während des konfigurierten Fensters als „aus“.
 
 ## Akku-Ladestrategie über den Tag
 
-Der Speicher hat zwei Ladefenster und dazwischen eine Pause (Ortszeit):
+Für die Alterung eines Speichers zählt nicht der Spitzen-SoC, sondern die **Zeit
+bei hohem SoC**. HEMS lädt deshalb **so spät wie vertretbar und nur so hoch wie
+nötig** — und rechnet beides aus dem Bedarf statt aus festen Uhrzeiten:
 
-| Zeit | Ladedeckel | Verhalten |
-|---|---|---|
-| **bis 11:00** | 95 % | Vormittags-Ladefenster: der Akku soll vor Mittag im Wesentlichen voll sein und hat dabei den eingestellten Vorrang vor den Lasten. |
-| **11:00–14:00** | 95 % | Mittags-Ladepause: der Akku reserviert **keinen** Überschuss mehr vor Warmwasser, Wallbox und Wärmepumpe. Die Mittagsspitze gehört den Verbrauchern. |
-| **14:00–16:00** | 95 → 100 % | Nachmittags-Ladefenster, der Deckel rampt linear hoch. |
-| **ab 16:00** | 100 % | Voll für die Nacht. |
+| | |
+|---|---|
+| **Wie hoch?** | Das Abendziel ist der errechnete Nachtbedarf (Nachtdefizit + Reserve) plus 10 Prozentpunkte Marge — im Sommer oft 60 statt 100 %. `sensor.hems_speicher_regelung` zeigt ihn als `lade_ziel_soc`. |
+| **Wann fertig?** | Eine Stunde vor Sonnenuntergang. Nicht zu einer festen Uhrzeit: im Juli wäre der Speicher sonst um 16:00 voll und stünde fünf Stunden ungenutzt oben. |
+| **Wann los?** | So spät, dass der erwartete Restüberschuss dafür reicht, mit 50 % Zeitzuschlag gegen Prognosefehler. Bis dahin hält der Ladedeckel auf dem aktuellen Stand: der Akku drängelt sich nicht vor die Lasten. Attribut `lade_start`. |
+| **Mittags** | Zwischen 11:00 und 14:00 (Ortszeit) reserviert der Akku grundsätzlich keinen Überschuss vor Warmwasser, Wallbox und Wärmepumpe — deren Puffer kostet keine Zyklenfestigkeit. Attribut `lade_pause`. |
 
 **Bevor eingespeist wird, wird geladen.** Der Deckel ordnet den *Vorrang*, er
 verschenkt keine Energie: Bleibt nach den Lasten Überschuss übrig, den sonst
 niemand nimmt, lädt der Akku auch über den Deckel hinaus bis 100 % — auch in der
-Mittagspause. Das Attribut `laden_statt_einspeisen` an
-`sensor.hems_speicher_regelung` zeigt diesen Fall an, `lade_deckel_soc` und
-`lade_pause` daneben den gerade wirksamen Deckel und die Pause. Ohne
-konkurrierende Verbraucher greift der Deckel deshalb praktisch nie — er wird
-erst dort sichtbar, wo eine Last um denselben Überschuss konkurriert.
+Mittagspause. Das Attribut `laden_statt_einspeisen` zeigt diesen Fall an, und der
+geräteseitige Ziel-SoC wird dafür mit angehoben. **Ohne konkurrierende
+Verbraucher greift der Deckel deshalb praktisch nie:** Wer nur Speicher und
+Zähler hat, sieht weiter einen Akku, der vormittags volläuft — für ihn gäbe es
+zum Laden nur die Alternative Einspeisen. Die Schonung verdient sich dort, wo
+eine Last um denselben Überschuss konkurriert.
 
-Der Zwischenstand tagsüber ist Akku-Schonung: kalendarische Alterung ist bei
-hohem SoC am größten. Deshalb steht der Deckel unter 100 %, solange die Nacht
-noch anders gedeckt werden kann. Muss der Speicher heute ohnehin voll werden —
-Ziel *Nulleinspeisung* oder *Vollladen*, morgen wenig Ertrag, oder der Restertrag
-heute reicht nicht mehr zum späteren Nachladen —, entfallen Deckel **und**
-Mittagspause sofort: Nachtdeckung geht vor Schonung.
+Der Plan wird sofort aufgegeben, wenn Deckung vor Schonung geht — Ziel
+*Nulleinspeisung* oder *Vollladen*, morgen wenig Ertrag, es ist Nacht, oder der
+Restertrag heute reicht nicht einmal mehr fürs Abendziel. Dann entfallen Rampe
+**und** Mittagspause, und geladen wird sofort.
+
+Und noch etwas fällt weg: Im **Winterhalbjahr** ist der Nachtbedarf regelmäßig
+größer als die Kapazität. Das Abendziel steht dann ohnehin auf 100 %, die Rampe
+beginnt früh, und die Strategie verhält sich wie vorher. Die Schonung ist ein
+Sommer- und Übergangszeit-Gewinn.
+
+### Speicher als Notstromreserve
+
+`switch.hems_speicher_als_notstromreserve` (auch im Panel unter **Steuerung**)
+kehrt die Abwägung um: Ziel 100 %, sofort statt just in time, Ladevorrang vor
+allen Lasten — unabhängig vom eingestellten Vorrang und ohne Mittagspause — und
+die volle Regel-Schrittweite beim Laden. Sehr schnell sehr voll; ein leerer
+Speicher im Ausfall kostet mehr als ein paar Zyklen Lebensdauer.
+
+Was der Schalter **nicht** tut: die Entladung begrenzen. Die untere Grenze bleibt
+die **Reserve-SoC** der Speicher-Rolle. Wer eine Reserve will, die auch über die
+Nacht stehen bleibt, hebt sie dort an — sonst ist der Speicher am Morgen wieder
+so leer wie sonst auch.
 
 ## HEMS-Panel
 
@@ -118,7 +137,8 @@ Die Integration registriert einen eigenen Eintrag **HEMS** in der Seitenleiste
 mit folgenden Ansichten:
 
 - **Übersicht** — Lastfluss- und Entladeplan-Karte
-- **Steuerung** — Betriebsmodus, Optimierungsziel und E-Auto-Zwangsladung
+- **Steuerung** — Betriebsmodus, Optimierungsziel, Regel-Aggressivität,
+  E-Auto-Zwangsladung und Notstromreserve
 - **Heizung** — Außentemperatur, Status (Frostschutz, Sommersperre, Heizgrenze),
   Vorlauf-Sollwert gegen Ist-Wert und die eingestellte Heizkurve
 - **Diagnose** — Fehler, Warnungen und Überlappungen auf einen Blick
@@ -184,13 +204,14 @@ funktioniert unabhängig davon.
 - `sensor.hems_lastfluss` — W, alle Flusswerte als Attribute
 - `sensor.hems_entladeplan` — W, geplante Akku-Entladung ins Haus; Stunden-Slots, SoC-Prognose und PV-Kurve als Attribute
 - `sensor.hems_warmwasser_soll` — °C, mit Status (aus / legionellenschutz / pv_boost / basis)
-- `sensor.hems_speicher_regelung` — Modus entladen / laden / pausiert, Zuteilung je Speicher als Attribut
+- `sensor.hems_speicher_regelung` — Modus entladen / laden / pausiert; Zuteilung je Speicher sowie Ladeplan (`lade_ziel_soc`, `lade_start`, `lade_deckel_soc`, `lade_pause`, `laden_statt_einspeisen`) als Attribute
 
 **Steuerung und Diagnose**
 
 - `select.hems_modus` — beobachten / auto / aus
 - `select.hems_optimierungsziel` — eigenverbrauch / nulleinspeisung / vollladen
 - `switch.hems_e_auto_zwangsladung`
+- `switch.hems_speicher_als_notstromreserve` — Speicher auf Ausfall-Bereitschaft
 - `binary_sensor.hems_konfiguration` — Config-Check für den Auto-Modus
 
 ## Weiterlesen

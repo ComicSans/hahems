@@ -265,6 +265,12 @@ class HemsPanel extends HTMLElement {
         <h2>E-Auto Zwangsladung</h2>
         <div class="toggle-row"><button data-role="force" class="toggle"></button>
           <span class="hint" data-role="force-hint"></span></div>
+      </div>
+      <div class="panel-card">
+        <h2>Speicher als Notstromreserve</h2>
+        <p class="hint">lädt sofort, voll und vor allen Lasten · Schonung aus</p>
+        <div class="toggle-row"><button data-role="reserve" class="toggle"></button>
+          <span class="hint" data-role="reserve-hint"></span></div>
       </div>`;
     this._ctrl = {
       mode: s.querySelector('[data-role="mode"]'),
@@ -272,20 +278,26 @@ class HemsPanel extends HTMLElement {
       gain: s.querySelector('[data-role="gain"]'),
       force: s.querySelector('[data-role="force"]'),
       forceHint: s.querySelector('[data-role="force-hint"]'),
+      reserve: s.querySelector('[data-role="reserve"]'),
+      reserveHint: s.querySelector('[data-role="reserve-hint"]'),
     };
     this._modeEntity = resolveEntity(this._hass, "select", "hems_modus", "modus");
     this._goalEntity = resolveEntity(this._hass, "select", "hems_optimierungsziel", "optimierungsziel");
     this._gainEntity = resolveEntity(this._hass, "select", "hems_regel_aggressivitaet", "aggressiv");
     this._forceEntity = resolveEntity(this._hass, "switch", "hems_e_auto_zwangsladung", "zwangsladung");
+    this._reserveEntity = resolveEntity(this._hass, "switch", "hems_speicher_als_notstromreserve", "notstromreserve");
     this._checkEntity = resolveEntity(this._hass, "binary_sensor", "hems_konfiguration", "konfiguration");
 
-    this._ctrl.force.addEventListener("click", () => {
-      const st = this._hass.states[this._forceEntity];
-      if (!st) return;
-      this._hass.callService("switch", st.state === "on" ? "turn_off" : "turn_on", {
-        entity_id: this._forceEntity,
+    const toggle = (button, entityKey) =>
+      button.addEventListener("click", () => {
+        const st = this._hass.states[this[entityKey]];
+        if (!st) return;
+        this._hass.callService("switch", st.state === "on" ? "turn_off" : "turn_on", {
+          entity_id: this[entityKey],
+        });
       });
-    });
+    toggle(this._ctrl.force, "_forceEntity");
+    toggle(this._ctrl.reserve, "_reserveEntity");
   }
 
   _selectTab(tab) {
@@ -309,6 +321,7 @@ class HemsPanel extends HTMLElement {
     this._renderSegmented("goal", this._goalEntity, "select");
     this._renderSegmented("gain", this._gainEntity, "select");
     this._renderForce();
+    this._renderReserve();
     this._renderHeating();
     this._renderDiagnostics();
   }
@@ -323,6 +336,7 @@ class HemsPanel extends HTMLElement {
     this._goalEntity ||= resolveEntity(this._hass, "select", "hems_optimierungsziel", "optimierungsziel");
     this._gainEntity ||= resolveEntity(this._hass, "select", "hems_regel_aggressivitaet", "aggressiv");
     this._forceEntity ||= resolveEntity(this._hass, "switch", "hems_e_auto_zwangsladung", "zwangsladung");
+    this._reserveEntity ||= resolveEntity(this._hass, "switch", "hems_speicher_als_notstromreserve", "notstromreserve");
     this._checkEntity ||= resolveEntity(this._hass, "binary_sensor", "hems_konfiguration", "konfiguration");
     // Die Heizungsdaten hängen als Attribut am Lastfluss-Sensor — derselben
     // Quelle, aus der auch die Flow-Karte ihre Schaltlasten liest.
@@ -363,18 +377,42 @@ class HemsPanel extends HTMLElement {
   }
 
   _renderForce() {
-    const st = this._forceEntity && this._hass.states[this._forceEntity];
+    this._renderToggle(
+      "force",
+      this._forceEntity,
+      "Lädt zwangsweise, Akku wird geschont.",
+      "Aus — reguläres Überschussladen.",
+    );
+  }
+
+  _renderReserve() {
+    this._renderToggle(
+      "reserve",
+      this._reserveEntity,
+      "Bereit für den Ausfall: Ziel 100 %, Vorrang vor allen Lasten.",
+      "Aus — bedarfsgeführtes Laden mit Akku-Schonung.",
+    );
+  }
+
+  /** Ein An/Aus-Schalter samt Hinweiszeile. `role` benennt die beiden
+   * Elemente in `this._ctrl` (`role` und `roleHint`). Fehlt die Entität —
+   * die Notstromreserve gibt es nur mit konfiguriertem Speicher, die
+   * Zwangsladung nur mit Wallbox —, steht der Schalter auf „—". */
+  _renderToggle(role, entity, hintOn, hintOff) {
+    const button = this._ctrl[role];
+    const hint = this._ctrl[`${role}Hint`];
+    const st = entity && this._hass.states[entity];
     if (!st) {
-      this._ctrl.force.textContent = "—";
-      this._ctrl.force.disabled = true;
+      button.textContent = "—";
+      button.disabled = true;
+      hint.textContent = "Entität nicht gefunden.";
       return;
     }
     const on = st.state === "on";
-    this._ctrl.force.textContent = on ? "AN" : "AUS";
-    this._ctrl.force.classList.toggle("on", on);
-    this._ctrl.forceHint.textContent = on
-      ? "Lädt zwangsweise, Akku wird geschont."
-      : "Aus — reguläres Überschussladen.";
+    button.disabled = false;
+    button.textContent = on ? "AN" : "AUS";
+    button.classList.toggle("on", on);
+    hint.textContent = on ? hintOn : hintOff;
   }
 
   // --- Heizung -----------------------------------------------------------

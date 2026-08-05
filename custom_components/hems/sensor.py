@@ -275,9 +275,14 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             ],
             "kaltreserve_aktiv": d.plan.regelung.reserve_aktiv,
             "kaltreserve_speicher": d.plan.regelung.reserve_namen,
-            # Ladestrategie über den Tag: wirksamer Deckel, Mittagspause und
-            # der Fall "lieber laden als einspeisen" (Deckel überfahren).
+            # Ladestrategie über den Tag: geplanter Deckel, Abendziel, geplanter
+            # Ladebeginn (None = läuft/jetzt), Mittagspause und der Fall
+            # "lieber laden als einspeisen" (Deckel überfahren).
             "lade_deckel_soc": d.plan.lade_deckel_soc,
+            "lade_ziel_soc": d.plan.lade_ziel_soc,
+            "lade_start": dt_util.as_local(d.plan.lade_start).isoformat()
+            if d.plan.lade_start
+            else None,
             "lade_pause": d.plan.lade_pause,
             "laden_statt_einspeisen": d.plan.regelung.laden_statt_einspeisen,
         }

@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from .battery import _lade_deckel_soc
 from .demand import _expected_load_w, _hour_slots
-from .types import DischargeSlot, PlanInput, PlanResult, PvSlot, SocPoint
+from .types import ChargeRamp, DischargeSlot, PlanInput, PlanResult, PvSlot, SocPoint
 
 
 def _pv_curve(inp: PlanInput) -> list[PvSlot]:
@@ -146,7 +146,7 @@ def _soc_forecast(
     available_kwh: float,
     reserve_kwh: float,
     cap_kwh: float,
-    voll_noetig: bool = False,
+    rampe: ChargeRamp | None = None,
 ) -> list[SocPoint]:
     """Stündlicher Vorwärtslauf des Speicherstands ab jetzt.
 
@@ -168,11 +168,11 @@ def _soc_forecast(
         balance_w = _pv_power_at(res.pv_kurve, t) - _expected_load_w(inp, t)
         if balance_w >= 0:
             charge_w = min(balance_w, max_charge_w)
-            # Ladedeckel mitführen (Akku-Schonung): nie über den Deckel laden,
-            # aber einen bereits höheren Stand nicht künstlich absenken.
-            deckel_kwh = max(
-                energy, _lade_deckel_soc(inp, voll_noetig, t) / 100 * cap_kwh
-            )
+            # Ladedeckel mitführen: nie über den Deckel laden, aber einen
+            # bereits höheren Stand nicht künstlich absenken. Ohne Ladeplan
+            # (kein Speicher-SoC bekannt) bleibt die Prognose ungedeckelt.
+            deckel_soc = 100.0 if rampe is None else _lade_deckel_soc(rampe, t)
+            deckel_kwh = max(energy, deckel_soc / 100 * cap_kwh)
             energy = min(deckel_kwh, energy + charge_w * hours / 1000)
         else:
             discharge_w = min(-balance_w, max_discharge_w)

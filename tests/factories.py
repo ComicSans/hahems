@@ -18,6 +18,11 @@ DAY = datetime(2026, 7, 22, tzinfo=UTC)
 NOON = DAY.replace(hour=11)
 SUNSET = DAY.replace(hour=19)
 SUNRISE = DAY.replace(hour=5)
+# Der Sonnenaufgang, der die KOMMENDE Nacht beendet — das ist es, was der
+# Planner als `sunrise` erwartet (der Coordinator holt ihn mit
+# `get_astral_event_next(..., utc_point_in_time=sunset)`). SUNRISE oben ist
+# der heutige, für `today_sunrise` der Plankarte.
+NEXT_SUNRISE = SUNRISE + timedelta(days=1)
 # Lokalzeit des Referenztags ist MESZ (UTC+2) — NOON ist damit 13:00 lokal,
 # Sonnenuntergang 21:00 lokal. Nur die Uhrzeit-Regeln der Ladestrategie
 # (Ladefenster, Mittagspause) werten den Offset aus.
@@ -168,7 +173,7 @@ def plan_input(
     *,
     now: datetime = NOON,
     sunset: datetime = SUNSET,
-    sunrise: datetime = SUNRISE,
+    sunrise: datetime = NEXT_SUNRISE,
     next_sunrise: datetime | None = None,
     socs: list[float] | None = None,
     storage_states: list[P.StorageState] | None = None,
@@ -183,6 +188,7 @@ def plan_input(
     modulateds: list[P.ModulatedState] | None = None,
     wallbox_w: float | None = None,
     ev_force: bool = False,
+    emergency_reserve: bool = False,
     priority_mode: str = "auto",
     switchables: list[P.SwitchableState] | None = None,
     heatings: list[P.HeatingState] | None = None,
@@ -201,7 +207,7 @@ def plan_input(
         storage_states = storages(socs if socs is not None else [60, 60, 60])
     if next_sunrise is None:
         # Tag: nächster Sonnenaufgang liegt hinter dem nächsten Sonnenuntergang.
-        next_sunrise = sunset + timedelta(hours=12)
+        next_sunrise = sunrise
     return P.PlanInput(
         now=now,
         sunset=sunset,
@@ -226,6 +232,7 @@ def plan_input(
         gain_level=gain_level,
         priority_mode=priority_mode,
         ev_force=ev_force,
+        emergency_reserve=emergency_reserve,
         wallbox_w=wallbox_w,
         weather_factor_tomorrow=weather_factor_tomorrow,
         modulateds=modulateds if modulateds is not None else [],
@@ -235,7 +242,7 @@ def plan_input(
         utc_offset_h=utc_offset_h,
         horizon_start=now.replace(hour=0, minute=0),
         horizon_end=(now + timedelta(days=1)).replace(hour=0, minute=0),
-        today_sunrise=sunrise,
+        today_sunrise=SUNRISE,
         today_sunset=sunset,
         flags=flags if flags is not None else P.PlanFlags(),
     )

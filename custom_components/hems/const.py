@@ -154,33 +154,49 @@ RESERVE_SOC_OFF = 45.0
 CONTROL_LEAD_HYST_SOC = 12.0
 CONTROL_LEAD_POWER_W = 30.0
 
-# Akku-Ladestrategie über den Tag (Ladedeckel, alle Zeiten LOKAL). Der Tag hat
-# zwei Ladefenster und dazwischen eine Pause:
+# Akku-Ladestrategie über den Tag. Für die kalendarische Alterung zählt nicht
+# der Spitzen-SoC, sondern die ZEIT bei hohem SoC. Der Ladedeckel ist deshalb
+# keine feste Kurve mehr, sondern die Rückwärtsrechnung des Nachtbedarfs:
 #
-#   bis 11:00   Vormittags-Ladefenster — Deckel STORAGE_DAY_TARGET_SOC (~95 %),
-#               der Akku soll vor Mittag im Wesentlichen voll sein.
-#   11:00–14:00 Mittags-Ladepause — derselbe Deckel, aber der Akku reserviert
-#               keinen Überschuss mehr vor den Lasten (Warmwasser, Wallbox,
-#               Wärmepumpe). Die Mittagsspitze gehört den Verbrauchern.
-#   ab 14:00    Nachmittags-Ladefenster, Deckel rampt linear auf 100 %, …
-#   ab 16:00    … und steht dort für die Nacht.
+#   Ziel   = errechneter Nachtbedarf (Nachtdefizit + Reserve) + Marge,
+#            statt pauschal 100 % — eine Sommernacht braucht selten mehr als
+#            60 %, und die Stunden zwischen 60 und 100 sind die teuren.
+#   Ende   = STORAGE_FULL_BY_LEAD_H vor Sonnenuntergang (voll, bevor die Nacht
+#            beginnt; die letzte Stunde vor Sonnenuntergang trägt ohnehin kaum
+#            noch Ertrag).
+#   Start  = Ende minus der Zeit, die das Nachladen mit dem erwarteten
+#            Überschuss braucht, mal STORAGE_RAMP_SAFETY. Davor hält der Deckel
+#            auf dem aktuellen Stand: der Akku drängelt sich nicht vor die
+#            Lasten, er lädt nur, was sonst eingespeist würde.
 #
-# Der Zwischenstand tagsüber ist Akku-Schonung: kalendarische Alterung ist bei
-# hohem SoC am größten, ein bei 100 % dösender Akku altert schneller. Der Deckel
-# begrenzt nur das Laden (kein Zwangsentladen, wenn der SoC schon darüber liegt)
-# und wird auf 100 % aufgehoben, sobald Nachtdeckung vor Schonung geht: Ziel
-# verlangt Vollladung (Nulleinspeisung/Vollladen), morgen wird es knapp, es ist
-# Nacht, oder der Restertrag heute reicht nicht mehr zum späteren Nachladen.
-# Dieselbe Aufhebung setzt auch die Mittagspause aus.
-#
+# Aufgehoben (Deckel sofort auf dem Nacht-Ziel, ohne Rampe) wird das, sobald
+# Deckung vor Schonung geht: Ziel verlangt Vollladung (Nulleinspeisung/
+# Vollladen), morgen wird es knapp, es ist Nacht, der Restertrag heute reicht
+# nicht mehr — oder der Speicher ist als Notstromreserve markiert (dann ist das
+# Nacht-Ziel ohnehin 100 %).
+STORAGE_NIGHT_MARGIN_SOC = 10.0
+STORAGE_FULL_BY_LEAD_H = 1.0
+STORAGE_RAMP_SAFETY = 1.5
+
+# Mittags-Ladepause (LOKALE Uhrzeit): zwischen diesen Zeiten reserviert der Akku
+# keinen Überschuss vor den Lasten (Warmwasser, Wallbox, Wärmepumpe) — die
+# Mittagsspitze gehört den Verbrauchern, deren Puffer keine Zyklenfestigkeit
+# kostet. Die Pause entfällt mit derselben Begründung wie der Deckel.
+STORAGE_MORNING_UNTIL_H = 11.0
+STORAGE_AFTERNOON_FROM_H = 14.0
+
 # Über allem steht: Bevor eingespeist wird, wird geladen. Bleibt nach den Lasten
 # Überschuss übrig, den sonst niemand nimmt, lädt der Akku auch über den Deckel
 # hinaus weiter (siehe `_storage_control`) — der Deckel ordnet also den Vorrang,
 # er verschenkt keine Energie ans Netz.
-STORAGE_DAY_TARGET_SOC = 95.0
-STORAGE_MORNING_UNTIL_H = 11.0
-STORAGE_AFTERNOON_FROM_H = 14.0
-STORAGE_NIGHT_FULL_FROM_H = 16.0
+
+# Notstromreserve: Der Speicher soll für einen Ausfall bereitstehen. Dann gilt
+# Ziel-SoC 100 %, sofort statt just-in-time, Ladevorrang vor allen Lasten
+# (unabhängig vom eingestellten Vorrang und ohne Mittagspause) und die volle
+# Regel-Schrittweite beim Laden — "sehr schnell sehr voll". Die ENTLADEgrenze
+# bleibt die Reserve-SoC der Speicher-Rolle; wer eine echte Notstromreserve
+# will, hebt sie dort an.
+CONTROL_GAIN_EMERGENCY = 1.0
 
 # E-Auto: Die "E-Auto laden"-Empfehlung setzt voraus, dass der Überschuss die
 # physikalische Mindestladeleistung der Wallbox erreicht (min_a × Phasen ×

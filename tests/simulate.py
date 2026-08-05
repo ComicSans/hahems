@@ -77,6 +77,8 @@ def simulate(goal: str = GOAL_SELF_CONSUMPTION, *, start_soc: float | None = Non
     for i, minute in enumerate(range(0, 24 * 60, step_min)):
         now = day + timedelta(minutes=minute)
         # Nacht: naechster Sonnenaufgang ist vor dem naechsten Untergang
+        # `eff_sunrise` ist der Aufgang NACH `eff_sunset` — daraus rechnet der
+        # Planner das Nachtdefizit und damit sein Ladeziel.
         if now < sunrise:
             next_sunrise = sunrise
             eff_sunset = sunset
@@ -86,6 +88,7 @@ def simulate(goal: str = GOAL_SELF_CONSUMPTION, *, start_soc: float | None = Non
         else:
             next_sunrise = sunrise + timedelta(days=1)
             eff_sunset = sunset
+        eff_sunrise = next_sunrise if next_sunrise > eff_sunset else next_sunrise + timedelta(days=1)
 
         # Schaltbare Last zieht Leistung (erhöht die Hauslast) und geht in den
         # Saldo ein.
@@ -107,7 +110,7 @@ def simulate(goal: str = GOAL_SELF_CONSUMPTION, *, start_soc: float | None = Non
             )]
 
         inp = P.PlanInput(
-            now=now, sunset=eff_sunset, sunrise=sunrise, next_sunrise=next_sunrise,
+            now=now, sunset=eff_sunset, sunrise=eff_sunrise, next_sunrise=next_sunrise,
             pv_today_kwh=sum(pv) * step_h / 1000,
             pv_remaining_kwh=sum(pv[i:]) * step_h / 1000,
             pv_tomorrow_kwh=sum(pv) * step_h / 1000,

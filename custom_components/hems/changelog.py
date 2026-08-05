@@ -57,6 +57,7 @@ _DECISION_FIELDS: dict[str, tuple[str, str]] = {
     "modus": ("Betriebsmodus", "modus"),
     "ziel": ("Optimierungsziel", "ziel"),
     "ev_force": ("E-Auto Zwangsladung", "ev"),
+    "notstromreserve": ("Notstromreserve", "akku"),
     "akku_modus": ("Akku-Regelung", "akku"),
     "akku_reserve": ("Akku-Kaltreserve", "akku"),
     "warmwasser_status": ("Warmwasser", "ww"),
@@ -67,7 +68,9 @@ _DECISION_FIELDS: dict[str, tuple[str, str]] = {
 }
 
 
-def decision_snapshot(mode: str, goal: str, ev_force: bool, plan: Any) -> dict:
+def decision_snapshot(
+    mode: str, goal: str, ev_force: bool, plan: Any, emergency: bool = False
+) -> dict:
     """Momentaufnahme der Entscheidungsfelder als ``key -> (vergleich, anzeige)``.
 
     ``vergleich`` steuert die Änderungserkennung (kategorial, damit ein
@@ -78,6 +81,7 @@ def decision_snapshot(mode: str, goal: str, ev_force: bool, plan: Any) -> dict:
         "modus": (mode, _MODE_LABEL.get(mode, mode)),
         "ziel": (goal, _GOAL_LABEL.get(goal, goal)),
         "ev_force": (bool(ev_force), "an" if ev_force else "aus"),
+        "notstromreserve": (bool(emergency), "an" if emergency else "aus"),
     }
 
     reg = getattr(plan, "regelung", None)

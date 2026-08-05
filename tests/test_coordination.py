@@ -11,13 +11,16 @@ from factories import load, lokal, plan_input, storage, zuteilung
 from hems import planner as P
 from hems.strategies.types import PlanFlags
 
-# Vormittags-Ladefenster (09:00 lokal): dort gilt der Tagesdeckel und der
-# eingestellte Vorrang. In der Mittagspause (11:00–14:00) reserviert der Akku
-# grundsätzlich nichts — das prüft test_charge_deckel.py.
-VORMITTAG = lokal(9)
+# Der Vorrang wird erst dort verteilt, wo der Akku überhaupt laden WILL: die
+# Ladung läuft just in time, vorher hält der Deckel auf dem Stand und der Akku
+# reserviert nichts (test_charge_deckel.py). 19:00 lokal mit halb leeren
+# Speichern liegt am Referenztag mitten in der Rampe.
+RAMPE_LAEUFT = lokal(19)
 
 
-def _run(mode, *, wb_on, socs=(60, 60, 60), saldo=-6000.0, knapp=True, now=VORMITTAG):
+def _run(
+    mode, *, wb_on, socs=(40, 40, 40), saldo=-6000.0, knapp=True, now=RAMPE_LAEUFT
+):
     wb_w = 4200.0 if wb_on else 0.0
     wb = load("WB", power_w=wb_w, ist_an=wb_on, an_seit_s=3600, nachfrage=wb_on)
     flags = PlanFlags()
