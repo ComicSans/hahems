@@ -18,6 +18,22 @@ from dataclasses import dataclass
 # nur ein/aus; der Sollwert läuft dann über eine separate Number-Entität.
 SETPOINT_CARRYING_DOMAINS = ("water_heater",)
 
+# Kopfraum (SoC-%), den ein geräteseitiger Ziel-SoC über dem Ist-SoC braucht,
+# damit das Gerät einen Ladebefehl überhaupt ausführt. Am 14.08.2026 an drei
+# Zendure Hyper 2000 gemessen: L1 stand auf Ziel-SoC 27 bei Ist-SoC 27 und zog
+# 0 W, während L2 und L3 mit demselben 581-W-Sollwert und Ziel-SoC 70 die volle
+# Leistung nahmen. Ein Ziel-SoC auf Höhe des Ist-SoC heißt für das Gerät
+# „fertig" — der Leistungs-Sollwert läuft dann ins Leere.
+#
+# Zwei Punkte, nicht einer: Der Ziel-SoC wird ganzzahlig geschrieben (`step: 1`
+# an der Number-Entität), ein Kopfraum von 1 verschwände im Runden.
+SOC_SET_KOPFRAUM = 2.0
+
+# Ab dieser gemessenen Ladeleistung (W, Betrag) gilt ein Speicher als ladend.
+# Nicht `> 0`: Die Leistungssensoren der Speicher rauschen um die Null, und ein
+# stehendes Gerät meldet gelegentlich zweistellige Werte.
+SPEICHER_LADEN_MIN_W = 50.0
+
 
 @dataclass(frozen=True)
 class WwAction:
@@ -147,3 +163,41 @@ def plan_ww_action(
     return WwPlan(
         None if same else WwAction("set_number", float(soll)), nicht_uebernommen
     )
+
+
+def plan_soc_set(
+    *,
+    deckel_soc: float,
+    laden_statt_einspeisen: bool,
+    laedt: bool,
+    ist_soc: float | None,
+) -> float:
+    """Geräteseitiger Ziel-SoC (%) für diesen Zyklus.
+
+    Grundlage ist der Ladedeckel des Tages — er hält das Gerät davon ab, nach
+    seinem EIGENEN Ziel weiterzuladen, wenn der Leistungs-Sollwert schon 0 ist.
+    Lädt die Regelung bewusst über den Deckel hinaus, weil der Überschuss sonst
+    eingespeist würde, muss der Ziel-SoC auf 100 %.
+
+    Der Kopfraum ist der Punkt: Ein Deckel auf Höhe des Ist-SoC ist *kein*
+    Deckel mehr, sondern ein Abbruchbefehl — das Gerät hält sich für fertig und
+    ignoriert die zugeteilte Ladeleistung. Solange dieser Speicher laden soll,
+    liegt der Ziel-SoC deshalb mindestens ``SOC_SET_KOPFRAUM`` über dem Ist.
+    Soll er nicht laden, bleibt der Deckel unangetastet — sonst höbe der
+    Kopfraum genau die Grenze auf, für die er da ist.
+    """
+    ziel = 100.0 if laden_statt_einspeisen else deckel_soc
+    if laedt and ist_soc is not None:
+        ziel = max(ziel, ist_soc + SOC_SET_KOPFRAUM)
+    return min(100.0, max(0.0, ziel))
+
+
+def speicher_laedt(gemessen_w: float | None) -> bool:
+    """Ob ein Speicher messbar lädt.
+
+    Vorzeichen wie in der Konfiguration beschrieben: positiv = entladen ins
+    Haus, negativ = laden. ``None`` (kein Leistungssensor oder unbekannt) ist
+    kein Nachweis fürs Laden — aber auch keiner dagegen; die Frist in
+    ``actuator.py`` entscheidet, ob daraus eine Meldung wird.
+    """
+    return gemessen_w is not None and gemessen_w <= -SPEICHER_LADEN_MIN_W

@@ -285,6 +285,10 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             else None,
             "lade_pause": d.plan.lade_pause,
             "laden_statt_einspeisen": d.plan.regelung.laden_statt_einspeisen,
+            # Steht hier ein Name, hat HEMS diesem Speicher Ladeleistung
+            # zugeteilt und er zieht sie messbar nicht — sonst sähe die
+            # Regelung so aus, als liefe sie.
+            "nicht_uebernommen": d.plan.speicher_nicht_uebernommen,
         }
         if d.plan.regelung
         else {},

@@ -572,6 +572,12 @@ class PlanResult:
     # die ein „aus" quittiert und weiterläuft, stünde sonst im Lastfluss als
     # abgeschaltet, während sie Strom zieht.
     heizung_nicht_uebernommen: list[str] = field(default_factory=list)
+    # Speicher, die zugeteilte Ladeleistung nicht ziehen (Namen). Wie oben vom
+    # Actuator eingetragen, nicht geplant: Die Planung kennt nur die Zuteilung,
+    # nicht die Messung. Ohne diesen Rückweg sieht ein Speicher, der den
+    # Ladebefehl entgegennimmt und stehen bleibt, in Empfehlung und Lastfluss
+    # aus wie einer, der lädt — während der Überschuss ins Netz geht.
+    speicher_nicht_uebernommen: list[str] = field(default_factory=list)
     # Empfehlung der Saldo-Regelung über alle Speicher (None ohne Daten).
     regelung: ControlResult | None = None
     # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).

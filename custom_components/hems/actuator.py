@@ -22,8 +22,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from . import entity_domain
-from .actuation import plan_ww_action
-from .models import DeviceRegistry
+from .actuation import plan_soc_set, plan_ww_action, speicher_laedt
+from .models import DeviceRegistry, Storage
 from .strategies.types import PlanResult
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,7 +72,28 @@ HEIZUNG_QUITTUNG_FRIST = timedelta(minutes=2)
 # dann Zyklus für Zyklus mit denselben Parametern erneut erreicht, wenn das
 # Zielgerät den Befehl dauerhaft ablehnt (z. B. tote Cloud-Anbindung). Ohne
 # Drossel spammt das jede Minute dieselbe Fehlermeldung ins HA-Log.
+#
+# Die Ausnahme dazu (`ohne_drossel`) gilt Werten, die das Gerät ANNIMMT und von
+# selbst wieder verwirft — dort ist die Annahme oben schlicht falsch. Am
+# 14.08.2026 an drei Zendure Hyper 2000 gemessen: Der geschriebene Ziel-SoC
+# hielt 10 bis 70 s, dann zog das Gerät ihn auf seinen eigenen Wert zurück
+# (100 → 27 bzw. 100 → 70). Mit Drossel schreibt HEMS erst fünf Minuten später
+# nach, und so lange steht ein Ladedeckel auf Höhe des Ist-SoC — der Speicher
+# lädt nicht. Nachschreiben ist da kein Spam, sondern die einzige Art, den Wert
+# zu halten. Für Schaltbefehle (WW, Heizung) bleibt „einmal schreiben, dann
+# melden" richtig: Ein Verdichter braucht kein Nachtreten im Minutentakt.
 _CALL_THROTTLE = timedelta(minutes=5)
+
+# Frist, nach der ein kommandiertes Laden am Speicher gemessen sein muss —
+# dieselbe Klasse wie WARMWASSER_QUITTUNG_FRIST und HEIZUNG_QUITTUNG_FRIST.
+# Ein Speicher, der die zugeteilte Leistung entgegennimmt und nichts zieht,
+# steht in Empfehlung und Lastfluss als ladend, während der Überschuss ins Netz
+# geht: am 14.08.2026 26 Minuten lang unbemerkt, rund 1,2 kW.
+#
+# Fünf Minuten, weil das Anlaufen eines Speichers Sekunden dauert, ein
+# Deadband-Durchgang der Regelung aber kurz auf 0 W führen kann — die Frist
+# soll den Dauerfall melden, nicht jede Lücke.
+SPEICHER_QUITTUNG_FRIST = timedelta(minutes=5)
 
 class Actuator:
     """Schaltet die Empfehlung im Auto-Modus auf die konfigurierten Geräte."""
@@ -90,6 +111,11 @@ class Actuator:
         # Entitäten, deren Nicht-Übernahme bereits im Log steht — die Meldung
         # gehört einmal je Vorfall ins Log, nicht in jeden Zyklus.
         self._heizung_gemeldet: set[str] = set()
+        # Speichername → Zeitpunkt, seit dem Laden kommandiert ist, ohne dass
+        # es gemessen wurde. Wird zurückgesetzt, sobald Leistung fließt oder
+        # nicht mehr geladen werden soll.
+        self._laden_seit: dict[str, datetime] = {}
+        self._speicher_gemeldet: set[str] = set()
 
     async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Reihenfolge WW → Akku → modulierbare Lasten. Jedes Gerät
@@ -139,12 +165,25 @@ class Actuator:
         except (TypeError, ValueError):
             return None
 
-    async def _call(self, domain: str, service: str, entity: str, **data) -> bool:
-        """Service aufrufen; ``False``, wenn die Drossel den Aufruf verworfen hat."""
+    async def _call(
+        self,
+        domain: str,
+        service: str,
+        entity: str,
+        *,
+        ohne_drossel: bool = False,
+        **data,
+    ) -> bool:
+        """Service aufrufen; ``False``, wenn die Drossel den Aufruf verworfen hat.
+
+        ``ohne_drossel`` ist für Werte, die das Zielgerät annimmt und von selbst
+        wieder verwirft — dort ist Nachschreiben die Aufgabe, nicht der Fehler
+        (siehe Kommentar bei ``_CALL_THROTTLE``).
+        """
         key = (domain, service, entity, tuple(sorted(data.items())))
         now = dt_util.utcnow()
         last = self._last_call.get(key)
-        if last is not None and now - last < _CALL_THROTTLE:
+        if not ohne_drossel and last is not None and now - last < _CALL_THROTTLE:
             return False
         self._last_call[key] = now
         await self.hass.services.async_call(
@@ -199,7 +238,9 @@ class Actuator:
         except ValueError:
             return None
 
-    async def _set_number(self, entity: str | None, value: float) -> None:
+    async def _set_number(
+        self, entity: str | None, value: float, *, ohne_drossel: bool = False
+    ) -> None:
         """number.set_value, dedupliziert gegen den Ist-Wert."""
         if not entity:
             return
@@ -209,7 +250,13 @@ class Actuator:
                 return
         except ValueError:
             pass
-        await self._call("number", "set_value", entity, value=round(value))
+        await self._call(
+            "number",
+            "set_value",
+            entity,
+            ohne_drossel=ohne_drossel,
+            value=round(value),
+        )
 
     # --- Warmwasser ---------------------------------------------------------
 
@@ -308,21 +355,35 @@ class Actuator:
             return
         alloc = {z.name: z.watt for z in ctrl.zuteilung}
         for s in reg.storages:
+            watt = alloc.get(s.name, 0.0) or 0.0
+            # Soll dieser Speicher jetzt laden? Nicht „der Modus heißt laden":
+            # Die Zuteilung kann für einen einzelnen Speicher 0 W sein (voll,
+            # über dem Deckel, Kaltreserve), und dann gilt der Deckel für ihn
+            # ungeschmälert.
+            laedt_soll = ctrl.modus == "laden" and watt > 0
             # Geräteseitigen Ladedeckel setzen (z. B. Zendure soc_set): der
             # Planner deckelt das Laden über die Leistungs-Zuteilung (0 W über
             # dem Deckel), aber manche Geräte laden im Lademodus nach ihrem
             # EIGENEN Ziel-SoC weiter und ignorieren den 0-W-Setpoint. Erst der
             # auf den Deckel gezogene Ziel-SoC stoppt sie zuverlässig. Der Deckel
             # rampt abends selbst auf das Nacht-Ziel — die Deckung bleibt
-            # erhalten. Lädt die Regelung gerade über den Deckel hinaus, weil der
-            # Überschuss sonst eingespeist würde, muss der Ziel-SoC mit auf
-            # 100 % — sonst bremste ausgerechnet das Gerät den Vorrang aus.
+            # erhalten. Warum der Ziel-SoC beim Laden Kopfraum über dem Ist
+            # braucht und warum hier ohne Drossel geschrieben wird, steht bei
+            # `plan_soc_set` bzw. `_CALL_THROTTLE`.
             if s.soc_set_entity and plan.lade_deckel_soc is not None:
-                ziel_soc = 100.0 if ctrl.laden_statt_einspeisen else plan.lade_deckel_soc
-                await self._set_number(s.soc_set_entity, ziel_soc)
+                await self._set_number(
+                    s.soc_set_entity,
+                    plan_soc_set(
+                        deckel_soc=plan.lade_deckel_soc,
+                        laden_statt_einspeisen=ctrl.laden_statt_einspeisen,
+                        laedt=laedt_soll,
+                        ist_soc=self._num_state(s.soc_entity),
+                    ),
+                    ohne_drossel=True,
+                )
+            self._quittung_speicher(s, plan, laedt_soll)
             if not s.charge_setpoint_entity and not s.discharge_setpoint_entity:
                 continue
-            watt = alloc.get(s.name, 0.0) or 0.0
             if ctrl.modus == "laden":
                 charge_w, discharge_w = watt, 0.0
             elif ctrl.modus == "entladen":
@@ -355,6 +416,46 @@ class Actuator:
                     )
             await self._set_number(s.charge_setpoint_entity, charge_w)
             await self._set_number(s.discharge_setpoint_entity, discharge_w)
+
+    def _quittung_speicher(
+        self, s: Storage, plan: PlanResult, laedt_soll: bool
+    ) -> None:
+        """Kommandiertes Laden gegen die gemessene Leistung halten.
+
+        Der Gegenpart zu den Quittungen bei Warmwasser und Heizung, und aus
+        demselben Anlass: Ein Gerät, das den Befehl entgegennimmt und nichts
+        tut, ist von einem arbeitenden Gerät nur an der Messung zu
+        unterscheiden. Ohne Leistungssensor gibt es nichts zu quittieren.
+
+        Gemeldet, nicht nachgetreten: Die Setpoints gehen ohnehin jeden Zyklus
+        erneut raus, und ein Speicher, der sie ignoriert, braucht kein
+        zusätzliches Schreiben, sondern jemanden, der hinschaut.
+        """
+        if not laedt_soll or not s.power_entity:
+            self._laden_seit.pop(s.name, None)
+            self._speicher_gemeldet.discard(s.name)
+            return
+        now = dt_util.utcnow()
+        seit = self._laden_seit.setdefault(s.name, now)
+        if speicher_laedt(self._num_state(s.power_entity)):
+            # Es fließt — die Uhr läuft erst wieder ab der nächsten Lücke.
+            self._laden_seit[s.name] = now
+            self._speicher_gemeldet.discard(s.name)
+            return
+        if now - seit < SPEICHER_QUITTUNG_FRIST:
+            return
+        if s.name not in self._speicher_gemeldet:
+            self._speicher_gemeldet.add(s.name)
+            _LOGGER.warning(
+                "HEMS-Actuator: Speicher %s lädt nicht, obwohl seit %d min "
+                "Ladeleistung zugeteilt ist (gemessen: %s W) — der Überschuss "
+                "geht ins Netz",
+                s.name,
+                SPEICHER_QUITTUNG_FRIST.total_seconds() // 60,
+                self._num_state(s.power_entity),
+            )
+        if s.name not in plan.speicher_nicht_uebernommen:
+            plan.speicher_nicht_uebernommen.append(s.name)
 
     # --- E-Auto (nur Zwangsladung) -----------------------------------------
 

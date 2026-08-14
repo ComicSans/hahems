@@ -97,6 +97,17 @@ def decision_snapshot(
             bool(reg.reserve_aktiv),
             "Kaltreserve aktiv" if reg.reserve_aktiv else "Kaltreserve inaktiv",
         )
+        # Wie bei Warmwasser und Heizung beide Lagen führen, damit es zur
+        # Meldung auch eine Entwarnung gibt. Am 14.08.2026 stand „laden" 26
+        # Minuten im Log, während die Speicher 0 W zogen und der Überschuss ins
+        # Netz ging — der Modus allein erzählt davon nichts.
+        offen_akku = tuple(getattr(plan, "speicher_nicht_uebernommen", ()))
+        snap["akku_quittung"] = (
+            offen_akku,
+            "angekommen"
+            if not offen_akku
+            else f"Speicher lädt nicht: {', '.join(offen_akku)}",
+        )
 
     if getattr(plan, "warmwasser_status", ""):
         snap["warmwasser_status"] = (
