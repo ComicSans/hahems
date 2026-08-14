@@ -197,6 +197,49 @@ def test_gemischte_staende_nutzen_auch_den_gedeckelten_speicher():
     assert z["L1"] > 0 and z["L2"] > 0
 
 
+def test_ungleiche_staende_lassen_den_deckel_stehen_statt_ihn_zu_ueberfahren():
+    # Der Deckel liegt vormittags auf dem MITTLEREN Stand. Streuen die Speicher
+    # um diesen Mittelwert, hat der schwächste noch einen Spalt freie Kapazität
+    # — und weil die Zuteilung proportional zur freien Kapazität verteilt und
+    # nur an der Ladegrenze (W) deckelt, nimmt dieser eine Spalt rechnerisch
+    # den GANZEN Überschuss auf. `laden_statt_einspeisen` bleibt damit aus:
+    # gestellt wurde ja alles.
+    #
+    # Genau dieser Zustand lief am 14.08.2026 26 Minuten lang: L1 bekam die
+    # volle Leistung zugeteilt, der Ziel-SoC am Gerät stand auf dem Deckel und
+    # damit auf dem Ist-SoC, und das Gerät hielt sich für fertig. Dass daraus
+    # heute trotzdem Ladung wird, hängt allein am Kopfraum in `plan_soc_set`
+    # (siehe tests/test_speicher_quittung.py) — der Plan überfährt den Deckel
+    # hier bewusst NICHT.
+    r = P.compute_plan(
+        plan_input(
+            now=lokal(8),
+            storage_states=storages([26.0, 26.3, 26.6]),
+            saldo_w=-1200,
+        )
+    )
+    z = zuteilung(r)
+    assert r.regelung.modus == "laden"
+    assert not r.regelung.laden_statt_einspeisen
+    # Alles auf dem einen Speicher, der unter dem Deckel steht.
+    assert z["L1"] > 0 and z["L2"] == 0 and z["L3"] == 0
+    assert r.lade_deckel_soc == r.speicher_soc
+
+
+def test_gleiche_staende_am_deckel_ueberfahren_ihn():
+    # Die Gegenprobe zum Test darüber: Stehen alle auf dem Deckel, ist nirgends
+    # mehr ein Spalt — dann greift „lieber laden als einspeisen".
+    r = P.compute_plan(
+        plan_input(
+            now=lokal(8),
+            storage_states=storages([26.3, 26.3, 26.3]),
+            saldo_w=-1200,
+        )
+    )
+    assert r.regelung.laden_statt_einspeisen
+    assert all(w > 0 for w in zuteilung(r).values())
+
+
 def test_volle_speicher_laden_nicht_weiter():
     r = P.compute_plan(plan_input(now=lokal(9), socs=[100, 100, 100], saldo_w=-1500))
     assert not r.regelung.laden_statt_einspeisen
