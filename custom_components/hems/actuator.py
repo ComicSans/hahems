@@ -22,7 +22,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from . import entity_domain
-from .actuation import plan_soc_set, plan_ww_action, speicher_laedt
+from .actuation import plan_soc_set, plan_ww_action, speicher_folgt
 from .models import DeviceRegistry, Storage
 from .strategies.types import PlanResult
 
@@ -84,11 +84,18 @@ HEIZUNG_QUITTUNG_FRIST = timedelta(minutes=2)
 # melden" richtig: Ein Verdichter braucht kein Nachtreten im Minutentakt.
 _CALL_THROTTLE = timedelta(minutes=5)
 
-# Frist, nach der ein kommandiertes Laden am Speicher gemessen sein muss —
+# Frist, nach der eine kommandierte Speicherleistung gemessen sein muss —
 # dieselbe Klasse wie WARMWASSER_QUITTUNG_FRIST und HEIZUNG_QUITTUNG_FRIST.
 # Ein Speicher, der die zugeteilte Leistung entgegennimmt und nichts zieht,
 # steht in Empfehlung und Lastfluss als ladend, während der Überschuss ins Netz
 # geht: am 14.08.2026 26 Minuten lang unbemerkt, rund 1,2 kW.
+#
+# Gilt in BEIDE Richtungen. Bis dahin war nur das Laden quittiert, und der
+# Entladefall blieb strukturell unsichtbar — am 15.08.2026 fünfeinhalb Stunden
+# lang: Die Zuteilung stand auf einem Hyper 2000, dessen Telemetrie seit 12:54
+# eingefroren war, die anderen beiden bekamen 0 W, und das Haus zog derweil
+# 1,1 kW aus dem Netz bei 95,7 % gemeldetem SoC. Wer nur eine Richtung prüft,
+# meldet genau die Hälfte der Fälle.
 #
 # Fünf Minuten, weil das Anlaufen eines Speichers Sekunden dauert, ein
 # Deadband-Durchgang der Regelung aber kurz auf 0 W führen kann — die Frist
@@ -111,10 +118,10 @@ class Actuator:
         # Entitäten, deren Nicht-Übernahme bereits im Log steht — die Meldung
         # gehört einmal je Vorfall ins Log, nicht in jeden Zyklus.
         self._heizung_gemeldet: set[str] = set()
-        # Speichername → Zeitpunkt, seit dem Laden kommandiert ist, ohne dass
-        # es gemessen wurde. Wird zurückgesetzt, sobald Leistung fließt oder
-        # nicht mehr geladen werden soll.
-        self._laden_seit: dict[str, datetime] = {}
+        # Speichername → Zeitpunkt, seit dem Leistung kommandiert ist, ohne
+        # dass sie gemessen wurde. Wird zurückgesetzt, sobald Leistung fließt,
+        # die Richtung wechselt oder nichts mehr kommandiert ist.
+        self._leistung_seit: dict[str, tuple[bool, datetime]] = {}
         self._speicher_gemeldet: set[str] = set()
 
     async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
@@ -361,6 +368,7 @@ class Actuator:
             # über dem Deckel, Kaltreserve), und dann gilt der Deckel für ihn
             # ungeschmälert.
             laedt_soll = ctrl.modus == "laden" and watt > 0
+            entlaedt_soll = ctrl.modus == "entladen" and watt > 0
             # Geräteseitigen Ladedeckel setzen (z. B. Zendure soc_set): der
             # Planner deckelt das Laden über die Leistungs-Zuteilung (0 W über
             # dem Deckel), aber manche Geräte laden im Lademodus nach ihrem
@@ -381,7 +389,7 @@ class Actuator:
                     ),
                     ohne_drossel=True,
                 )
-            self._quittung_speicher(s, plan, laedt_soll)
+            self._quittung_speicher(s, plan, laedt_soll, entlaedt_soll)
             if not s.charge_setpoint_entity and not s.discharge_setpoint_entity:
                 continue
             if ctrl.modus == "laden":
@@ -418,41 +426,62 @@ class Actuator:
             await self._set_number(s.discharge_setpoint_entity, discharge_w)
 
     def _quittung_speicher(
-        self, s: Storage, plan: PlanResult, laedt_soll: bool
+        self, s: Storage, plan: PlanResult, laden_soll: bool, entladen_soll: bool
     ) -> None:
-        """Kommandiertes Laden gegen die gemessene Leistung halten.
+        """Kommandierte Speicherleistung gegen die gemessene halten.
 
         Der Gegenpart zu den Quittungen bei Warmwasser und Heizung, und aus
         demselben Anlass: Ein Gerät, das den Befehl entgegennimmt und nichts
         tut, ist von einem arbeitenden Gerät nur an der Messung zu
         unterscheiden. Ohne Leistungssensor gibt es nichts zu quittieren.
 
+        **Beide Richtungen.** Ein nicht ausgeführtes Entladen kostet dasselbe
+        wie ein nicht ausgeführtes Laden, nur andersherum: Der Bezug, den der
+        Speicher decken sollte, kommt aus dem Netz. Und weil die Zuteilung
+        greedy bündelt, hängt an einem stummen Speicher regelmäßig die GANZE
+        Anforderung — die übrigen stehen dann mit 0 W daneben.
+
+        Die Uhr merkt sich die Richtung mit: Ein Wechsel laden ⇄ entladen ist
+        ein neuer Befehl und startet die Frist neu, statt die Wartezeit der
+        alten Richtung zu erben.
+
         Gemeldet, nicht nachgetreten: Die Setpoints gehen ohnehin jeden Zyklus
         erneut raus, und ein Speicher, der sie ignoriert, braucht kein
         zusätzliches Schreiben, sondern jemanden, der hinschaut.
         """
-        if not laedt_soll or not s.power_entity:
-            self._laden_seit.pop(s.name, None)
+        if not (laden_soll or entladen_soll) or not s.power_entity:
+            self._leistung_seit.pop(s.name, None)
             self._speicher_gemeldet.discard(s.name)
             return
         now = dt_util.utcnow()
-        seit = self._laden_seit.setdefault(s.name, now)
-        if speicher_laedt(self._num_state(s.power_entity)):
+        vorher = self._leistung_seit.get(s.name)
+        if vorher is None or vorher[0] != laden_soll:
+            # Richtungswechsel ist ein neuer Befehl: Uhr UND Meldeflagge zurück.
+            # Ohne das Zurücksetzen bliebe die Meldung der alten Richtung stehen
+            # und unterdrückte die Warnung für die neue.
+            vorher = (laden_soll, now)
+            self._leistung_seit[s.name] = vorher
+            self._speicher_gemeldet.discard(s.name)
+        gemessen = self._num_state(s.power_entity)
+        if speicher_folgt(gemessen, laden=laden_soll):
             # Es fließt — die Uhr läuft erst wieder ab der nächsten Lücke.
-            self._laden_seit[s.name] = now
+            self._leistung_seit[s.name] = (laden_soll, now)
             self._speicher_gemeldet.discard(s.name)
             return
-        if now - seit < SPEICHER_QUITTUNG_FRIST:
+        if now - vorher[1] < SPEICHER_QUITTUNG_FRIST:
             return
         if s.name not in self._speicher_gemeldet:
             self._speicher_gemeldet.add(s.name)
             _LOGGER.warning(
-                "HEMS-Actuator: Speicher %s lädt nicht, obwohl seit %d min "
-                "Ladeleistung zugeteilt ist (gemessen: %s W) — der Überschuss "
-                "geht ins Netz",
+                "HEMS-Actuator: Speicher %s %s nicht, obwohl seit %d min "
+                "Leistung zugeteilt ist (gemessen: %s W) — %s",
                 s.name,
+                "lädt" if laden_soll else "entlädt",
                 SPEICHER_QUITTUNG_FRIST.total_seconds() // 60,
-                self._num_state(s.power_entity),
+                gemessen,
+                "der Überschuss geht ins Netz"
+                if laden_soll
+                else "der Bezug kommt aus dem Netz",
             )
         if s.name not in plan.speicher_nicht_uebernommen:
             plan.speicher_nicht_uebernommen.append(s.name)

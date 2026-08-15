@@ -26,8 +26,31 @@ The format, deliberately narrow:
 
 -->
 
-### YYYY-MM-DD No entries yet
+### 2026-08-15 Snapshot-Feld in `changelog.py` gebaut, aber nicht in `_DECISION_FIELDS` eingetragen
 
-- **What happened:** Placeholder, so the format is visible.
-- **Trigger:** The project was just set up.
-- **Fix:** Replace this entry with the first real mistake.
+- **What happened:** `akku_quittung` wurde am 14.08.2026 in `decision_snapshot`
+  gefüllt und war nie im Entscheidungs-Log zu sehen. `diff_snapshots` läuft
+  ausschließlich über `_DECISION_FIELDS`; ein Schlüssel, der dort fehlt, wird
+  gebaut und stillschweigend verworfen. Der Test prüfte nur, dass der Name
+  irgendwo in `changelog.py` vorkommt — und war grün.
+- **Trigger:** Ein neues `snap[...] = (...)` in `decision_snapshot`. Zu sehen
+  wäre es am HEMS-Log gewesen: Der Eintrag taucht dort nie auf, auch wenn der
+  Fall eintritt.
+- **Fix:** Schlüssel zusätzlich in `_DECISION_FIELDS` eintragen. Der Test liest
+  die Tabelle jetzt über den Syntaxbaum statt per Textsuche
+  (`tests/test_speicher_abgemeldet.py::_feldtabelle`).
+
+### 2026-08-15 Eingefrorene Entität ist nicht `unavailable` — Diagnose braucht `last_reported`
+
+- **What happened:** Ein ausgefallener Speicher lieferte weiter gültige
+  Zustände, nur keine neuen. Weder `_state()` (prüft `unavailable`/`unknown`)
+  noch die Historie (zeigt nur Änderungen) machten das sichtbar; die Ursache
+  war erst über `last_reported` zu sehen.
+- **Trigger:** Ein Gerät „tut nichts", obwohl HEMS regelt, und die Sensoren
+  sehen plausibel aus. Erster Griff: `last_reported` aller beteiligten
+  Entitäten vergleichen, nicht `state` oder `last_changed`.
+- **Fix:** `HemsCoordinator._abgemeldet` prüft `last_reported` gegen
+  `STORAGE_STALE_MIN`. Achtung bei der Umkehrung: Ein eingefrorenes
+  `last_reported` an einer *Stell*-Entität beweist NICHT, dass HEMS nicht
+  schreibt — Integrationen, die den Zustand erst nach Geräte-Echo setzen,
+  bewegen ihn beim Schreiben gar nicht.

@@ -29,6 +29,8 @@ from hems.actuation import (
     SOC_SET_KOPFRAUM,
     SPEICHER_LADEN_MIN_W,
     plan_soc_set,
+    speicher_entlaedt,
+    speicher_folgt,
     speicher_laedt,
 )
 from hems.strategies.types import PlanResult
@@ -127,6 +129,26 @@ def test_laden_ist_negative_leistung_oberhalb_des_rauschens():
     assert speicher_laedt(None) is False
 
 
+def test_entladen_ist_die_gespiegelte_schwelle():
+    assert speicher_entlaedt(581.0) is True
+    assert speicher_entlaedt(SPEICHER_LADEN_MIN_W) is True
+    assert speicher_entlaedt(10.0) is False
+    assert speicher_entlaedt(0.0) is False
+    assert speicher_entlaedt(-581.0) is False
+    assert speicher_entlaedt(None) is False
+
+
+def test_das_rauschband_gilt_in_beide_richtungen():
+    # Der Grund für zwei Funktionen statt einer Negation: Zwischen den
+    # Schwellen tut der Speicher gar nichts — und genau dieser Zustand ist der
+    # Fehlerfall, den die Quittung sucht. `not speicher_laedt(10)` wäre True
+    # und würde ihn als „entlädt" durchwinken.
+    assert speicher_folgt(10.0, laden=True) is False
+    assert speicher_folgt(10.0, laden=False) is False
+    assert speicher_folgt(-581.0, laden=True) is True
+    assert speicher_folgt(581.0, laden=False) is True
+
+
 # --- Naht zum Actuator ------------------------------------------------------
 
 
@@ -189,7 +211,23 @@ def test_quittung_haengt_an_einer_frist():
     fn = _funktion("actuator.py", "_quittung_speicher")
     namen = {k.id for k in ast.walk(fn) if isinstance(k, ast.Name)}
     assert "SPEICHER_QUITTUNG_FRIST" in namen
-    assert "speicher_laedt" in namen
+    assert "speicher_folgt" in namen
+
+
+def test_quittung_bekommt_beide_richtungen():
+    # Der Fall vom 15.08.2026: Die Zuteilung stand fünfeinhalb Stunden auf
+    # einem stummen Speicher, und weil die Quittung nur `laedt_soll` kannte,
+    # stieg sie beim Entladen sofort wieder aus.
+    aufruf = [
+        k
+        for k in ast.walk(_funktion("actuator.py", "_apply_battery"))
+        if isinstance(k, ast.Call)
+        and isinstance(k.func, ast.Attribute)
+        and k.func.attr == "_quittung_speicher"
+    ]
+    assert len(aufruf) == 1
+    quelle = ast.unparse(aufruf[0])
+    assert "laedt_soll" in quelle and "entlaedt_soll" in quelle
 
 
 def test_quittung_schreibt_die_beobachtung_in_den_plan():

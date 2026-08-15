@@ -34,6 +34,14 @@ class StorageState:
     # Saldo-Regelung selbstkorrigierend, ohne Abschalt-Mess-Zyklus.
     power_w: float | None = None
     cold_reserve: bool = False
+    # Der Speicher meldet nicht mehr: Seine SoC-Entität steht seit
+    # STORAGE_STALE_MIN Minuten auf demselben Wert, ohne ihn zu melden. Setzt
+    # der Coordinator (die Frist braucht Zeitstempel aus HA), auswerten muss es
+    # die Regelung: `soc` und `power_w` sind dann Fiktion, und wer einer
+    # Fiktion Leistung zuteilt, hält den Rest der Anlage still. Anders als
+    # `soc = None` (Wert nie lesbar) ist das ein Wert, der bloß nicht mehr
+    # stimmt — deshalb ein eigenes Feld statt eines gelöschten SoC.
+    stale: bool = False
 
 
 @dataclass
@@ -107,6 +115,11 @@ class ControlResult:
     zuteilung: list[StorageSetpoint] = field(default_factory=list)
     reserve_aktiv: bool = False
     reserve_namen: list[str] = field(default_factory=list)
+    # Speicher, die nicht mehr melden und deshalb aus der Zuteilung genommen
+    # wurden (siehe StorageState.stale). Steht hier ein Name, regelt HEMS
+    # bewusst ohne diesen Speicher — das gehört sichtbar gemacht, sonst ist
+    # eine halbierte Anlage von einer vollständigen nicht zu unterscheiden.
+    abgemeldet_namen: list[str] = field(default_factory=list)
     # „Laden statt einspeisen": alle Speicher stehen am Ladedeckel, es bliebe
     # aber Überschuss übrig, den auch die Lasten nicht nehmen. Dann wird über
     # den Deckel hinaus geladen — Einspeisen ist die schlechtere Verwendung.

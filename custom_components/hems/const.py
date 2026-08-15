@@ -154,6 +154,26 @@ RESERVE_SOC_OFF = 45.0
 CONTROL_LEAD_HYST_SOC = 12.0
 CONTROL_LEAD_POWER_W = 30.0
 
+# Ein Speicher gilt als abgemeldet, wenn seine SoC-Entität so viele Minuten
+# lang gar nichts mehr gemeldet hat. Gemessen wird `last_reported`, nicht
+# `last_changed`: Ein stehender SoC ändert sich nicht, ein lebendes Gerät
+# meldet ihn trotzdem weiter — nur die Meldung selbst trennt „unverändert" von
+# „stumm". `unavailable`/`unknown` erkennt der Coordinator ohnehin; hier geht
+# es um den Fall, den er NICHT erkennt: eine Entität, die ihren letzten Wert
+# einfach stehen lässt.
+#
+# Anlass ist der 15.08.2026: Ein Hyper 2000 fiel um 12:54 aus, seine
+# SoC-Entität blieb auf 100 % stehen, und die greedy bündelnde Zuteilung gab
+# genau diesem Speicher fünfeinhalb Stunden lang die volle Anforderung — er
+# hatte ja rechnerisch die meiste Energie. Die beiden lebenden Speicher standen
+# derweil auf 0 W, das Haus zog 1,1 kW aus dem Netz.
+#
+# 15 Minuten: weit über dem Meldetakt eines gesunden Speichers (Sekunden bis
+# wenige Minuten), damit eine Netzlücke oder ein Integrations-Neustart keinen
+# Speicher aus der Regelung wirft, und weit unter der Zeit, in der ein
+# stummer Speicher nennenswert Energie kostet.
+STORAGE_STALE_MIN = 15.0
+
 # Akku-Ladestrategie über den Tag. Für die kalendarische Alterung zählt nicht
 # der Spitzen-SoC, sondern die ZEIT bei hohem SoC. Der Ladedeckel ist deshalb
 # keine feste Kurve mehr, sondern die Rückwärtsrechnung des Nachtbedarfs:

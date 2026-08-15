@@ -29,9 +29,9 @@ SETPOINT_CARRYING_DOMAINS = ("water_heater",)
 # an der Number-Entität), ein Kopfraum von 1 verschwände im Runden.
 SOC_SET_KOPFRAUM = 2.0
 
-# Ab dieser gemessenen Ladeleistung (W, Betrag) gilt ein Speicher als ladend.
-# Nicht `> 0`: Die Leistungssensoren der Speicher rauschen um die Null, und ein
-# stehendes Gerät meldet gelegentlich zweistellige Werte.
+# Ab dieser gemessenen Leistung (W, Betrag) gilt ein Speicher als arbeitend —
+# in beide Richtungen. Nicht `> 0`: Die Leistungssensoren der Speicher rauschen
+# um die Null, und ein stehendes Gerät meldet gelegentlich zweistellige Werte.
 SPEICHER_LADEN_MIN_W = 50.0
 
 
@@ -201,3 +201,24 @@ def speicher_laedt(gemessen_w: float | None) -> bool:
     ``actuator.py`` entscheidet, ob daraus eine Meldung wird.
     """
     return gemessen_w is not None and gemessen_w <= -SPEICHER_LADEN_MIN_W
+
+
+def speicher_entlaedt(gemessen_w: float | None) -> bool:
+    """Ob ein Speicher messbar entlädt — die Gegenrichtung zu ``speicher_laedt``.
+
+    Eigene Funktion und nicht `not speicher_laedt(...)`: Zwischen den beiden
+    Schwellen liegt das Rauschband um die Null, in dem der Speicher weder das
+    eine noch das andere tut. Eine Negation würde genau dieses Band als
+    „entlädt\" durchgehen lassen — und damit den Fall verdecken, den die
+    Quittung sucht.
+    """
+    return gemessen_w is not None and gemessen_w >= SPEICHER_LADEN_MIN_W
+
+
+def speicher_folgt(gemessen_w: float | None, *, laden: bool) -> bool:
+    """Ob ein Speicher der kommandierten Richtung messbar folgt.
+
+    Der gemeinsame Einstieg für die Quittung in ``actuator.py``: Sie prüft
+    Laden und Entladen mit demselben Ablauf, nur die Richtung wechselt.
+    """
+    return speicher_laedt(gemessen_w) if laden else speicher_entlaedt(gemessen_w)

@@ -275,6 +275,10 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             ],
             "kaltreserve_aktiv": d.plan.regelung.reserve_aktiv,
             "kaltreserve_speicher": d.plan.regelung.reserve_namen,
+            # Steht hier ein Name, meldet dieser Speicher seit Minuten nichts
+            # mehr und ist aus der Zuteilung genommen — HEMS regelt dann
+            # bewusst mit weniger Speichern, als konfiguriert sind.
+            "abgemeldet": d.plan.regelung.abgemeldet_namen,
             # Ladestrategie über den Tag: geplanter Deckel, Abendziel, geplanter
             # Ladebeginn (None = läuft/jetzt), Mittagspause und der Fall
             # "lieber laden als einspeisen" (Deckel überfahren).

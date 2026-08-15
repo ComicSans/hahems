@@ -60,6 +60,12 @@ _DECISION_FIELDS: dict[str, tuple[str, str]] = {
     "notstromreserve": ("Notstromreserve", "akku"),
     "akku_modus": ("Akku-Regelung", "akku"),
     "akku_reserve": ("Akku-Kaltreserve", "akku"),
+    # Beide Speicher-Befunde gehören in dieselbe Tabelle wie ihre Geschwister
+    # bei Warmwasser und Heizung. `akku_quittung` stand seit dem 14.08.2026 im
+    # Snapshot, aber nicht hier — `diff_snapshots` läuft ausschließlich über
+    # diese Tabelle, der Eintrag wurde also gebaut und nie ausgegeben.
+    "akku_quittung": ("Akku folgt dem Sollwert", "akku"),
+    "akku_abgemeldet": ("Akku meldet sich", "akku"),
     "warmwasser_status": ("Warmwasser", "ww"),
     "warmwasser_soll": ("Warmwasser-Sollwert", "ww"),
     "warmwasser_quittung": ("Warmwasser-Freigabe gestellt", "ww"),
@@ -106,7 +112,17 @@ def decision_snapshot(
             offen_akku,
             "angekommen"
             if not offen_akku
-            else f"Speicher lädt nicht: {', '.join(offen_akku)}",
+            else f"Speicher folgt dem Sollwert nicht: {', '.join(offen_akku)}",
+        )
+        # Und ebenso beide Lagen für den abgemeldeten Speicher: Dass HEMS mit
+        # weniger Speichern regelt als konfiguriert, ist eine Entscheidung —
+        # und die gehört ins Entscheidungs-Log, samt Entwarnung.
+        stumm = tuple(getattr(reg, "abgemeldet_namen", ()))
+        snap["akku_abgemeldet"] = (
+            stumm,
+            "alle Speicher melden"
+            if not stumm
+            else f"meldet nicht mehr, aus der Regelung genommen: {', '.join(stumm)}",
         )
 
     if getattr(plan, "warmwasser_status", ""):

@@ -183,9 +183,32 @@ def _storage_control(
     """
     if inp.saldo_w is None or not inp.storages:
         return None
-    known = [s for s in inp.storages if s.soc is not None]
+    # Ein abgemeldeter Speicher ist für die Zuteilung dasselbe wie einer ohne
+    # SoC: Sein Stand ist nicht bekannt, sondern nur zuletzt bekannt gewesen.
+    # Der Unterschied liegt allein im Schaden — ein stehengebliebener Wert
+    # gewinnt jede Rangfolge, ein fehlender nimmt gar nicht teil (siehe
+    # STORAGE_STALE_MIN).
+    known = [s for s in inp.storages if s.soc is not None and not s.stale]
     if not known:
-        return None
+        abgemeldet = [s.name for s in inp.storages if s.stale]
+        if not abgemeldet:
+            # Kein Speicher hat je einen SoC geliefert: unverändert keine
+            # Empfehlung — daran hängt nichts, was abgeschaltet gehörte.
+            return None
+        # Alle Speicher stumm — bei drei Geräten an einem MQTT-Pfad ein
+        # Broker-Neustart, nicht die Ausnahme. Hier NICHT auf `None` fallen:
+        # Ohne Empfehlung schreibt der Actuator gar nichts, und der zuletzt
+        # kommandierte Sollwert bliebe blind stehen (genau das, wogegen
+        # `release_battery` existiert). Stattdessen eine ausdrücklich passive
+        # Empfehlung — 0 W an alle, und der Grund steht in `abgemeldet_namen`,
+        # damit Sensor und Log den Zustand auch dann noch benennen können.
+        return ControlResult(
+            modus="pausiert",
+            fehler_w=0.0,
+            soll_w=0.0,
+            zuteilung=[StorageSetpoint(name=s.name, watt=0.0) for s in inp.storages],
+            abgemeldet_namen=abgemeldet,
+        )
 
     # Kaltreserve-Hysterese über den mittleren SoC der Nicht-Reserve-Speicher.
     primary_socs = [s.soc for s in known if not s.cold_reserve]
@@ -197,7 +220,12 @@ def _storage_control(
     )
     reserve_aktiv = res.flags.kaltreserve
 
-    bat_ist = sum(s.power_w for s in inp.storages if s.power_w is not None)
+    # Ist-Leistung nur aus Speichern, die noch melden: Der eingefrorene Wert
+    # eines abgemeldeten Speichers ist kein Messwert mehr, und der Regler
+    # rechnet ihn sonst als reale Leistung in seinen nächsten Schritt ein.
+    bat_ist = sum(
+        s.power_w for s in inp.storages if s.power_w is not None and not s.stale
+    )
     # E-Auto-Zwangsladung: die Wallbox-Last nicht ausregeln, sonst entlädt der
     # Regler den Hausakku, um den Netzbezug der Wallbox zu decken. Der
     # herausgerechnete Saldo lässt den Akku seinen SoC halten; das Zwangs-Delta
@@ -261,6 +289,7 @@ def _storage_control(
         soll_w=round(soll, 0),
         reserve_aktiv=reserve_aktiv,
         reserve_namen=[s.name for s in inp.storages if s.cold_reserve],
+        abgemeldet_namen=[s.name for s in inp.storages if s.stale],
     )
 
     def _verteile_entladen(

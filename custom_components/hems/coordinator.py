@@ -48,6 +48,7 @@ from .const import (
     PRIORITY_AUTO,
     SALDO_JUMP_COOLDOWN_S,
     SALDO_JUMP_W,
+    STORAGE_STALE_MIN,
     SWITCH_LEARN_FLOOR_HEAT_W,
     SWITCH_LEARN_FLOOR_W,
     WEATHER_CONDITION_FACTORS,
@@ -616,6 +617,28 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         except ValueError:
             return None
 
+    def _abgemeldet(self, entity_id: str | None, frist_min: float) -> bool:
+        """Ob eine Entität seit `frist_min` Minuten nichts mehr gemeldet hat.
+
+        Gegen `last_reported` und nicht `last_changed`/`last_updated`: Ein
+        unveränderter Wert erzeugt keine Zustandsänderung, ein lebendes Gerät
+        meldet ihn trotzdem in jedem Takt. Nur `last_reported` trennt deshalb
+        „steht still" von „ist stumm" — und genau diese Unterscheidung fehlte,
+        als am 15.08.2026 ein ausgefallener Speicher mit stehengebliebenen
+        100 % die ganze Entladeanforderung an sich zog.
+
+        Nicht konfiguriert oder (noch) nicht vorhanden ist NICHT abgemeldet:
+        Das ist ein Konfigurationsbefund, den `config_check` meldet, und eine
+        fehlende Entität liefert ohnehin keinen SoC.
+        """
+        if not entity_id:
+            return False
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return False
+        zuletzt = getattr(state, "last_reported", None) or state.last_updated
+        return dt_util.utcnow() - zuletzt >= timedelta(minutes=frist_min)
+
     def _is_on(self, entity_id: str | None) -> bool:
         """Ein/Aus-Rückmeldung als bool. Nicht konfiguriert, nicht vorhanden
         oder unavailable/unknown → False: eine optionale Rückmeldung, die nicht
@@ -1052,6 +1075,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 max_discharge_w=s.max_discharge_w,
                 power_w=self._power_w(s.power_entity),
                 cold_reserve=s.cold_reserve,
+                stale=self._abgemeldet(s.soc_entity, STORAGE_STALE_MIN),
             )
             for s in reg.storages
         ]
@@ -1062,6 +1086,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 "soc": st.soc,
                 "watt": st.power_w,
                 "kapazitaet_kwh": st.capacity_kwh,
+                # Damit die Karte einen stehengebliebenen Wert nicht als
+                # Messwert zeigt: `soc` und `watt` sind hier der letzte
+                # bekannte Stand, nicht der aktuelle.
+                "abgemeldet": st.stale,
             }
             for st in storages
         ]

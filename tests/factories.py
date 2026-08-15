@@ -44,6 +44,7 @@ def storage(
     max_discharge_w: float = 1200.0,
     power_w: float | None = 0.0,
     cold_reserve: bool = False,
+    stale: bool = False,
 ) -> P.StorageState:
     return P.StorageState(
         name=name,
@@ -54,6 +55,7 @@ def storage(
         max_discharge_w=max_discharge_w,
         power_w=power_w,
         cold_reserve=cold_reserve,
+        stale=stale,
     )
 
 
