@@ -26,6 +26,23 @@ The format, deliberately narrow:
 
 -->
 
+### 2026-08-16 Ein neuer Betriebsmodus neben `auto` — die zweite Prüfung wird vergessen
+
+- **What happened:** Beim Einbau von `invers-auto` war zuerst nur
+  `self.mode == MODE_AUTO` in `_async_update_data` gewidert. Die Zwillings-
+  prüfung `self._prev_mode == MODE_AUTO` zwei Zeilen tiefer wäre stehen
+  geblieben — dann gibt `release_battery` den Akku beim Wechsel invers-auto →
+  beobachten/aus nicht mehr frei, und er läuft mit der zuletzt kommandierten
+  Rate blind weiter. Genau der Fall, für den `release_battery` existiert. Vor
+  dem Commit gefunden, gekostet hat es nichts.
+- **Trigger:** Jeder neue Wert neben `MODE_AUTO`. Der Betriebsmodus wird an
+  mehr als einer Stelle geprüft, und die zweite (Verlassen, Freigabe) ist
+  stumm — kein Test schlägt an, kein Log meldet etwas.
+- **Fix:** Die Modi, in denen geschrieben wird, stehen als `MODES_ACTUATING` in
+  `const.py`; alle Prüfungen laufen über die Liste. `tests/test_invers_modus.py
+  ::test_beide_modus_pruefungen_laufen_ueber_die_liste` liest das über den
+  Syntaxbaum und verbietet einen direkten Vergleich gegen `MODE_AUTO`.
+
 ### 2026-08-15 Snapshot-Feld in `changelog.py` gebaut, aber nicht in `_DECISION_FIELDS` eingetragen
 
 - **What happened:** `akku_quittung` wurde am 14.08.2026 in `decision_snapshot`

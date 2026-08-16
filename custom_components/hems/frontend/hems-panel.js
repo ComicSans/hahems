@@ -55,6 +55,11 @@ const HEIZ_STATUS = {
 // nur die Beschriftung weicht ab, wo die reine Erst-Buchstaben-Großschreibung
 // nicht passt (z. B. „vollladen" → „Laden").
 const SEG_LABELS = {
+  mode: {
+    // Nur der Bindestrich-Slug braucht einen Override; die übrigen Modi trifft
+    // die Erst-Buchstaben-Großschreibung unten schon richtig.
+    "invers-auto": "Invers-Auto",
+  },
   goal: {
     eigenverbrauch: "Eigenverbrauch",
     nulleinspeisung: "Nulleinspeisung",
