@@ -59,6 +59,16 @@ ROLE_HEATING = "heating"
 MODE_OBSERVE = "beobachten"  # empfehlen + loggen, nicht schalten
 MODE_AUTO = "auto"  # empfehlen + schalten (Actuator aktiv)
 MODE_OFF = "aus"  # reiner Stopp: keine Schreibzugriffe (Kill-Switch)
+# Wie `auto`, nur der Richtungs-Select des Speichers wird verkehrt herum
+# gestellt: Laden → Ausgangsmodus, Entladen → Eingangsmodus. Für Geräte bzw.
+# Integrationen, deren Ein-/Ausgangsmodus-Optionen vertauscht beschriftet sind.
+# Die Leistungs-Sollwerte bleiben unberührt — sonst liefe die Regelung, die
+# über die gemessene Speicherleistung schließt, gegen sich selbst.
+MODE_INVERS_AUTO = "invers-auto"
+# Die Modi, in denen der Actuator schreibt. Wer hier prüft statt auf MODE_AUTO,
+# vergisst den Invers-Modus nicht — insbesondere nicht beim Verlassen, wo der
+# Akku freigegeben werden muss (siehe `Actuator.release_battery`).
+MODES_ACTUATING = (MODE_AUTO, MODE_INVERS_AUTO)
 
 DEFAULT_BASELINE_W = 500
 DEFAULT_NIGHT_W = 400

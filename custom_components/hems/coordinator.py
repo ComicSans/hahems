@@ -43,8 +43,9 @@ from .const import (
     EV_DEMAND_GRACE_S,
     EV_EMPTY_COOLDOWN_S,
     GOAL_SELF_CONSUMPTION,
-    MODE_AUTO,
+    MODE_INVERS_AUTO,
     MODE_OBSERVE,
+    MODES_ACTUATING,
     PRIORITY_AUTO,
     SALDO_JUMP_COOLDOWN_S,
     SALDO_JUMP_W,
@@ -1300,16 +1301,20 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         data.verlauf_pv_entity = self._own_entity_id("pv_leistung_jetzt")
         data.verlauf_soc_entity = self._own_entity_id("speicher_soc")
 
-        if self.mode == MODE_AUTO:
-            _LOGGER.info("HEMS-Auto: %s", data.plan.empfehlung)
-            await self._actuator.apply(reg, data.plan)
+        if self.mode in MODES_ACTUATING:
+            _LOGGER.info("HEMS-%s: %s", self.mode, data.plan.empfehlung)
+            await self._actuator.apply(
+                reg, data.plan, invers=self.mode == MODE_INVERS_AUTO
+            )
         else:
             if self.mode == MODE_OBSERVE:
                 _LOGGER.info("HEMS-Empfehlung: %s", data.plan.empfehlung)
             # Verlassen des Auto-Modus (→ beobachten oder aus): den Akku einmalig
             # freigeben, damit er nicht mit der letzten Rate blind weiterläuft.
-            # WW/WP/EV bleiben unangetastet.
-            if self._prev_mode == MODE_AUTO:
+            # WW/WP/EV bleiben unangetastet. Der Wechsel auto ⇄ invers-auto ist
+            # kein Verlassen — beide schalten weiter, die Freigabe wäre ein
+            # unnötiger Aussetzer mitten im Betrieb.
+            if self._prev_mode in MODES_ACTUATING:
                 _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
                 await self._actuator.release_battery(reg)
         self._prev_mode = self.mode

@@ -15,6 +15,7 @@ from .const import (
     GOAL_SELF_CONSUMPTION,
     GOALS,
     MODE_AUTO,
+    MODE_INVERS_AUTO,
     MODE_OBSERVE,
     MODE_OFF,
 )
@@ -37,7 +38,7 @@ async def async_setup_entry(
 class HemsModeSelect(SelectEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_name = "Modus"
-    _attr_options = [MODE_OBSERVE, MODE_AUTO, MODE_OFF]
+    _attr_options = [MODE_OBSERVE, MODE_AUTO, MODE_INVERS_AUTO, MODE_OFF]
 
     def __init__(self, coordinator: HemsCoordinator) -> None:
         self._coordinator = coordinator

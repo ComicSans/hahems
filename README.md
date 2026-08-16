@@ -58,6 +58,7 @@ am Eingabefeld, im Options-Flow wie im HEMS-Panel.
 |---|---|
 | **beobachten** | Standard. Empfehlungen werden berechnet und angezeigt, aber nichts geschaltet. |
 | **auto** | HEMS schreibt die Empfehlungen zusätzlich auf die konfigurierten Steuer-Entitäten. |
+| **invers-auto** | Wie **auto**, nur der Richtungs-Select des Speichers wird verkehrt herum gestellt: Laden → Ausgangsmodus, Entladen → Eingangsmodus. Für Geräte, deren Ein-/Ausgangsmodus vertauscht beschriftet ist. Die Lade-/Entlade-Sollwerte bleiben unverändert. |
 | **aus** | Kill-Switch. Keinerlei Schreibzugriffe. Geräte behalten ihren letzten Zustand, parallele Automationen übernehmen sofort wieder. |
 
 > **Der Auto-Modus schaltet echte Hardware.** Vor dem Scharfschalten:
@@ -208,7 +209,7 @@ funktioniert unabhängig davon.
 
 **Steuerung und Diagnose**
 
-- `select.hems_modus` — beobachten / auto / aus
+- `select.hems_modus` — beobachten / auto / invers-auto / aus
 - `select.hems_optimierungsziel` — eigenverbrauch / nulleinspeisung / vollladen
 - `switch.hems_e_auto_zwangsladung`
 - `switch.hems_speicher_als_notstromreserve` — Speicher auf Ausfall-Bereitschaft

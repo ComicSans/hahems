@@ -22,7 +22,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from . import entity_domain
-from .actuation import plan_soc_set, plan_ww_action, speicher_folgt
+from .actuation import (
+    plan_soc_set,
+    plan_ww_action,
+    speicher_folgt,
+    speicher_modus_option,
+)
 from .models import DeviceRegistry, Storage
 from .strategies.types import PlanResult
 
@@ -124,13 +129,21 @@ class Actuator:
         self._leistung_seit: dict[str, tuple[bool, datetime]] = {}
         self._speicher_gemeldet: set[str] = set()
 
-    async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
+    async def apply(
+        self, reg: DeviceRegistry, plan: PlanResult, *, invers: bool = False
+    ) -> None:
         """Reihenfolge WW → Akku → modulierbare Lasten. Jedes Gerät
         gekapselt. Die Zwangsladung ist bereits in der Empfehlung kodiert
         (plan.ev_regelung.zwang → jede Last läuft, mit dem dort berechneten
-        Sollstrom zwischen Unter- und Obergrenze)."""
+        Sollstrom zwischen Unter- und Obergrenze).
+
+        ``invers`` reicht den Invers-Modus durch: nur der Richtungs-Select des
+        Speichers wird vertauscht gestellt (siehe ``speicher_modus_option``).
+        Bewusst als Argument je Aufruf und nicht als Feld am Actuator — der
+        Betriebsmodus gehört dem Coordinator, eine Kopie hier ginge schal.
+        """
         await self._guard(self._apply_ww, reg, plan, name="Warmwasser")
-        await self._guard(self._apply_battery, reg, plan, name="Speicher")
+        await self._guard(self._apply_battery, reg, plan, name="Speicher", invers=invers)
         await self._guard(self._apply_modulated, reg, plan, name="Lasten")
         await self._guard(self._apply_switchable, reg, plan, name="Schaltlasten")
         await self._guard(self._apply_heating, reg, plan, name="Heizung")
@@ -149,9 +162,9 @@ class Actuator:
                     "HEMS-Actuator: Akku-Freigabe %s fehlgeschlagen: %s", s.name, err
                 )
 
-    async def _guard(self, fn, reg, plan, *, name) -> None:
+    async def _guard(self, fn, reg, plan, *, name, **kwargs) -> None:
         try:
-            await fn(reg, plan)
+            await fn(reg, plan, **kwargs)
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("HEMS-Actuator: %s fehlgeschlagen: %s", name, err)
 
@@ -356,7 +369,9 @@ class Actuator:
 
     # --- Speicher (Akku) ----------------------------------------------------
 
-    async def _apply_battery(self, reg: DeviceRegistry, plan: PlanResult) -> None:
+    async def _apply_battery(
+        self, reg: DeviceRegistry, plan: PlanResult, *, invers: bool = False
+    ) -> None:
         ctrl = plan.regelung
         if ctrl is None:
             return
@@ -398,30 +413,23 @@ class Actuator:
                 charge_w, discharge_w = 0.0, watt
             else:  # "pausiert"
                 charge_w = discharge_w = 0.0
-            # Richtungs-Select (optional, z. B. Zendure ac_mode) nur beim
-            # tatsächlichen Laden/Entladen stellen — in der Pause den zuletzt
-            # gesetzten Modus stehen lassen. Sonst flippt der Select bei jedem
-            # Deadband-Durchgang (laden ⇄ pausiert) zwischen den Optionen und
-            # lässt das Gerät takten. Die 0/0-Setpoints halten den Speicher in
-            # der Pause ohnehin passiv, egal in welcher Richtung der Select steht.
-            if (
-                s.mode_entity
-                and s.mode_charge_option
-                and s.mode_discharge_option
-                and ctrl.modus in ("laden", "entladen")
-            ):
-                want = (
-                    s.mode_charge_option
-                    if ctrl.modus == "laden"
-                    else s.mode_discharge_option
+            # Richtungs-Select (optional, z. B. Zendure ac_mode). Welche Option
+            # fällig ist — und wann gar keine — entscheidet die HA-freie
+            # `speicher_modus_option`; dort steht auch, warum der Invers-Modus
+            # ausschließlich hier wirkt.
+            want = speicher_modus_option(
+                ctrl.modus,
+                lade_option=s.mode_charge_option,
+                entlade_option=s.mode_discharge_option,
+                invers=invers,
+            )
+            if s.mode_entity and want and self._state(s.mode_entity) != want:
+                await self._call(
+                    s.mode_entity.split(".")[0],
+                    "select_option",
+                    s.mode_entity,
+                    option=want,
                 )
-                if self._state(s.mode_entity) != want:
-                    await self._call(
-                        s.mode_entity.split(".")[0],
-                        "select_option",
-                        s.mode_entity,
-                        option=want,
-                    )
             await self._set_number(s.charge_setpoint_entity, charge_w)
             await self._set_number(s.discharge_setpoint_entity, discharge_w)
 

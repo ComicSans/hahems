@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 from homeassistant.core import CoreState, HomeAssistant
 
-from .const import DEFAULT_SWITCHABLE_EXPECTED_W, MODE_AUTO
+from .const import DEFAULT_SWITCHABLE_EXPECTED_W, MODES_ACTUATING
 from .models import DeviceRegistry
 
 
@@ -42,7 +42,7 @@ class ConfigCheck:
     def problem(self, mode: str) -> bool:
         """Sensor-Zustand: harte Fehler immer; Überlappung nur im Auto-Modus
         (im Beobachten-/Aus-Modus sind aktive Automationen erwünscht)."""
-        return bool(self.errors) or (mode == MODE_AUTO and bool(self.overlaps))
+        return bool(self.errors) or (mode in MODES_ACTUATING and bool(self.overlaps))
 
     def signature(self) -> tuple:
         return (

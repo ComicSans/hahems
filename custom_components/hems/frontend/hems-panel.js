@@ -249,7 +249,7 @@ class HemsPanel extends HTMLElement {
     s.innerHTML = `
       <div class="panel-card">
         <h2>Betriebsmodus</h2>
-        <p class="hint">beobachten = nur empfehlen · auto = schalten · aus = Stopp</p>
+        <p class="hint">beobachten = nur empfehlen · auto = schalten · invers-auto = schalten, Richtungs-Select vertauscht · aus = Stopp</p>
         <div class="segmented" data-role="mode"></div>
       </div>
       <div class="panel-card">

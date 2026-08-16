@@ -29,7 +29,12 @@ _MAX_ENTRIES = 5000  # harte Obergrenze als Notnagel gegen Ausreißer
 
 # Anzeigetexte der Rohwerte (die Roh-States sind bereits deutsch, aber teils
 # klein/uneinheitlich geschrieben).
-_MODE_LABEL = {"beobachten": "beobachten", "auto": "auto", "aus": "aus"}
+_MODE_LABEL = {
+    "beobachten": "beobachten",
+    "auto": "auto",
+    "invers-auto": "auto (invers)",
+    "aus": "aus",
+}
 _GOAL_LABEL = {
     "eigenverbrauch": "Eigenverbrauch",
     "nulleinspeisung": "Nulleinspeisung",
