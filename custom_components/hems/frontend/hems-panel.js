@@ -307,9 +307,12 @@ class HemsPanel extends HTMLElement {
 
   _selectTab(tab) {
     this._tab = tab;
-    this._tabButtons.forEach((b) =>
-      b.classList.toggle("active", b.dataset.tab === tab),
-    );
+    this._tabButtons.forEach((b) => {
+      const active = b.dataset.tab === tab;
+      b.classList.toggle("active", active);
+      if (active)
+        b.scrollIntoView({ inline: "nearest", block: "nearest" });
+    });
     for (const [id, el] of Object.entries(this._sections)) el.hidden = id !== tab;
     if (tab === "config" && !this._cfg) this._loadConfig();
     if (tab === "logs") this._openLogs();
@@ -1081,12 +1084,17 @@ const STYLE = `
     cursor: pointer; padding: 4px 8px; border-radius: 8px;
   }
   .menu:hover { background: rgba(255,255,255,.15); }
+  /* Die Leiste scrollt in sich selbst, nie die Seite — sonst ragen die Tabs
+     auf schmalen Bildschirmen über den Viewport hinaus. */
   nav.tabs { display: flex; gap: 4px; padding: 8px 12px 0;
-    border-bottom: 1px solid var(--divider-color); background: var(--card-background-color); }
+    border-bottom: 1px solid var(--divider-color); background: var(--card-background-color);
+    overflow-x: auto; scrollbar-width: none; }
+  nav.tabs::-webkit-scrollbar { display: none; }
   nav.tabs button {
     background: none; border: none; color: var(--secondary-text-color);
     padding: 10px 16px; cursor: pointer; font-size: 14px;
     border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0;
+    flex: 0 0 auto; white-space: nowrap;
   }
   nav.tabs button.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
   nav.tabs button:hover { background: var(--secondary-background-color); }
