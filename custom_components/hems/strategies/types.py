@@ -359,6 +359,25 @@ class PlanFlags:
     heizen: dict[str, bool] = field(default_factory=dict)
 
 
+def speicher_stumm_latch(
+    verriegelt: set[str], name: str, *, schweigt: bool, nicht_gefolgt: bool
+) -> bool:
+    """Verriegelung „Speicher ausgefallen": zwei Auslöser, ein Rückweg.
+
+    Verriegelt wird, wenn die SoC-Entität schweigt UND der Speicher einem Befehl
+    ≠ 0 nicht gefolgt ist. Entriegelt wird ausschließlich über eine frische
+    Meldung (`schweigt` fällt auf False) — nie dadurch, dass HEMS aufhört zu
+    befehlen. Die Begründung beider Richtungen steht bei `HemsCoordinator._stumm`;
+    hier steht sie HA-frei, damit der Übergang über mehrere Zyklen prüfbar ist
+    (`tests/test_speicher_selbstsperre.py`). `verriegelt` wird dabei verändert.
+    """
+    if not schweigt:
+        verriegelt.discard(name)
+    elif nicht_gefolgt:
+        verriegelt.add(name)
+    return name in verriegelt
+
+
 def _latch(prev: bool, value: float | None, on: float, off: float) -> bool:
     """Schmitt-Trigger: True erst ab `on`, False erst wieder ab `off`.
 

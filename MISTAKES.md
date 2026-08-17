@@ -47,9 +47,20 @@ The format, deliberately narrow:
   Hälfte liefert die Quittung des Actuators (`_quittung_speicher`,
   `plan.speicher_nicht_uebernommen`), die den WERT des Leistungssensors liest
   statt dessen Alter und deshalb unabhängig davon ist, wann eine Integration
-  schreibt. Ohne Leistungssensor gilt niemand als abgemeldet.
-  `tests/test_speicher_selbstsperre.py` prüft die UND-Verknüpfung über den
-  Syntaxbaum. Siehe Korrektur am Eintrag vom 15.08.2026.
+  schreibt. Ohne Leistungssensor verriegelt nie etwas.
+  `tests/test_speicher_selbstsperre.py` prüft die Übergänge.
+  Siehe Korrektur am Eintrag vom 15.08.2026.
+- **Beinahe-Folgefehler:** Der erste Anlauf las `nicht_gefolgt` in jedem Zyklus
+  neu und verriegelte nicht. Das hätte den 15.08. getaktet wiederholt: Ein
+  abgemeldeter Speicher bekommt 0 W, `_apply_battery` leitet
+  `laden_soll`/`entladen_soll` aus der Zuteilung ab, `_quittung_speicher` steigt
+  bei 0 W sofort aus — die Abmeldung löscht also ihren eigenen Beweis, und der
+  Ausfall kehrt alle 5 Minuten in die Zuteilung zurück. **Merke:** Wird ein
+  Befund aus einer Reaktion abgeleitet, die der Befund selbst unterbindet,
+  gehört er verriegelt, und das Entriegeln an ein Signal, das unabhängig davon
+  weiterläuft (hier: eine frische Meldung). Ein Test über einen einzigen Zyklus
+  sieht davon nichts — `speicher_stumm_latch` steht HA-frei in
+  `strategies/types.py`, damit die Übergänge über mehrere Zyklen prüfbar sind.
 
 ### 2026-08-16 Ein neuer Betriebsmodus neben `auto` — die zweite Prüfung wird vergessen
 

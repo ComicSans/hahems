@@ -74,6 +74,7 @@ from .strategies.types import (
     PlanResult,
     StorageState,
     SwitchableState,
+    speicher_stumm_latch,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -440,6 +441,13 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._last_jump_refresh: datetime | None = None
         # Hysterese-Zustand des Planners, über die Update-Zyklen fortgeschrieben.
         self._plan_flags = PlanFlags()
+        # Als ausgefallen verriegelte Speicher (siehe `_stumm`). Muss über die
+        # Zyklen stehen bleiben: Ein abgemeldeter Speicher bekommt 0 W, und ohne
+        # Befehl quittiert der Actuator nicht mehr — der Beweis für die
+        # Abmeldung verschwände also genau dadurch, dass sie wirkt, und der
+        # Ausfall käme im Takt von 5 Minuten immer wieder in die Zuteilung
+        # zurück. Entriegelt wird ausschließlich über eine frische Meldung.
+        self._speicher_stumm: set[str] = set()
         # Fairness-Akkumulator für die Lastrotation: geladene Energie je Last
         # (kWh) am laufenden lokalen Kalendertag, aus der gemessenen Leistung
         # integriert. Reset um Mitternacht. Bewusst „dumm" — jede Entscheidung
@@ -619,32 +627,45 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             return None
 
     def _stumm(self, s, offen: set[str]) -> bool:
-        """Ob ein Speicher abgemeldet ist: still UND einem Befehl nicht gefolgt.
+        """Ob ein Speicher abgemeldet ist — verriegelt, mit zwei Auslösern.
 
-        Beide Hälften sind nötig, und die zweite ist die tragende. `_abgemeldet`
-        allein misst nur, dass keine Meldung mehr kommt — und das ist kein
-        Ausfallbeweis: Eine push-basierte Integration schreibt den Zustand nur
-        bei Wertänderung (die Zendure-Integration setzt `_attr_should_poll =
-        False` und ruft `schedule_update_ha_state()` erst, wenn sich der Wert
-        unterscheidet). Ein voller Speicher, der ruht, ändert nichts, meldet
-        nichts — und war am 17.08.2026 damit „abgemeldet", worauf HEMS pausierte,
-        worauf er weiter ruhte. Eine Sperre, die sich selbst hält; das Haus zog
-        derweil 800 W aus dem Netz.
+        **Verriegeln** braucht beides: Die SoC-Entität schweigt seit
+        STORAGE_STALE_MIN Minuten UND der Speicher ist im letzten Zyklus einem
+        Befehl ≠ 0 nicht gefolgt (`offen`, aus `_quittung_speicher` im Actuator,
+        Frist SPEICHER_QUITTUNG_FRIST).
 
-        `offen` sind die Speicher, die im letzten Zyklus einen Befehl ≠ 0 nicht
-        ausgeführt haben (`_quittung_speicher` im Actuator, Frist
-        SPEICHER_QUITTUNG_FRIST). Diese Prüfung liest den WERT des
-        Leistungssensors, nicht dessen Alter, und ist deshalb unabhängig davon,
-        wann eine Integration schreibt. Der Fall vom 15.08.2026 bleibt gedeckt
-        und wird sogar früher erkannt (5 statt 15 Minuten): Der ausgefallene
-        Speicher bekam die volle Entladeanforderung und lieferte nichts.
+        Schweigen allein genügt ausdrücklich nicht. `_abgemeldet` misst nur, dass
+        keine Meldung mehr kommt, und das ist kein Ausfallbeweis: Eine
+        push-basierte Integration schreibt den Zustand nur bei Wertänderung (die
+        Zendure-Integration setzt `_attr_should_poll = False` und ruft
+        `schedule_update_ha_state()` erst, wenn sich der Wert unterscheidet). Ein
+        voller Speicher, der ruht, ändert nichts, meldet nichts — und war am
+        17.08.2026 damit „abgemeldet", worauf HEMS pausierte, worauf er weiter
+        ruhte. Eine Sperre, die sich selbst hält; das Haus zog derweil 800 W aus
+        dem Netz. Die Quittung dagegen liest den WERT des Leistungssensors, nicht
+        dessen Alter, und ist deshalb unabhängig davon, wann eine Integration
+        schreibt.
+
+        **Entriegelt** wird ausschließlich über eine frische Meldung — nicht
+        dadurch, dass HEMS aufhört zu befehlen. Sonst löschte die Abmeldung ihren
+        eigenen Beweis: Ein abgemeldeter Speicher bekommt 0 W, ohne Befehl
+        quittiert der Actuator gar nicht mehr, `offen` liefe leer, und der
+        Ausfall käme im 5-Minuten-Takt in die Zuteilung zurück — mit genau dem
+        Schaden vom 15.08.2026, nur getaktet. Der Rückweg über die Meldung ist
+        zugleich der schnellste: Meldet das Gerät wieder, regelt HEMS im nächsten
+        Zyklus mit, ohne Neustart und ohne Quittierung von Hand.
 
         Ohne Leistungssensor ist eine Nichtausführung nicht feststellbar — dann
-        gilt der Speicher nie als abgemeldet. Bewusst so herum: Ein zu Unrecht
-        abgemeldeter Speicher legt die ganze Regelung still, ein zu Unrecht
-        mitgeführter kostet die Zeit bis zum nächsten Befehl.
+        verriegelt nie etwas. Bewusst so herum: Ein zu Unrecht abgemeldeter
+        Speicher legt die ganze Regelung still, ein zu Unrecht mitgeführter
+        kostet die Zeit bis zum nächsten Befehl.
         """
-        return s.name in offen and self._abgemeldet(s.soc_entity, STORAGE_STALE_MIN)
+        return speicher_stumm_latch(
+            self._speicher_stumm,
+            s.name,
+            schweigt=self._abgemeldet(s.soc_entity, STORAGE_STALE_MIN),
+            nicht_gefolgt=s.name in offen,
+        )
 
     def _abgemeldet(self, entity_id: str | None, frist_min: float) -> bool:
         """Ob eine Entität seit `frist_min` Minuten nichts mehr gemeldet hat.

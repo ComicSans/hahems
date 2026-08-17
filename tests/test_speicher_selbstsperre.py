@@ -23,6 +23,15 @@ Der Ausweg ist die Quittung des Actuators, die es längst gibt: Sie liest den
 WERT des Leistungssensors gegen einen ausstehenden Befehl, nicht dessen Alter,
 und ist damit unabhängig davon, wann eine Integration schreibt. Abgemeldet ist
 seither nur, wer schweigt UND einem Befehl nicht folgt.
+
+Die Verriegelung ist der zweite Teil und wiegt schwerer als der erste: Ein
+abgemeldeter Speicher bekommt 0 W, und ohne Befehl quittiert der Actuator gar
+nicht mehr (`_apply_battery` leitet `laden_soll`/`entladen_soll` aus der
+Zuteilung ab, `_quittung_speicher` steigt bei 0 W sofort aus). Ohne Verriegelung
+löschte die Abmeldung also ihren eigenen Beweis und der Ausfall käme im
+5-Minuten-Takt zurück in die Zuteilung — der Schaden vom 15.08.2026, nur
+getaktet. Deshalb prüft dieser Test die Übergänge über mehrere Zyklen und nicht
+bloß die Form des Ausdrucks.
 """
 from __future__ import annotations
 
@@ -31,6 +40,7 @@ from pathlib import Path
 
 from factories import plan_input, storage, zuteilung
 from hems import planner as P
+from hems.strategies.types import speicher_stumm_latch
 
 BASIS = Path(__file__).resolve().parents[1] / "custom_components" / "hems"
 
@@ -71,22 +81,74 @@ def test_ruhender_voller_speicher_deckt_den_netzbezug():
 # --- Die Erkennung im Coordinator (HA-nah, über den Syntaxbaum) --------------
 
 
-def test_stille_allein_meldet_niemanden_ab():
-    """`_stumm` verlangt BEIDE Hälften.
+def test_stille_allein_verriegelt_niemanden():
+    # Der 17.08.: Der Speicher schweigt seit Stunden, aber es lag nie ein
+    # Befehl an, dem er nicht gefolgt wäre. Wer nichts befohlen bekam, kann
+    # nichts verweigert haben.
+    verriegelt: set[str] = set()
+    for _ in range(50):
+        assert not speicher_stumm_latch(
+            verriegelt, "L1", schweigt=True, nicht_gefolgt=False
+        )
+    assert verriegelt == set()
 
-    Fiele die Kopplung an `offen` weg, stünde exakt der 17.08. wieder da: Ein
-    Speicher, dem nichts befohlen wurde, kann nichts verweigert haben.
+
+def test_schweigen_und_nichtausfuehrung_verriegeln():
+    # Der 15.08.: eingefrorene 100 %, volle Anforderung, keine Leistung.
+    verriegelt: set[str] = set()
+    assert speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+
+
+def test_verriegelung_haelt_ohne_weiteren_befehl():
+    """Der Kern: Die Abmeldung darf ihren eigenen Beweis nicht löschen.
+
+    Sobald L1 abgemeldet ist, teilt ihm die Regelung 0 W zu — und ohne Befehl
+    quittiert der Actuator nicht mehr, `nicht_gefolgt` fällt also auf False.
+    Ohne Verriegelung käme der ausgefallene Speicher damit im nächsten Zyklus
+    zurück in die Zuteilung, gewönne mit seinen eingefrorenen 100 % erneut die
+    Rangfolge und flackerte im 5-Minuten-Takt.
     """
-    knoten = _funktion("coordinator.py", "_stumm")
-    rueckgaben = [k for k in ast.walk(knoten) if isinstance(k, ast.Return)]
-    assert len(rueckgaben) == 1, "eine einzige Rückgabe, sonst greift die Prüfung daneben"
-    ausdruck = rueckgaben[0].value
-    assert isinstance(ausdruck, ast.BoolOp) and isinstance(ausdruck.op, ast.And), (
-        "Abmelden muss eine UND-Verknüpfung sein: still UND einem Befehl nicht gefolgt"
+    verriegelt: set[str] = set()
+    speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+    for _ in range(50):
+        assert speicher_stumm_latch(
+            verriegelt, "L1", schweigt=True, nicht_gefolgt=False
+        ), "abgemeldet bleibt abgemeldet, solange keine Meldung kommt"
+
+
+def test_eine_frische_meldung_entriegelt_sofort():
+    # Der Rückweg, und der einzige: Meldet das Gerät wieder, regelt HEMS im
+    # nächsten Zyklus mit — ohne Neustart, ohne Quittierung von Hand.
+    verriegelt: set[str] = set()
+    speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+    assert not speicher_stumm_latch(
+        verriegelt, "L1", schweigt=False, nicht_gefolgt=False
     )
-    quelle = ast.unparse(ausdruck)
-    assert "offen" in quelle
-    assert "_abgemeldet" in quelle
+    assert verriegelt == set()
+    # Und die Verriegelung greift danach wieder, wenn der Ausfall zurückkommt.
+    assert speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+
+
+def test_verriegelung_trennt_die_speicher():
+    # Ein Ausfall darf nicht die gesunden Nachbarn mitnehmen.
+    verriegelt: set[str] = set()
+    speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+    assert not speicher_stumm_latch(
+        verriegelt, "L2", schweigt=True, nicht_gefolgt=False
+    )
+    assert verriegelt == {"L1"}
+
+
+# --- Die Nähte (HA-nah, über den Syntaxbaum) --------------------------------
+
+
+def test_coordinator_verriegelt_ueber_die_gemeinsame_funktion():
+    # Sonst stünde die Übergangslogik zweimal da und die Tests oben prüften
+    # eine Kopie, die im Betrieb gar nicht läuft.
+    quelle = ast.unparse(_funktion("coordinator.py", "_stumm"))
+    assert "speicher_stumm_latch" in quelle
+    assert "self._speicher_stumm" in quelle
+    assert "STORAGE_STALE_MIN" in quelle
 
 
 def test_offen_kommt_aus_der_quittung_des_actuators():
@@ -98,24 +160,31 @@ def test_offen_kommt_aus_der_quittung_des_actuators():
     assert "stale=self._stumm(s, offen)" in quelle
 
 
+def test_verriegelung_ueberlebt_die_zyklen():
+    # Als Instanzzustand angelegt, nicht als lokale Variable — eine pro Zyklus
+    # neu gebaute Menge wäre die Verriegelung, die nichts verriegelt.
+    quelle = (BASIS / "coordinator.py").read_text(encoding="utf-8")
+    assert "self._speicher_stumm: set[str] = set()" in quelle
+
+
 def test_erster_zyklus_ohne_vorlauf_stuerzt_nicht_ab():
     # `speicher_nicht_uebernommen` schreibt der Actuator NACH `compute_plan` —
     # gelesen wird also der vorige Zyklus. Beim ersten Lauf gibt es keinen.
-    knoten = _funktion("coordinator.py", "_async_update_data")
-    quelle = ast.unparse(knoten)
+    quelle = ast.unparse(_funktion("coordinator.py", "_async_update_data"))
     assert "self.data is not None" in quelle
     assert "self.data.plan is not None" in quelle
 
 
-def test_ohne_leistungssensor_gilt_niemand_als_abgemeldet():
+def test_ohne_leistungssensor_quittiert_der_actuator_nicht():
     """Ohne Messung ist eine Nichtausführung nicht feststellbar.
 
-    Das ist bewusst so herum entschieden und steht im Docstring: Ein zu Unrecht
-    abgemeldeter Speicher legt die ganze Regelung stumm, ein zu Unrecht
-    mitgeführter kostet die Zeit bis zum nächsten Befehl. Der Actuator setzt es
-    um, indem er ohne `power_entity` gar nicht erst quittiert — dieser Test
-    hält die Begründung an der Entscheidung fest.
+    Damit verriegelt ein Speicher ohne `power_entity` nie — bewusst so herum:
+    Ein zu Unrecht abgemeldeter Speicher legt die ganze Regelung still, ein zu
+    Unrecht mitgeführter kostet die Zeit bis zum nächsten Befehl. Geprüft wird
+    der Wächter im Actuator, nicht die Prosa daneben.
     """
-    quittung = ast.unparse(_funktion("actuator.py", "_quittung_speicher"))
-    assert "not s.power_entity" in quittung
-    assert "Leistungssensor" in ast.get_docstring(_funktion("coordinator.py", "_stumm"))
+    knoten = _funktion("actuator.py", "_quittung_speicher")
+    rueckgaben = [k for k in ast.walk(knoten) if isinstance(k, ast.Return)]
+    assert rueckgaben, "die Quittung muss früh aussteigen können"
+    quelle = ast.unparse(knoten)
+    assert "not s.power_entity" in quelle
