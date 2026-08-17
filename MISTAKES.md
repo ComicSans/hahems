@@ -26,6 +26,31 @@ The format, deliberately narrow:
 
 -->
 
+### 2026-08-17 `last_reported` als Lebenszeichen — bei push-Integrationen ist es keins
+
+- **What happened:** Am Morgen lief der Hausverbrauch (~800 W) komplett über
+  das Netz, obwohl die Speicher bei 92 % standen. `sensor.hems_speicher_regelung`
+  meldete `pausiert`, `soll_w = 0`, `abgemeldet: [L1, L2, L3]` — obwohl alle
+  drei Hyper-2000 in HA `available` waren und einwandfrei liefen. Erste
+  Diagnose („Zendure-Integration ausgefallen, Reload nötig") war falsch.
+- **Trigger:** Ein voller, ruhender Speicher. Die Zendure-Integration setzt
+  `_attr_should_poll = False` und ruft `schedule_update_ha_state()` nur bei
+  Wertänderung — `last_reported` verhält sich damit wie `last_changed`. Ein
+  Akku, der nichts tut, ändert keinen Wert und gilt nach
+  `STORAGE_STALE_MIN = 15` min als abgemeldet. Daraus wird eine Selbstsperre:
+  abgemeldet → HEMS pausiert → Akku bleibt ruhig → nie wieder eine Änderung.
+  Zu sehen war es an der *Streuung* der Alter: 223 Zendure-Entitäten verteilt
+  über ~15 verschiedene `last_reported`-Stufen (121 bis 746 min). Ein echter
+  Ausfall hinterlässt einen einzigen Zeitpunkt, nicht fünfzehn.
+- **Fix:** `HemsCoordinator._stumm` verlangt beide Hälften — die SoC-Entität
+  schweigt UND der Speicher ist einem Befehl ≠ 0 nicht gefolgt. Die zweite
+  Hälfte liefert die Quittung des Actuators (`_quittung_speicher`,
+  `plan.speicher_nicht_uebernommen`), die den WERT des Leistungssensors liest
+  statt dessen Alter und deshalb unabhängig davon ist, wann eine Integration
+  schreibt. Ohne Leistungssensor gilt niemand als abgemeldet.
+  `tests/test_speicher_selbstsperre.py` prüft die UND-Verknüpfung über den
+  Syntaxbaum. Siehe Korrektur am Eintrag vom 15.08.2026.
+
 ### 2026-08-16 Ein neuer Betriebsmodus neben `auto` — die zweite Prüfung wird vergessen
 
 - **What happened:** Beim Einbau von `invers-auto` war zuerst nur
@@ -66,6 +91,12 @@ The format, deliberately narrow:
 - **Trigger:** Ein Gerät „tut nichts", obwohl HEMS regelt, und die Sensoren
   sehen plausibel aus. Erster Griff: `last_reported` aller beteiligten
   Entitäten vergleichen, nicht `state` oder `last_changed`.
+- **Korrektur 17.08.2026:** Der Fix trägt nur bei *pollenden* Quellen. Die
+  Zendure-Integration setzt `_attr_should_poll = False` und schreibt den State
+  ausschließlich bei Wertänderung (`sensor.py`: `if new_value !=
+  self._attr_native_value: … schedule_update_ha_state()`). Dort verhält sich
+  `last_reported` wie `last_changed`, und `_abgemeldet` misst „Wert steht
+  still" statt „Gerät ist stumm" — siehe Eintrag vom 17.08.2026.
 - **Fix:** `HemsCoordinator._abgemeldet` prüft `last_reported` gegen
   `STORAGE_STALE_MIN`. Achtung bei der Umkehrung: Ein eingefrorenes
   `last_reported` an einer *Stell*-Entität beweist NICHT, dass HEMS nicht

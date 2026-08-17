@@ -34,13 +34,15 @@ class StorageState:
     # Saldo-Regelung selbstkorrigierend, ohne Abschalt-Mess-Zyklus.
     power_w: float | None = None
     cold_reserve: bool = False
-    # Der Speicher meldet nicht mehr: Seine SoC-Entität steht seit
-    # STORAGE_STALE_MIN Minuten auf demselben Wert, ohne ihn zu melden. Setzt
-    # der Coordinator (die Frist braucht Zeitstempel aus HA), auswerten muss es
-    # die Regelung: `soc` und `power_w` sind dann Fiktion, und wer einer
-    # Fiktion Leistung zuteilt, hält den Rest der Anlage still. Anders als
-    # `soc = None` (Wert nie lesbar) ist das ein Wert, der bloß nicht mehr
-    # stimmt — deshalb ein eigenes Feld statt eines gelöschten SoC.
+    # Der Speicher ist ausgefallen: Seine SoC-Entität schweigt seit
+    # STORAGE_STALE_MIN Minuten UND er hat einen Befehl ≠ 0 nicht ausgeführt.
+    # Setzt der Coordinator (`_stumm`; die Frist braucht Zeitstempel aus HA),
+    # auswerten muss es die Regelung: `soc` und `power_w` sind dann Fiktion,
+    # und wer einer Fiktion Leistung zuteilt, hält den Rest der Anlage still.
+    # Anders als `soc = None` (Wert nie lesbar) ist das ein Wert, der bloß
+    # nicht mehr stimmt — deshalb ein eigenes Feld statt eines gelöschten SoC.
+    # Schweigen allein reicht ausdrücklich NICHT: Ein ruhender Speicher an
+    # einer push-basierten Integration schweigt, ohne ausgefallen zu sein.
     stale: bool = False
 
 

@@ -164,13 +164,18 @@ RESERVE_SOC_OFF = 45.0
 CONTROL_LEAD_HYST_SOC = 12.0
 CONTROL_LEAD_POWER_W = 30.0
 
-# Ein Speicher gilt als abgemeldet, wenn seine SoC-Entität so viele Minuten
-# lang gar nichts mehr gemeldet hat. Gemessen wird `last_reported`, nicht
-# `last_changed`: Ein stehender SoC ändert sich nicht, ein lebendes Gerät
-# meldet ihn trotzdem weiter — nur die Meldung selbst trennt „unverändert" von
-# „stumm". `unavailable`/`unknown` erkennt der Coordinator ohnehin; hier geht
-# es um den Fall, den er NICHT erkennt: eine Entität, die ihren letzten Wert
-# einfach stehen lässt.
+# Wie viele Minuten die SoC-Entität eines Speichers geschwiegen haben muss,
+# damit er abgemeldet werden DARF. Gemessen wird `last_reported`, nicht
+# `last_changed`. `unavailable`/`unknown` erkennt der Coordinator ohnehin; hier
+# geht es um den Fall, den er NICHT erkennt: eine Entität, die ihren letzten
+# Wert einfach stehen lässt.
+#
+# Schweigen allein meldet niemanden ab — das entscheidet `_stumm` im
+# Coordinator, und es verlangt zusätzlich einen Befehl, den der Speicher
+# nachweislich nicht ausgeführt hat. Grund ist der 17.08.2026: Eine
+# push-basierte Integration schreibt den Zustand nur bei Wertänderung, ein
+# ruhender voller Akku ändert nichts — und wurde so ohne jeden Ausfall
+# abgemeldet, was die Regelung in eine sich selbst haltende Sperre führte.
 #
 # Anlass ist der 15.08.2026: Ein Hyper 2000 fiel um 12:54 aus, seine
 # SoC-Entität blieb auf 100 % stehen, und die greedy bündelnde Zuteilung gab

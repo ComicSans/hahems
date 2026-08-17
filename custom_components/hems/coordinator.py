@@ -618,15 +618,43 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         except ValueError:
             return None
 
+    def _stumm(self, s, offen: set[str]) -> bool:
+        """Ob ein Speicher abgemeldet ist: still UND einem Befehl nicht gefolgt.
+
+        Beide Hälften sind nötig, und die zweite ist die tragende. `_abgemeldet`
+        allein misst nur, dass keine Meldung mehr kommt — und das ist kein
+        Ausfallbeweis: Eine push-basierte Integration schreibt den Zustand nur
+        bei Wertänderung (die Zendure-Integration setzt `_attr_should_poll =
+        False` und ruft `schedule_update_ha_state()` erst, wenn sich der Wert
+        unterscheidet). Ein voller Speicher, der ruht, ändert nichts, meldet
+        nichts — und war am 17.08.2026 damit „abgemeldet", worauf HEMS pausierte,
+        worauf er weiter ruhte. Eine Sperre, die sich selbst hält; das Haus zog
+        derweil 800 W aus dem Netz.
+
+        `offen` sind die Speicher, die im letzten Zyklus einen Befehl ≠ 0 nicht
+        ausgeführt haben (`_quittung_speicher` im Actuator, Frist
+        SPEICHER_QUITTUNG_FRIST). Diese Prüfung liest den WERT des
+        Leistungssensors, nicht dessen Alter, und ist deshalb unabhängig davon,
+        wann eine Integration schreibt. Der Fall vom 15.08.2026 bleibt gedeckt
+        und wird sogar früher erkannt (5 statt 15 Minuten): Der ausgefallene
+        Speicher bekam die volle Entladeanforderung und lieferte nichts.
+
+        Ohne Leistungssensor ist eine Nichtausführung nicht feststellbar — dann
+        gilt der Speicher nie als abgemeldet. Bewusst so herum: Ein zu Unrecht
+        abgemeldeter Speicher legt die ganze Regelung still, ein zu Unrecht
+        mitgeführter kostet die Zeit bis zum nächsten Befehl.
+        """
+        return s.name in offen and self._abgemeldet(s.soc_entity, STORAGE_STALE_MIN)
+
     def _abgemeldet(self, entity_id: str | None, frist_min: float) -> bool:
         """Ob eine Entität seit `frist_min` Minuten nichts mehr gemeldet hat.
 
         Gegen `last_reported` und nicht `last_changed`/`last_updated`: Ein
-        unveränderter Wert erzeugt keine Zustandsänderung, ein lebendes Gerät
-        meldet ihn trotzdem in jedem Takt. Nur `last_reported` trennt deshalb
-        „steht still" von „ist stumm" — und genau diese Unterscheidung fehlte,
-        als am 15.08.2026 ein ausgefallener Speicher mit stehengebliebenen
-        100 % die ganze Entladeanforderung an sich zog.
+        unveränderter Wert erzeugt keine Zustandsänderung, ein pollendes Gerät
+        meldet ihn trotzdem in jedem Takt. Nur bei solchen Quellen trennt
+        `last_reported` „steht still" von „ist stumm" — bei push-basierten
+        Integrationen tut es das NICHT (siehe `_stumm`). Allein entscheidet
+        diese Prüfung deshalb über nichts mehr.
 
         Nicht konfiguriert oder (noch) nicht vorhanden ist NICHT abgemeldet:
         Das ist ein Konfigurationsbefund, den `config_check` meldet, und eine
@@ -1066,6 +1094,14 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         if sunset is None or sunrise is None:
             return data  # Polarnacht/-tag: ohne Sonnenzeiten keine Planung
 
+        # Speicher, die im letzten Zyklus einen Befehl nicht ausgeführt haben
+        # (Quittung des Actuators). Nur sie dürfen abgemeldet werden — siehe
+        # `_stumm`.
+        offen = set(
+            self.data.plan.speicher_nicht_uebernommen
+            if self.data is not None and self.data.plan is not None
+            else ()
+        )
         storages = [
             StorageState(
                 name=s.name,
@@ -1076,7 +1112,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 max_discharge_w=s.max_discharge_w,
                 power_w=self._power_w(s.power_entity),
                 cold_reserve=s.cold_reserve,
-                stale=self._abgemeldet(s.soc_entity, STORAGE_STALE_MIN),
+                stale=self._stumm(s, offen),
             )
             for s in reg.storages
         ]

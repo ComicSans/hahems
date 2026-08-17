@@ -198,9 +198,12 @@ def test_fehlende_entitaet_gilt_nicht_als_abgemeldet():
 
 def test_coordinator_reicht_die_erkennung_in_den_planner():
     # Ohne diese Naht ist die ganze Prüfung wirkungslos: `stale` bliebe auf
-    # seinem Default, und die Regelung sähe den Ausfall nie.
+    # seinem Default, und die Regelung sähe den Ausfall nie. Die Erkennung
+    # selbst sitzt seit dem 17.08.2026 in `_stumm` — `_abgemeldet` ist nur
+    # noch deren eine Hälfte (siehe test_speicher_selbstsperre.py).
     quelle = (BASIS / "coordinator.py").read_text(encoding="utf-8")
-    assert "stale=self._abgemeldet(s.soc_entity, STORAGE_STALE_MIN)" in quelle
+    assert "stale=self._stumm(s, offen)" in quelle
+    assert "STORAGE_STALE_MIN" in ast.unparse(_funktion("coordinator.py", "_stumm"))
 
 
 def test_sensor_und_log_zeigen_den_ausfall():
