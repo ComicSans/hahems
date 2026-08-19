@@ -253,3 +253,37 @@ def speicher_folgt(gemessen_w: float | None, *, laden: bool) -> bool:
     Laden und Entladen mit demselben Ablauf, nur die Richtung wechselt.
     """
     return speicher_laedt(gemessen_w) if laden else speicher_entlaedt(gemessen_w)
+
+
+def ladeauftrag_in_frist_erfuellbar(
+    *,
+    ist_soc: float | None,
+    grenze_soc: float | None,
+    capacity_kwh: float,
+    zugeteilt_w: float,
+    frist_h: float,
+) -> bool:
+    """Ob ein Ladeauftrag innerhalb der Quittungsfrist zu Ende geht.
+
+    Trifft das zu, sagt ein Speicher, der keine Leistung mehr nimmt, nichts über
+    seine Gesundheit: Er ist fertig. Genau daran ist die Quittung am 19.08.2026
+    gescheitert — sie wertete „nimmt nicht auf" als Verweigerung und ließ die
+    Verriegelung in ``_stumm`` zuschnappen, obwohl die drei Hyper 2000 bei 99 %
+    standen und einwandfrei liefen. Weil ein voller Akku zugleich seinen
+    push-basierten SoC-Sensor verstummen lässt, traten beide Auslöser der
+    Verriegelung gemeinsam auf — sie sind eben nicht unabhängig, wie der Fix vom
+    17.08.2026 angenommen hatte. Das Haus zog daraufhin 800 W aus dem Netz.
+
+    Verglichen wird die freie Kapazität bis zur Ladegrenze mit der Energie, die
+    die zugeteilte Leistung in der Frist liefern würde. Bewusst nicht „SoC nahe
+    der Grenze": Wie viel Kopf ein Prozentpunkt trägt, hängt an der Kapazität,
+    und wie schnell er aufgebraucht ist, an der Zuteilung. 36 Wh Rest sind bei
+    800 W nach knapp drei Minuten weg, bei 60 W nicht.
+
+    Ohne SoC oder Grenze ist nichts zu rechnen; dann bleibt es bei der Quittung
+    — ein Speicher ohne SoC nimmt an der Zuteilung ohnehin nicht teil.
+    """
+    if ist_soc is None or grenze_soc is None or capacity_kwh <= 0:
+        return False
+    frei_wh = max(0.0, (grenze_soc - ist_soc) / 100 * capacity_kwh * 1000)
+    return frei_wh <= max(0.0, zugeteilt_w) * frist_h

@@ -39,6 +39,7 @@ import ast
 from pathlib import Path
 
 from factories import plan_input, storage, zuteilung
+from hems import actuation as A
 from hems import planner as P
 from hems.strategies.types import speicher_stumm_latch
 
@@ -188,3 +189,83 @@ def test_ohne_leistungssensor_quittiert_der_actuator_nicht():
     assert rueckgaben, "die Quittung muss früh aussteigen können"
     quelle = ast.unparse(knoten)
     assert "not s.power_entity" in quelle
+
+
+# --- Der fertige Ladeauftrag (19.08.2026) -----------------------------------
+#
+# Der Fix vom 17.08. verlangt für die Verriegelung zwei Auslöser: Schweigen UND
+# Nichtausführung. Das trägt nur, solange beide unabhängig sind — und genau das
+# sind sie beim vollen Akku nicht. Er ruht (also schweigt sein push-Sensor) und
+# nimmt keine Ladung mehr an (also „folgt er nicht"), beides aus derselben
+# Ursache. Am Abend des 19.08. verriegelten so alle drei Hyper 2000 nacheinander,
+# jeder exakt 15 Minuten nach seiner letzten Meldung, und das Haus zog 800 W.
+
+
+def test_voller_akku_meldet_keinen_ausfall():
+    # 99 % bei 3,6 kWh sind 36 Wh Rest — die 800 W zugeteilte Leistung hätte sie
+    # in knapp drei Minuten geliefert, also lange vor Ablauf der 5-Minuten-Frist.
+    assert A.ladeauftrag_in_frist_erfuellbar(
+        ist_soc=99.0,
+        grenze_soc=100.0,
+        capacity_kwh=3.6,
+        zugeteilt_w=800.0,
+        frist_h=5 / 60,
+    )
+
+
+def test_halbvoller_akku_muss_weiter_quittieren():
+    # 90 % bei 3,6 kWh sind 360 Wh — in fünf Minuten nicht zu füllen. Nimmt er
+    # hier nichts auf, ist das ein Befund und kein Feierabend.
+    assert not A.ladeauftrag_in_frist_erfuellbar(
+        ist_soc=90.0,
+        grenze_soc=100.0,
+        capacity_kwh=3.6,
+        zugeteilt_w=800.0,
+        frist_h=5 / 60,
+    )
+
+
+def test_kleine_zuteilung_verlaengert_die_erwartung():
+    # Dieselben 36 Wh Rest, aber nur 60 W zugeteilt: Das dauert 36 Minuten, der
+    # Speicher müsste in der Frist also sehr wohl Leistung ziehen. Deshalb wird
+    # gegen die zugeteilte Leistung gerechnet und nicht gegen einen SoC-Abstand.
+    assert not A.ladeauftrag_in_frist_erfuellbar(
+        ist_soc=99.0,
+        grenze_soc=100.0,
+        capacity_kwh=3.6,
+        zugeteilt_w=60.0,
+        frist_h=5 / 60,
+    )
+
+
+def test_ohne_soc_oder_grenze_bleibt_es_bei_der_quittung():
+    # Nichts zu rechnen heißt nicht „fertig". Ein Speicher ohne SoC nimmt an der
+    # Zuteilung ohnehin nicht teil, hier darf also nichts stillschweigend
+    # entschärft werden.
+    for kwargs in (
+        {"ist_soc": None, "grenze_soc": 100.0},
+        {"ist_soc": 99.0, "grenze_soc": None},
+    ):
+        assert not A.ladeauftrag_in_frist_erfuellbar(
+            capacity_kwh=3.6, zugeteilt_w=800.0, frist_h=5 / 60, **kwargs
+        )
+
+
+def test_die_ausnahme_gilt_nur_beim_laden():
+    """Der Entlade-Zweig bleibt scharf — dort war der 15.08. echt.
+
+    Ein Speicher mit eingefrorenen 100 %, der die volle Anforderung nicht
+    bedient, ist der Ausfall, für den die Quittung gebaut wurde. Läge die
+    Ausnahme vor der Richtungsprüfung, entschärfte sie genau ihn: „voll" ist
+    beim Entladen die Bedingung, unter der er liefern MUSS.
+    """
+    quelle = ast.unparse(_funktion("actuator.py", "_quittung_speicher"))
+    assert "laden_soll and ladeauftrag_in_frist_erfuellbar" in quelle
+
+
+def test_die_frist_der_ausnahme_ist_die_der_quittung():
+    # Zwei Fristen, die auseinanderlaufen können, wären eine Fehlerquelle ohne
+    # Gegenwert: Die Ausnahme fragt genau, ob der Auftrag VOR der Meldung fertig
+    # war, und „vor der Meldung" ist SPEICHER_QUITTUNG_FRIST.
+    quelle = ast.unparse(_funktion("actuator.py", "_quittung_speicher"))
+    assert "SPEICHER_QUITTUNG_FRIST.total_seconds() / 3600" in quelle

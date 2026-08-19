@@ -26,6 +26,39 @@ The format, deliberately narrow:
 
 -->
 
+### 2026-08-19 Zwei Auslöser sperren nur, wenn sie unabhängig sind — hier teilten sie die Ursache
+
+- **What happened:** Abends zog das Haus 800 W aus dem Netz, während die drei
+  Hyper 2000 bei 99 % standen und in HA einwandfrei erreichbar waren.
+  `sensor.hems_speicher_regelung` meldete wieder `pausiert` mit
+  `abgemeldet: [L1, L2, L3]` — dasselbe Bild wie am 17.08., obwohl dessen Fix
+  in Version 2.5.2 lief. `sensor.hems_entladeplan` stand derweil auf 534 W.
+  Die erste Diagnose („Zendure-Integration ausgefallen") war erneut falsch.
+- **Trigger:** Ein voller Akku bei laufendem Überschuss. Der Fix vom 17.08.
+  verlangt für die Verriegelung zwei Auslöser — die SoC-Entität schweigt UND
+  der Speicher folgt einem Befehl ≠ 0 nicht. Beim vollen Akku haben beide
+  dieselbe Ursache: Er ruht, also meldet der push-Sensor nichts, und er nimmt
+  keine Ladung mehr an, also „folgt" er dem Ladebefehl nicht, den ihm die
+  Zuteilung aus der Restkapazität bis zum Deckel trotzdem schickt. Die zweite
+  Bedingung sichert die erste damit nicht ab, sie begleitet sie.
+  Zu sehen war es an den Zeitstempeln: Jeder Speicher verriegelte auf die
+  Minute genau 15 Minuten nach seiner letzten Meldung (L1 13:18 → 13:33,
+  L3 14:03 → 14:18, L2 14:55 → 15:11 UTC), und im selben Zyklus lief noch ein
+  Schreibvorgang auf sein `input_limit`. Ein echter Integrationsausfall
+  verriegelt alle drei zugleich, nicht gestaffelt nach ihrer eigenen Ruhezeit.
+- **Fix:** `ladeauftrag_in_frist_erfuellbar` in `actuation.py` — beim Laden
+  quittiert der Actuator nicht mehr, wenn die freie Kapazität bis zur
+  Ladegrenze kleiner ist als das, was die zugeteilte Leistung in
+  `SPEICHER_QUITTUNG_FRIST` liefern würde. Wer fertig wird, bevor die Frist
+  abläuft, darf danach schweigen. Bewusst gegen die Zuteilung gerechnet und
+  nicht gegen einen SoC-Abstand: 36 Wh Rest sind bei 800 W nach drei Minuten
+  weg, bei 60 W nicht. Der Entlade-Zweig bleibt unangetastet — dort ist „voll"
+  gerade die Bedingung, unter der geliefert werden muss (15.08.).
+  `tests/test_speicher_selbstsperre.py` deckt beide Richtungen ab.
+- **Sofortmaßnahme im Betrieb:** Die Verriegelung lebt als `_speicher_stumm` im
+  Coordinator, ein Reload des Config Entry leert sie. Danach fiel der Netzbezug
+  binnen einer Minute von 736 W auf 12 W.
+
 ### 2026-08-17 `last_reported` als Lebenszeichen — bei push-Integrationen ist es keins
 
 - **What happened:** Am Morgen lief der Hausverbrauch (~800 W) komplett über
