@@ -26,6 +26,25 @@ The format, deliberately narrow:
 
 -->
 
+### 2026-08-21 Mindesthaltezeit hält einen Boost, dem ein anderer Verbraucher den Grund weggenommen hat
+
+- **What happened:** Bei leichtem Überschuss lief der WW-PV-Boost (07:01,
+  Sollwert 60 °C). Um 07:42 wurde die E-Auto-Zwangsladung eingeschaltet, der
+  Netzsaldo kippte auf ~+1000 W Bezug — der Boiler heizte trotzdem bis 08:02
+  weiter, also exakt bis zum Ablauf der 60-minütigen `boost_min_hold_min`. Zwei
+  Fehler in einem: `ev_force` war in `water.py` gar kein Kriterium, und selbst
+  das Saldo-Kriterium konnte den Boost erst nach der Haltezeit beenden.
+- **Trigger:** Eine Haltezeit, die gegen das *eigene* rückgekoppelte Kriterium
+  gebaut ist (der Boiler zieht die Einspeisung weg, die ihn eingeschaltet hat),
+  bremst genauso jede Entscheidung von außen. Sichtbar an der Reihenfolge der
+  `last_changed`-Zeitstempel: Boost-Ende genau eine Haltezeit nach Boost-Start,
+  nicht kurz nach dem auslösenden Ereignis.
+- **Fix:** Der Zwang überstimmt den Boost jetzt sofort — als Status-Zweig in der
+  Sollwert-Priorität von `strategies/water.py` (wie Sperrzeit und
+  Legionellenschutz), ohne den gehaltenen Latch anzufassen. Gespiegelt in
+  `_priorities` (planner.py), sonst wies die Empfehlung den PV-Boost weiter aus,
+  während der Sollwert längst auf Basis stand.
+
 ### 2026-08-19 Zwei Auslöser sperren nur, wenn sie unabhängig sind — hier teilten sie die Ursache
 
 - **What happened:** Abends zog das Haus 800 W aus dem Netz, während die drei

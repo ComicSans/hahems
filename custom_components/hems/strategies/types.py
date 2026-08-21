@@ -587,7 +587,8 @@ class PlanResult:
     # Warmwasser-Orchestrierung: empfohlener Sollwert nach Priorität
     # Legionellenschutz > PV-Boost > Basis; in der Sperrzeit None ("aus").
     warmwasser_soll_c: float | None = None
-    warmwasser_status: str = ""  # "aus" | "legionellenschutz" | "pv_boost" | "basis"
+    # "aus" | "legionellenschutz" | "ev_zwang" | "pv_boost" | "basis"
+    warmwasser_status: str = ""
     warmwasser_legionelle_aktiv: bool = False
     # Ab wann der PV-Boost wieder wechseln darf (Mindestabstand); None heißt
     # „jederzeit". Reine Anzeige: erklärt einen Boost, der steht, obwohl seine

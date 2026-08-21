@@ -1,6 +1,7 @@
 """Warmwasser-Domäne: empfohlener WW-Sollwert und die zugehörigen Flags.
 
-Priorität: Sperrzeit (aus) > Legionellenschutz > PV-Boost (Komfort) > Basis.
+Priorität: Sperrzeit (aus) > Legionellenschutz > E-Auto-Zwangsladung > PV-Boost
+(Komfort) > Basis.
 `water_plan` setzt alle WW-Flags (Sperre, Legionellen, PV-Boost, Basis/Komfort-
 Thermostat) und den Sollwert direkt im Ergebnis. Muss vor der Empfehlungs-
 Priorisierung laufen — die liest die Basis/Komfort-Flags nur noch.
@@ -101,18 +102,28 @@ def water_plan(inp: PlanInput, res: PlanResult) -> None:
         res.warmwasser_boost_frei_ab = frei_ab if frei_ab > inp.now else None
 
     # Empfohlener Sollwert nach Priorität: Sperrzeit (aus) > Legionellenschutz >
-    # PV-Boost > Basis. Ohne WW-Gerät bleibt warmwasser_soll_c None, Status leer.
-    # Sperre und Legionellenschutz überstimmen den Boost sofort — sie ändern nur
-    # den Status, nicht den gehaltenen Boost-Zustand; ihre Fenster sind Stunden
-    # lang, der Mindestabstand ist an ihrem Ende ohnehin abgelaufen.
+    # E-Auto-Zwangsladung > PV-Boost > Basis. Ohne WW-Gerät bleibt
+    # warmwasser_soll_c None, Status leer. Diese drei überstimmen den Boost
+    # sofort — sie ändern nur den Status, nicht den gehaltenen Boost-Zustand.
     if not inp.thermal_present:
         return
+    # E-Auto-Zwangsladung: der Zwang lädt notfalls aus dem Netz, jede Kilowatt-
+    # stunde in den Boiler wird also zugekauft. Der Boost weicht deshalb sofort,
+    # ohne auf den Mindestabstand zu warten — der bremst den *gehaltenen*
+    # Zustand gegen das eigene, vom Boiler weggezogene Saldo-Kriterium, nicht
+    # eine Entscheidung von außen. An den Ist-Bezug der Wallbox gekoppelt (wie
+    # in battery.py): steht der Schalter auf an, ohne dass ein Auto zieht, gibt
+    # es nichts zu sparen.
+    ev_zwang = bool(inp.ev_force and inp.wallbox_w)
     if res.warmwasser_gesperrt:
         res.warmwasser_soll_c = None
         res.warmwasser_status = "aus"
     elif res.warmwasser_legionelle_aktiv:
         res.warmwasser_soll_c = inp.thermal_legionella_target
         res.warmwasser_status = "legionellenschutz"
+    elif ev_zwang:
+        res.warmwasser_soll_c = inp.thermal_base
+        res.warmwasser_status = "ev_zwang"
     elif res.flags.warmwasser_boost:
         res.warmwasser_soll_c = inp.thermal_comfort
         res.warmwasser_status = "pv_boost"

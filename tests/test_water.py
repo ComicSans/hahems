@@ -141,3 +141,38 @@ def test_sperrzeit_ueberstimmt_den_gehaltenen_boost():
     )
     assert r.warmwasser_status == "aus"
     assert r.warmwasser_soll_c is None
+
+
+def test_ev_zwang_beendet_pv_boost_sofort():
+    # Boost läuft (Speicher voll, kräftige Einspeisung) und ist per
+    # Mindestabstand gehalten — die Zwangsladung setzt sich trotzdem sofort
+    # durch: der Zwang kauft notfalls Netzstrom, der Boiler bekäme ihn ab.
+    r = _ww(
+        thermal_present=True,
+        thermal_temp=55.0,
+        socs=[90, 90, 90],
+        saldo_w=-3000,
+        ev_force=True,
+        wallbox_w=4000.0,
+    )
+    assert r.warmwasser_soll_c == 48.0
+    assert r.warmwasser_status == "ev_zwang"
+    # Der gehaltene Boost-Zustand bleibt unangetastet — nur der Status weicht,
+    # wie bei Sperrzeit und Legionellenschutz.
+    assert r.flags.warmwasser_boost is True
+    # Und die Empfehlung darf den Boost nicht weiter ausweisen.
+    assert not any("PV-Boost" in p for p in r.prioritaeten)
+
+
+def test_ev_zwang_ohne_ladendes_auto_laesst_den_boost_laufen():
+    # Schalter an, aber die Wallbox zieht nichts: es gibt nichts zu sparen.
+    r = _ww(
+        thermal_present=True,
+        thermal_temp=55.0,
+        socs=[90, 90, 90],
+        saldo_w=-3000,
+        ev_force=True,
+        wallbox_w=0.0,
+    )
+    assert r.warmwasser_status == "pv_boost"
+    assert r.warmwasser_soll_c == 60.0

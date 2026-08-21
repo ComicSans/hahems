@@ -44,6 +44,7 @@ _AKKU_LABEL = {"laden": "Laden", "entladen": "Entladen", "pausiert": "Pausiert"}
 _WARMWASSER_LABEL = {
     "aus": "aus (Sperrzeit)",
     "legionellenschutz": "Legionellenschutz",
+    "ev_zwang": "Basis (E-Auto-Zwangsladung)",
     "pv_boost": "PV-Boost",
     "basis": "Basis",
 }

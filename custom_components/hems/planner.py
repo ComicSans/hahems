@@ -474,9 +474,12 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
 
     # Komfortladung (PV-Boost) nur, wenn der Speicher fast voll ist und
     # kräftig eingespeist wird — sonst gehört der Überschuss zuerst dem Akku.
+    # Dieselben Überstimmungen wie in water_plan, sonst zeigte die Empfehlung
+    # den PV-Boost weiter an, während der Sollwert längst auf Basis steht.
     warmwasser_comfort_pending = (
         not res.warmwasser_gesperrt
         and not res.warmwasser_legionelle_aktiv
+        and res.warmwasser_status != "ev_zwang"
         and inp.thermal_temp is not None
         and res.flags.warmwasser_komfort
         and res.flags.warmwasser_boost_soc
