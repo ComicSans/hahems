@@ -98,13 +98,20 @@ def _modulated_control(
     # rechnen. Bewusst ohne Regel-Offset (der gilt nur der Akku-Ruhelage).
     avail_w = -(inp.saldo_w - mess_summe + bat_ist)
     # Akku-Ladevorrang (coordination): den reservierten Überschuss abziehen,
-    # damit der Speicher-Regler ihn über sein Saldo-Residuum bekommt. Aber nur
-    # den Teil OBERHALB der Minima bereits laufender Lasten — ein ladendes Auto
-    # behält sein Minimum und wird nie abgeregelt.
-    if lade_reservierung > 0:
-        laufende_minima = sum(m.min_w for m in loads if m.ist_an)
-        reservierbar = max(0.0, avail_w - laufende_minima)
-        avail_w -= min(lade_reservierung, reservierbar)
+    # damit der Speicher-Regler ihn über sein Saldo-Residuum bekommt.
+    #
+    # Voll abziehen, auch gegen die Minima laufender Lasten. Bis zum 23.08.2026
+    # stand hier eine Ausnahme („ein ladendes Auto behält sein Minimum und wird
+    # nie abgeregelt"), die den Vorrang genau dann aushebelte, wenn er zählt:
+    # Sobald das Auto einmal lief, war der Akku hinten, egal was eingestellt war.
+    # Fängt der Akku an zu laden, weicht das Auto jetzt — bis unter sein Minimum
+    # und damit aus, denn unterhalb von min_w kann es nicht laufen. Es entsteht
+    # dabei kein Netzbezug: Was das Auto verliert, geht in den Akku, nicht ans
+    # Netz, und die Reservierung entsteht nur für Speicher mit echtem Ladebedarf
+    # (siehe coordination). Der Mindestlaufzeit-Lock unten hält ein gerade erst
+    # gestartetes Auto noch für seine min_on-Zeit; das ist Schützschutz an der
+    # Hardware, keine geplante Ladung.
+    avail_w -= lade_reservierung
     margin = EV_SURPLUS_MARGIN_W
 
     def _demanding(m: ModulatedState) -> bool:

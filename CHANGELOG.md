@@ -4,6 +4,39 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 2.6.0 — Vorrang, der nichts kostet, wenn er nichts nützt
+
+Am 23. August 2026 speiste die Anlage 4466 W ins Netz, während das Auto mit
+eingestecktem Kabel dastand und nicht lud. Der Grund war eine Reservierung für
+drei Speicher, die bei 99, 100 und 99 % standen: Ihnen fehlten 0,07 kWh, sie
+nahmen keine Leistung mehr an, und trotzdem hielt HEMS ihnen 2400 W frei. Die
+Wallbox blieb damit unter ihrem Mindeststrom.
+
+**Reserviert wird jetzt nach Ladebedarf, nicht nach SoC-Abstand.** Ein Speicher
+bekommt nur dann Überschuss vor der Wallbox freigehalten, wenn er ihn länger
+aufnehmen kann, als die Wallbox mindestens laufen würde. Ein Akku, der in dieser
+Zeit ohnehin voll wird, reserviert nichts.
+
+**„Automatisch" heißt jetzt Akku zuerst.** Bis 2.5.4 verteilte der Modus nach
+einem Ertragsverhältnis: Akku zuerst nur an knappen Tagen, sonst das Auto
+zuerst. Ab 2.6.0 hat der Akku im Automatik-Modus immer Vorrang — er kostet das
+Auto nach der Regel oben nichts mehr, sobald er voll ist. **Wer das Auto zuerst
+laden will, stellt jetzt „E-Auto zuerst" ein**; „Automatisch" tut das nicht mehr
+für ihn. Die Einstellung selbst bleibt unverändert stehen, es ändert sich, was
+sie bedeutet.
+
+**Ein ladender Akku drosselt die Wallbox.** Bisher behielt ein einmal laufendes
+Auto immer seinen Mindeststrom, auch gegen den eingestellten Vorrang. Damit war
+der Vorrang genau dann wirkungslos, wenn er zählt. Fällt der Überschuss unter
+den Mindeststrom, schaltet die Wallbox jetzt ab, statt die Differenz aus dem
+Netz zu ziehen.
+
+**Der Hausakku entlädt nicht mehr in die Wallbox.** Hing das Auto an seinem
+Mindeststrom, sah die Saldo-Regelung dessen Last als Bezug und deckte sie aus
+dem Akku — Vorrang, der beim Entladen wieder abgegeben wird. Der Entlade-Sollwert
+ist jetzt auf den Bezug ohne die Wallbox gedeckelt. Der Haushalt wird
+unverändert aus dem Akku gedeckt.
+
 ## 2.2.0 — Eine Anlage, die kühlt, ist keine Heizung
 
 Am 4. August 2026 nahm die **Sommersperre** eine Wärmepumpe weg, die bei 39 °C

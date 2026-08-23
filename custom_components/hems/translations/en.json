@@ -26,7 +26,7 @@
           "weather_entity": "Weather entity whose daily forecast feeds the planning: on an overcast next day HEMS fully charges the battery instead of covering only the night.",
           "baseline_load_w": "Typical continuous consumption of the house during the day without large consumers (fridge, network, standby).",
           "night_load_w": "Initial value for night-time consumption. HEMS learns the real value automatically from meter statistics after a few days.",
-          "priority_mode": "Where should surplus go first? \"Automatic\" fills the battery first when yield is scarce so the night is covered; with plenty of yield the EV may charge first. Hot-water base heating always has top priority.",
+          "priority_mode": "Where should surplus go first? \"Automatic\" charges the battery before the EV for as long as it still needs charge. Once it is full, the EV gets the entire surplus. Hot-water base heating always has top priority.",
           "free_capacity_kwh": "The \"Capacity free\" binary sensor turns on when this much energy is available over the given duration without touching the reserve or the night coverage.",
           "free_capacity_h": "Duration over which the energy demand must be covered. PV surplus expected within this window counts towards the free capacity."
         }
@@ -386,7 +386,7 @@
           "weather_entity": "Weather entity whose daily forecast feeds the planning: on an overcast next day HEMS fully charges the battery instead of covering only the night.",
           "baseline_load_w": "Typical continuous consumption of the house during the day without large consumers.",
           "night_load_w": "Fallback for night-time consumption until HEMS has learned it from statistics.",
-          "priority_mode": "Where should surplus go first? \"Automatic\" fills the battery first when yield is scarce so the night is covered; with plenty of yield the EV may charge first. Hot-water base heating always has top priority.",
+          "priority_mode": "Where should surplus go first? \"Automatic\" charges the battery before the EV for as long as it still needs charge. Once it is full, the EV gets the entire surplus. Hot-water base heating always has top priority.",
           "free_capacity_kwh": "The \"Capacity free\" binary sensor turns on when this much energy is available over the given duration without touching the reserve or the night coverage.",
           "free_capacity_h": "Duration over which the energy demand must be covered. PV surplus expected within this window counts towards the free capacity."
         }
@@ -500,7 +500,7 @@
   "selector": {
     "priority_mode": {
       "options": {
-        "auto": "Automatic – battery first when yield is scarce (recommended)",
+        "auto": "Automatic – battery first while it still needs charge (recommended)",
         "battery_first": "Battery first – always secure the night",
         "ev_first": "EV first – charging takes precedence"
       }

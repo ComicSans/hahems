@@ -26,6 +26,44 @@ The format, deliberately narrow:
 
 -->
 
+### 2026-08-23 Reservierung gegen einen SoC-Abstand statt gegen den Ladebedarf
+
+- **What happened:** 14:33 lokal, 11,6 kW PV, 4466 W Einspeisung, Kabel am
+  Charger eingesteckt — das Auto lud nicht. `wallbox_ueberschuss_w` stand auf
+  2066 mit Grund „Überschuss zu klein". Die Differenz waren 2400 W, die
+  `akku_ladereservierung` für drei Speicher bei 99/100/99 % zurückhielt, denen
+  zusammen 0,07 kWh auf 11,1 kWh fehlten. Sie nahmen die reservierte Leistung
+  nicht, konnten sie nicht nehmen und gaben sie auch nicht zurück: Der
+  Überschuss ging vollständig ins Netz. Reserviert wurde für einen Verbraucher,
+  den es nicht mehr gab.
+- **Trigger:** Ein voller Akku bei laufendem Überschuss — dieselbe Konstellation
+  wie am 17.08. und 19.08., diesmal eine Ebene höher. Die Bedingung war
+  `s.soc < deckel`, also ein SoC-*Abstand*; wie viel Energie in dem Abstand
+  steckt und wie schnell die reservierte Leistung ihn auffüllt, fragte sie
+  nicht. Zu sehen war es am Vergleich zweier Zahlen im selben Attributsatz:
+  `speicher_bedarf_kwh: 0.07` neben einer Reservierung von 2400 W. Der
+  Actuator kannte die richtige Rechnung seit dem 19.08. bereits
+  (`ladeauftrag_in_frist_erfuellbar`) — sie stand nur an einer Stelle, an der
+  die Planung sie nicht las.
+- **Fix:** `akku_ladereservierung` (strategies/coordination.py) nutzt jetzt
+  genau dieses Prädikat, mit der längsten Mindestlaufzeit der wartenden Lasten
+  als Frist: Wer die Wallbox am Starten hindert, hindert sie mindestens so
+  lange, und ein Akku, der in der Zeit ohnehin voll wird, hat das nicht
+  verdient. Gerechnet gegen `lade_ziel_soc`, nicht gegen den Ladedeckel — der
+  läuft der Just-in-time-Rampe nur wenige Prozentpunkte voraus, gegen ihn
+  gerechnet hätte ein halb leerer Akku ständig „keinen Bedarf" und die Rampe
+  käme nie in Gang. Die Deckel-Bedingung bleibt daneben stehen, sie beantwortet
+  die andere Frage (*jetzt* laden oder noch warten).
+  `tests/test_coordination.py` deckt beide Grenzen ab.
+- **Nicht behoben, weiterhin offen:** Die Leistungssensoren der drei Hyper 2000
+  meldeten seit 160 Minuten nichts (`pack_input_power`, `energy_power`,
+  `grid_input_power`), während `electric_level` mit 18–26 Minuten weiterlief.
+  `_stumm` prüft die SoC-Entität, nicht den Leistungssensor, und meldete
+  deshalb `abgemeldet: []`. Die Speicher-Regelung regelte gegen einen Messwert,
+  der konstant 0 zeigte (`fehler_w: -4441` bei `soll_w: -3331`). Der Fix oben
+  kommt ohne diese Messung aus, hängt also nicht davon ab — die Diagnose bleibt
+  trotzdem blind, solange Stale je Gerät statt je Sensor bestimmt wird.
+
 ### 2026-08-21 Mindesthaltezeit hält einen Boost, dem ein anderer Verbraucher den Grund weggenommen hat
 
 - **What happened:** Bei leichtem Überschuss lief der WW-PV-Boost (07:01,

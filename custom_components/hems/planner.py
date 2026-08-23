@@ -18,8 +18,6 @@ from datetime import datetime, time, timedelta, tzinfo
 from .const import (
     GOAL_FULL_CHARGE,
     GOAL_ZERO_FEEDIN,
-    PRIORITY_BATTERY_FIRST,
-    PRIORITY_EV_FIRST,
     STORAGE_NIGHT_MARGIN_SOC,
 )
 from .strategies import coordination
@@ -47,12 +45,6 @@ SURPLUS_ON_W = -200.0  # Netzsaldo, ab dem "Überschuss" gilt (negativ = Einspei
 
 
 SURPLUS_OFF_W = -50.0  # ... und ab dem er wieder als beendet gilt
-
-
-KNAPP_ON = 1.3  # Restertrag/Speicherbedarf, ab dem "knapp" greift
-
-
-KNAPP_OFF = 1.7
 
 
 WEATHER_ON = 0.30  # Wetterfaktor morgen, ab dem "morgen knapp" greift
@@ -546,26 +538,16 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
         if akku is not None:
             prio.append(akku)
     elif akku is not None and auto is not None:
-        if inp.priority_mode == PRIORITY_BATTERY_FIRST:
-            akku_zuerst = True
-        elif inp.priority_mode == PRIORITY_EV_FIRST:
-            akku_zuerst = False
-        else:
-            # Automatik: Reicht der Restertrag nicht für Akku UND Auto, bekommt der
-            # Akku Vorrang, damit die Nacht gedeckt ist. Bei reichlich Ertrag darf
-            # das Auto zuerst, der Akku wird dann trotzdem noch voll. Mit Totband
-            # um das Verhältnis, sonst tauschen Akku und Auto laufend die Plätze.
-            # Der Latch läuft auch in der Mittagspause weiter (sonst stünde er
-            # drei Stunden still und käme um 14:00 mit einem alten Wert zurück).
-            res.flags.knapp = _latch(
-                inp.flags.knapp,
-                res.ueberschuss_rest_kwh / res.speicher_bedarf_kwh
-                if res.speicher_bedarf_kwh > 0
-                else None,
-                on=KNAPP_ON,
-                off=KNAPP_OFF,
-            )
-            akku_zuerst = res.flags.knapp
+        # Eine Wahrheit für Reihenfolge und Verteilung: dieselbe Funktion, nach
+        # der auch die Reservierung entscheidet. Stünde hier eine zweite
+        # Herleitung, zeigte die Empfehlung früher oder später eine Reihenfolge,
+        # nach der HEMS gerade nicht verteilt — genau der Fehler, den der
+        # Mittagspausen-Zweig unten schon einmal ausbessern musste.
+        #
+        # Bis zum 23.08.2026 entschied im Auto-Modus ein eigener `knapp`-Latch
+        # über das Verhältnis Restertrag/Speicherbedarf. Er ist mit dem Vorrang
+        # weggefallen (siehe `akku_hat_vorrang`).
+        akku_zuerst = coordination.akku_hat_vorrang(inp)
         # Mittags-Ladepause: die Reservierung ruht (coordination), also muss
         # auch die Empfehlung die Last vor den Akku stellen — sonst zeigte die
         # Zeile eine Reihenfolge, nach der HEMS gerade nicht verteilt.

@@ -283,6 +283,32 @@ def _storage_control(
         fehler_roh = inp.saldo_w + offset
         soll = max(-max_lad, min(0.0, max(soll, bat_ist + fehler_roh * _gain(fehler_roh))))
 
+    # Gegenstück beim ENTLADEN: kein Akkustrom ins Auto (23.08.2026). Die
+    # Vorsteuerung oben (`saldo + (ev_target − wallbox_w)`) hält den Regler nur
+    # davon ab, für eine Wallbox zu entladen, die HEMS gerade herunterregelt.
+    # Steht die Wallbox schon auf ihrem Sollwert — typisch: sie hängt an ihrem
+    # Mindeststrom, oder eine Mindestlaufzeit hält sie — ist das Delta null, der
+    # Regler sieht ihre volle Last im Saldo und deckt sie aus dem Akku. Dann
+    # fließt Akkustrom ins Auto, ohne dass irgendwo eine Entscheidung dafür
+    # gefallen wäre: Der Akku entlädt sich in genau den Verbraucher, vor dem er
+    # laut Vorrang stehen sollte.
+    #
+    # Deshalb den Entlade-Sollwert zusätzlich gegen den Saldo OHNE die
+    # Wallbox-Last deckeln — dieselbe Sollwertformel, nur mit dem Fehler, den
+    # der Regler ohne Wallbox sähe. Der Haushalt wird weiter aus dem Akku
+    # gedeckt; der Wallbox-Anteil bleibt beim Netz oder fällt weg, wenn die
+    # Lastregelung sie im nächsten Zyklus abschaltet. Spiegelbildlich zur
+    # Klausel darüber: die schützt den Lade-Zweig vor der Bereinigung, diese
+    # schützt den Entlade-Zweig vor ihrem Ausbleiben.
+    #
+    # Bei Zwangsladung ändert die Klausel nichts: Dort ist `saldo_w` bereits um
+    # die Wallbox bereinigt, beide Rechnungen fallen zusammen.
+    if soll > 0 and inp.wallbox_w:
+        fehler_ohne_ev = inp.saldo_w - inp.wallbox_w + offset
+        soll = min(
+            soll, max(0.0, bat_ist + fehler_ohne_ev * _gain(fehler_ohne_ev))
+        )
+
     ctrl = ControlResult(
         modus="pausiert",
         fehler_w=round(fehler, 0),

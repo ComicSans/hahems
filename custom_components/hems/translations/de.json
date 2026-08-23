@@ -26,7 +26,7 @@
           "weather_entity": "Wetter-Entität, deren Tagesvorhersage in die Planung einfließt: Bei trübem Folgetag lädt HEMS den Speicher voll statt nur den Nachtbedarf zu sichern.",
           "baseline_load_w": "Typischer Dauerverbrauch des Hauses tagsüber ohne große Verbraucher (Kühlschrank, Netzwerk, Standby).",
           "night_load_w": "Startwert für den Verbrauch in der Nacht. HEMS lernt den echten Wert nach einigen Tagen automatisch aus der Zählerstatistik.",
-          "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ sichert bei knappem Ertrag zuerst den Akku für die Nacht ab, bei reichlich Ertrag darf das E-Auto zuerst laden. Die Warmwasser-Basisladung hat immer Vorrang.",
+          "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ lädt den Akku vor dem E-Auto — solange er Ladebedarf hat. Ist er voll, bekommt das Auto den vollen Überschuss. Die Warmwasser-Basisladung hat immer Vorrang.",
           "free_capacity_kwh": "Der Binärsensor „Kapazität frei“ schaltet ein, wenn diese Energiemenge über die angegebene Dauer verfügbar ist, ohne Reserve und Nachtdeckung anzutasten.",
           "free_capacity_h": "Dauer, über die der Bedarf gedeckt sein muss. PV-Überschuss, der in dieses Zeitfenster fällt, zählt zur freien Kapazität."
         }
@@ -386,7 +386,7 @@
           "weather_entity": "Wetter-Entität, deren Tagesvorhersage in die Planung einfließt: Bei trübem Folgetag lädt HEMS den Speicher voll statt nur den Nachtbedarf zu sichern.",
           "baseline_load_w": "Typischer Dauerverbrauch des Hauses tagsüber ohne große Verbraucher.",
           "night_load_w": "Fallback für den nächtlichen Verbrauch, bis HEMS ihn aus der Statistik gelernt hat.",
-          "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ sichert bei knappem Ertrag zuerst den Akku für die Nacht ab, bei reichlich Ertrag darf das E-Auto zuerst laden. Die Warmwasser-Basisladung hat immer Vorrang.",
+          "priority_mode": "Wohin soll der Überschuss zuerst fließen? „Automatisch“ lädt den Akku vor dem E-Auto — solange er Ladebedarf hat. Ist er voll, bekommt das Auto den vollen Überschuss. Die Warmwasser-Basisladung hat immer Vorrang.",
           "free_capacity_kwh": "Der Binärsensor „Kapazität frei“ schaltet ein, wenn diese Energiemenge über die angegebene Dauer verfügbar ist, ohne Reserve und Nachtdeckung anzutasten.",
           "free_capacity_h": "Dauer, über die der Bedarf gedeckt sein muss. PV-Überschuss, der in dieses Zeitfenster fällt, zählt zur freien Kapazität."
         }
@@ -500,7 +500,7 @@
   "selector": {
     "priority_mode": {
       "options": {
-        "auto": "Automatisch – Akku zuerst, wenn der Ertrag knapp ist (empfohlen)",
+        "auto": "Automatisch – Akku zuerst, solange er Ladebedarf hat (empfohlen)",
         "battery_first": "Akku zuerst – die Nacht immer absichern",
         "ev_first": "E-Auto zuerst – Laden hat Vorrang"
       }

@@ -118,7 +118,15 @@ Pause ganz auf, sobald die Nachtdeckung auf dem Spiel steht — und der Schalter
 
 **Modulierbare Lasten weichen vor dem Speicher.** Lässt der Ertrag nach, wird
 zuerst der Ladestrom heruntergeregelt, erst danach hilft der Akku. Sonst
-finanzierte der Speicher das Laden.
+finanzierte der Speicher das Laden. Das gilt auch für eine Wallbox, die ihrem
+Sollwert nicht folgt: Ihre Last ist aus dem Entlade-Sollwert des Akkus
+herausgerechnet, sonst deckte er sie, während sie an ihrem Mindeststrom hängt.
+
+**Vorrang kostet nur, wo er nützt.** Der Akku hält Überschuss vor der Wallbox
+zurück, solange er ihn länger aufnehmen kann als eine Wallbox-Mindestlaufzeit.
+Ist er praktisch voll, reserviert er nichts — dann ist der Vorrang eine
+Reihenfolge ohne Preis, und deshalb darf „Automatisch" ihn dauerhaft geben,
+statt ihn an knappe Tage zu knüpfen.
 
 **Der Frostschutz hängt an nichts als der Temperatur.** Die Überschussregelung
 steigt ohne Netzsaldo aus — kein Zähler, nichts zu verteilen. Für die

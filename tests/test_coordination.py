@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from factories import load, lokal, plan_input, storage, zuteilung
 from hems import planner as P
+from hems.strategies import coordination
 from hems.strategies.types import PlanFlags
 
 # Der Vorrang wird erst dort verteilt, wo der Akku überhaupt laden WILL: die
@@ -18,13 +19,10 @@ from hems.strategies.types import PlanFlags
 RAMPE_LAEUFT = lokal(19)
 
 
-def _run(
-    mode, *, wb_on, socs=(40, 40, 40), saldo=-6000.0, knapp=True, now=RAMPE_LAEUFT
-):
+def _run(mode, *, wb_on, socs=(40, 40, 40), saldo=-6000.0, now=RAMPE_LAEUFT):
     wb_w = 4200.0 if wb_on else 0.0
     wb = load("WB", power_w=wb_w, ist_an=wb_on, an_seit_s=3600, nachfrage=wb_on)
     flags = PlanFlags()
-    flags.knapp = knapp
     r = P.compute_plan(
         plan_input(
             now=now,
@@ -85,12 +83,24 @@ def test_ev_first_unveraendert():
     assert ef.ev_regelung.soll_summe_w == 9660
 
 
-def test_auto_folgt_knapp_latch():
-    # auto = battery_first bei knappem Tag, sonst ev_first.
-    knapp = _run("auto", wb_on=True, knapp=True)
-    reichlich = _run("auto", wb_on=True, knapp=False)
-    assert knapp.ev_regelung.soll_summe_w < reichlich.ev_regelung.soll_summe_w
-    assert sum(zuteilung(knapp).values()) > sum(zuteilung(reichlich).values())
+def test_auto_gibt_dem_akku_immer_vorrang():
+    """23.08.2026: `auto` heißt jetzt battery_first, nicht mehr „battery_first
+    an knappen Tagen". Wer keine Priorität setzt, will den Akku zuerst voll
+    haben; der frühere `knapp`-Latch (Restertrag/Speicherbedarf mit Totband)
+    ist damit weggefallen. Dass das nichts kostet, hängt an der Reservierung:
+    Ein Akku ohne Ladebedarf reserviert auch mit Vorrang nichts
+    (test_voller_akku_reserviert_nichts)."""
+    auto = _run("auto", wb_on=True)
+    bf = _run("battery_first", wb_on=True)
+    ef = _run("ev_first", wb_on=True)
+    assert auto.ev_regelung.soll_summe_w == bf.ev_regelung.soll_summe_w
+    assert zuteilung(auto) == zuteilung(bf)
+    assert auto.ev_regelung.soll_summe_w < ef.ev_regelung.soll_summe_w
+    # Und die Empfehlungszeile zeigt dieselbe Reihenfolge, nach der verteilt
+    # wird — sie liest denselben `akku_hat_vorrang` wie die Reservierung.
+    akku_pos = next(i for i, t in enumerate(auto.prioritaeten) if "Akku" in t)
+    auto_pos = next(i for i, t in enumerate(auto.prioritaeten) if "E-Auto" in t)
+    assert akku_pos < auto_pos
 
 
 def test_koordination_konvergiert_ueber_zyklen():
@@ -160,45 +170,61 @@ def test_akku_laedt_nicht_gegen_netzbezug_wenn_wallbox_gedrosselt_wird():
     assert all(z.watt == 0 for z in r.regelung.zuteilung)
 
 
-def test_wallbox_die_ihrem_sollwert_nicht_folgt_haelt_den_akku_nicht_dauerhaft_an():
-    """Fortsetzung des Falls darüber, einen Zyklus später. HEMS hat die Wallbox
-    bereits auf 0 kommandiert und kommandiert erneut 0 — das Auto zieht aber
-    weiter 1,8 kW. Damit steht keine Änderung mehr bevor, für die vorzusteuern
-    wäre: Die bereinigte Sicht wäre ab hier ein Dauer-Offset, der HEMS 1,5 kW
-    kaufen ließe, während die Akkus danebenstehen. Der zweite Lauf sieht deshalb
-    den echten Saldo und entlädt."""
+def _haengende_wallbox(saldo, flags=None):
+    """Ein Auto, das seinem Abschaltbefehl nicht folgt und weiter 1,8 kW zieht."""
     wb = load(
         "WB", min_a=6, max_a=16, phases=1, power_w=1841.0,
         ist_an=True, an_seit_s=3600.0, nachfrage=True,
     )
-
-    def _lauf(flags):
-        return P.compute_plan(
-            plan_input(
-                storage_states=[
-                    storage(f"L{i+1}", 60.0, power_w=0.0) for i in range(3)
-                ],
-                saldo_w=1573.0,
-                wallbox_w=1841.0,
-                modulateds=[wb],
-                priority_mode="auto",
-                gain_level="max",
-                flags=flags,
-            )
+    return P.compute_plan(
+        plan_input(
+            storage_states=[
+                storage(f"L{i+1}", 60.0, power_w=0.0) for i in range(3)
+            ],
+            saldo_w=saldo,
+            wallbox_w=1841.0,
+            modulateds=[wb],
+            priority_mode="auto",
+            gain_level="max",
+            flags=flags,
         )
+    )
 
-    erst = _lauf(None)
-    # Erster Lauf unverändert: die Drosselung steht bevor, der Akku wartet sie ab.
+
+def test_akku_deckt_den_bezug_der_haengenden_wallbox_nicht():
+    """Kein Akkustrom ins Auto (23.08.2026). HEMS hat die Wallbox auf 0
+    kommandiert und kommandiert erneut 0 — das Auto zieht aber weiter 1,8 kW.
+    Die Vorsteuerung ist damit verbraucht, der Regler sähe ab hier den echten
+    Saldo und entlud früher den Akku in genau den Verbraucher, vor dem er laut
+    Vorrang stehen sollte. Der Bezug (1573 W) stammt hier vollständig von der
+    Wallbox: ohne sie speiste das Haus mit 268 W ein.
+
+    Der Bezug bleibt also beim Netz, bis das Auto folgt. Das ist kein von HEMS
+    geplanter Netzbezug — der Abschaltbefehl steht, das Gerät gehorcht ihm
+    nicht."""
+    erst = _haengende_wallbox(1573.0)
+    assert erst.ev_regelung.soll_summe_w == 0
     assert erst.regelung.modus != "laden"
     assert erst.flags.ev_soll_w == erst.ev_regelung.soll_summe_w
 
-    zweit = _lauf(erst.flags)
-    # Derselbe Sollwert noch einmal — die Vorsteuerung ist verbraucht.
+    zweit = _haengende_wallbox(1573.0, erst.flags)
     assert zweit.ev_regelung.soll_summe_w == erst.ev_regelung.soll_summe_w
-    assert zweit.regelung.modus == "entladen"
-    assert zweit.regelung.fehler_w == 1598.0  # roher Saldo + 25 W Zieloffset
-    assert sum(zuteilung(zweit).values()) > 0
+    assert zweit.regelung.modus != "entladen"
+    assert all(z.watt == 0 for z in zweit.regelung.zuteilung)
 
+
+def test_akku_deckt_den_hausbezug_neben_der_haengenden_wallbox_weiter():
+    """Gegenprobe: Die Deckelung trennt Wallbox-Bezug von echtem Hausbezug,
+    statt den Akku pauschal anzuhalten. Bei 2400 W Saldo und 1841 W Wallbox
+    bleiben 559 W, die das Haus selbst zieht — die darf der Akku decken, sonst
+    wäre die Regel eine Selbstsperre wie am 19.08.2026."""
+    erst = _haengende_wallbox(2400.0)
+    zweit = _haengende_wallbox(2400.0, erst.flags)
+    assert zweit.regelung.modus == "entladen"
+    assert sum(zuteilung(zweit).values()) > 0
+    # Gedeckelt auf den Hausanteil (559 W + 25 W Zieloffset), nicht auf den
+    # rohen Saldo — ohne die Deckelung stünden hier 2425 W.
+    assert 0 < zweit.regelung.soll_w <= 584.0
 
 def test_lade_asymmetrie_ist_noop_ohne_wallbox():
     """Ohne Wallbox-Herausrechnung (inp.saldo_w == saldo_w) greift die
@@ -232,3 +258,94 @@ def test_zwang_bei_defizit_laesst_den_akku_in_ruhe():
     assert r.ev_regelung.lasten[0].strom_a == wb.min_a
     # Akku: entlädt nicht, um den Zwangsbezug zu decken.
     assert r.regelung.modus != "entladen"
+
+
+# --- Reservierung nur bei echtem Ladebedarf (23.08.2026) --------------------
+# Der Betriebsfall, der die Regel erzwungen hat: Drei Hyper 2000 standen bei
+# 99/100/99 % mit zusammen 0,07 kWh freier Kapazität und nahmen 0 W. Die alte
+# Bedingung `soc < deckel` reservierte trotzdem 3 × 1200 W, die Wallbox blieb
+# mit dem Rest unter ihrem Mindeststrom stehen, und 4466 W gingen ins Netz.
+
+
+def _voll_am_nachmittag(socs, *, stale=False, saldo=-4466.0):
+    """Die Anlage am 23.08.2026, 14:33 lokal: drei Speicher à 3,7 kWh, Wallbox
+    aus, 4466 W Einspeisung. Nebel für morgen (Wetterfaktor 0,25) hebt das
+    Ladeziel auf 100 % — sonst läge es beim Nachtbedarf und der Fall wäre schon
+    über das Ziel entschieden statt über die Frist."""
+    wb = load("WB", power_w=0.0, ist_an=False, nachfrage=True)
+    inp = plan_input(
+        now=lokal(14, 33),
+        storage_states=[
+            storage(f"L{i+1}", s, capacity_kwh=3.7, stale=stale)
+            for i, s in enumerate(socs)
+        ],
+        saldo_w=saldo,
+        modulateds=[wb],
+        wallbox_w=0.0,
+        priority_mode="auto",
+        weather_factor_tomorrow=0.25,
+    )
+    return inp, P.compute_plan(inp)
+
+
+def test_voller_akku_reserviert_nichts_und_das_auto_startet():
+    inp, res = _voll_am_nachmittag([99.0, 100.0, 99.0])
+    # Die Vorbedingung explizit, sonst prüfte der Test das Falsche: Der Akku
+    # steht am Tagesziel, ihm fehlen 0,07 kWh von 11,1 kWh.
+    assert res.lade_ziel_soc == 100.0
+    assert res.speicher_bedarf_kwh < 0.1
+    assert not res.lade_pause
+    assert coordination.akku_ladereservierung(inp, res) == 0.0
+    # Und damit reicht der Überschuss dem Auto für seinen Mindeststrom.
+    assert res.ev_regelung.soll_summe_w >= 6.0 * 3 * 230.0
+
+
+def test_abgemeldeter_speicher_reserviert_nichts():
+    """Ein `stale` Speicher meldet einen SoC, der nur zuletzt gestimmt hat. Wer
+    einer Fiktion Leistung zuteilt, hält den Rest der Anlage still — hier das
+    Auto."""
+    inp, res = _voll_am_nachmittag([40.0, 40.0, 40.0], stale=True)
+    assert coordination.akku_ladereservierung(inp, res) == 0.0
+
+
+def test_frist_trennt_fertigen_akku_vom_ladebedarf():
+    """Die Grenze läuft über die Energie, nicht über den SoC-Abstand: 1200 W
+    füllen in einer 10-Minuten-Mindestlaufzeit 200 Wh, bei 3,7 kWh Kapazität
+    also gut 5 Prozentpunkte. Darunter ist der Akku fertig, bevor das Auto
+    seine Mindestlaufzeit überhaupt hinter sich hätte — dieselbe Rechnung, mit
+    der der Actuator seit dem 19.08.2026 „fertig" von „antwortet nicht" trennt.
+
+    Beide Stände liegen unter dem Ladedeckel; allein die Frist entscheidet."""
+    inp_f, res_f = _voll_am_nachmittag([96.0, 96.0, 96.0])
+    inp_b, res_b = _voll_am_nachmittag([92.0, 92.0, 92.0])
+    assert res_f.lade_deckel_soc > 96.0 and res_b.lade_deckel_soc > 92.0
+    assert coordination.akku_ladereservierung(inp_f, res_f) == 0.0
+    assert coordination.akku_ladereservierung(inp_b, res_b) == 3600.0
+
+
+def test_ladender_akku_drosselt_laufendes_auto_bis_zum_aus():
+    """Spec vom 23.08.2026: „Fängt er an zu laden, dann muss die Wallbox
+    gedrosselt werden." Bis dahin nahm `_modulated_control` die Minima
+    laufender Lasten von der Reservierung aus — das Auto behielt seinen
+    Mindeststrom und der Vorrang war genau dann wirkungslos, wenn er zählt.
+
+    Unterhalb von min_w kann eine Wallbox nicht laufen; Drosseln heißt hier
+    also Abschalten. Netzbezug entsteht dabei nicht: Was das Auto verliert,
+    geht in den Akku."""
+    wb = load("WB", power_w=4140.0, ist_an=True, an_seit_s=3600, nachfrage=True)
+    res = P.compute_plan(
+        plan_input(
+            now=RAMPE_LAEUFT,
+            socs=[40, 40, 40],
+            saldo_w=-860.0,
+            modulateds=[wb],
+            wallbox_w=4140.0,
+            priority_mode="battery_first",
+        )
+    )
+    # 5000 W Überschuss, davon 3 × 1200 W reserviert — 1400 W bleiben übrig,
+    # zu wenig für 6 A dreiphasig.
+    assert res.ev_regelung.ueberschuss_w == 1400
+    assert res.ev_regelung.soll_summe_w == 0
+    assert res.ev_regelung.lasten[0].grund == "Überschuss zu klein"
+    assert sum(zuteilung(res).values()) > 0

@@ -321,7 +321,6 @@ class PlanFlags:
     """
 
     surplus: bool = False
-    knapp: bool = True
     warmwasser_basis: bool = False
     warmwasser_komfort: bool = False
     wetter_knapp: bool = False
