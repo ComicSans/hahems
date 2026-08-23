@@ -29,7 +29,12 @@ Regler daraus macht, entscheidet er selbst, einen Takt später.
 from __future__ import annotations
 
 from ..actuation import ladeauftrag_in_frist_erfuellbar
-from ..const import PRIORITY_AUTO, PRIORITY_BATTERY_FIRST, PRIORITY_EV_FIRST
+from ..const import (
+    PRIORITY_AUTO,
+    PRIORITY_BATTERY_FIRST,
+    PRIORITY_EV_FIRST,
+    STORAGE_NIGHT_MARGIN_SOC,
+)
 from .types import PlanInput, PlanResult
 
 
@@ -67,10 +72,22 @@ def akku_ladereservierung(inp: PlanInput, res: PlanResult) -> float:
     als das, was die volle Ladeleistung in der Frist liefern würde, ist der
     Speicher fertig und reserviert nichts.
 
-    Die Frist ist hier die längste Mindestlaufzeit der wartenden Lasten. Das ist
+    Die Frist ist die längste Mindestlaufzeit der modulierbaren Lasten. Das ist
     der Preis, den die Reservierung dem Auto abverlangt: Wer die Wallbox am
     Starten hindert, hindert sie mindestens eine Mindestlaufzeit lang. Ein Akku,
     der in dieser Zeit ohnehin voll wird, hat diesen Preis nicht verdient.
+
+    Gedeckelt wird sie an der halben Nachtmarge des Speichers, und das ist keine
+    Feinheit, sondern der Unterschied zwischen einer Regel und einer Selbstsperre.
+    Was die Frist als „fertig" abschreibt, bleibt liegen: Die Wallbox nimmt den
+    freigegebenen Überschuss, der Saldo steht auf Null, der Speicher-Regler lädt
+    nichts mehr nach — und weil `frei_wh` damit stehen bleibt, bleibt auch das
+    Urteil „fertig" stehen. Der Rest kommt erst zurück, wenn das Auto satt oder
+    abgesteckt ist. Ungedeckelt wächst diese Lücke linear mit `min_on_min`: bei
+    den konfigurierbaren 240 Minuten (config_flow) gälte jeder Speicher unter
+    4,8 kWh immer als fertig, und der Akku-Vorrang wäre stumm abgeschaltet, ohne
+    dass irgendwo eine Warnung stünde. Der Deckel hält die Lücke unter der
+    halben Nachtmarge — dort deckt sie der Puffer, für den die Marge da ist.
 
     Zwei Bedingungen, die verschiedene Fragen stellen, und beide müssen erfüllt
     sein:
@@ -106,17 +123,24 @@ def akku_ladereservierung(inp: PlanInput, res: PlanResult) -> float:
     deckel = res.lade_deckel_soc if res.lade_deckel_soc is not None else 100.0
     ziel = res.lade_ziel_soc if res.lade_ziel_soc is not None else deckel
     frist_h = max(m.min_on_min for m in inp.modulateds) / 60.0
+
+    def _fertig(s) -> bool:
+        if s.max_charge_w <= 0:
+            return True
+        marge_wh = STORAGE_NIGHT_MARGIN_SOC / 100 * s.capacity_kwh * 1000
+        return ladeauftrag_in_frist_erfuellbar(
+            ist_soc=s.soc,
+            grenze_soc=ziel,
+            capacity_kwh=s.capacity_kwh,
+            zugeteilt_w=s.max_charge_w,
+            frist_h=min(frist_h, marge_wh / 2 / s.max_charge_w),
+        )
+
     return sum(
         s.max_charge_w
         for s in inp.storages
         if s.soc is not None
         and not s.stale
         and s.soc < deckel
-        and not ladeauftrag_in_frist_erfuellbar(
-            ist_soc=s.soc,
-            grenze_soc=ziel,
-            capacity_kwh=s.capacity_kwh,
-            zugeteilt_w=s.max_charge_w,
-            frist_h=frist_h,
-        )
+        and not _fertig(s)
     )

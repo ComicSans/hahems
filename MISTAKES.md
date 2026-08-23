@@ -55,6 +55,18 @@ The format, deliberately narrow:
   käme nie in Gang. Die Deckel-Bedingung bleibt daneben stehen, sie beantwortet
   die andere Frage (*jetzt* laden oder noch warten).
   `tests/test_coordination.py` deckt beide Grenzen ab.
+- **Nachtrag am selben Tag, im Review gefunden (2.6.1):** Die Frist war
+  ungedeckelt an `min_on_min` der Lasten gehängt — konfigurierbar bis 240
+  Minuten. Bei 1200 W Ladeleistung schriebe sie damit 4,8 kWh als „fertig" ab,
+  jeder Speicher darunter reservierte nie wieder, und der Akku-Vorrang wäre
+  stumm abgeschaltet gewesen. Auch bei Default-10-Minuten blieb eine Lücke
+  stehen: Was die Frist als fertig abschreibt, lädt niemand nach — die Wallbox
+  nimmt den freigegebenen Überschuss, der Saldo steht auf Null, `frei_wh` friert
+  ein und mit ihm das Urteil. **Merke, zum zweiten Mal nach dem 17.08.:** Eine
+  Schwelle, deren Ergebnis den Zustand einfriert, an dem sie gemessen wird,
+  urteilt einmal und nie wieder. Sie braucht eine Grenze aus einer anderen
+  Quelle. Hier: die halbe Nachtmarge des Speichers, also genau der Puffer, der
+  die Lücke auffangen muss.
 - **Nicht behoben, weiterhin offen:** Die Leistungssensoren der drei Hyper 2000
   meldeten seit 160 Minuten nichts (`pack_input_power`, `energy_power`,
   `grid_input_power`), während `electric_level` mit 18–26 Minuten weiterlief.

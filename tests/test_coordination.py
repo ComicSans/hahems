@@ -349,3 +349,44 @@ def test_ladender_akku_drosselt_laufendes_auto_bis_zum_aus():
     assert res.ev_regelung.soll_summe_w == 0
     assert res.ev_regelung.lasten[0].grund == "Überschuss zu klein"
     assert sum(zuteilung(res).values()) > 0
+
+
+def test_lange_mindestlaufzeit_schaltet_den_vorrang_nicht_stumm_ab():
+    """`min_on_min` ist bis 240 Minuten konfigurierbar. Ungedeckelt schriebe die
+    Frist bei 1200 W Ladeleistung 4,8 kWh als „schon fertig" ab — jeder Speicher
+    unter dieser Größe reservierte nie wieder, und der Akku-Vorrang wäre stumm
+    abgeschaltet, ohne dass irgendwo eine Warnung stünde.
+
+    Der Deckel an der halben Nachtmarge (10 % von 3,7 kWh, davon die Hälfte =
+    185 Wh) macht die Reservierung unabhängig von der Wallbox-Einstellung."""
+    wb_kurz = load("WB", power_w=0.0, ist_an=False, nachfrage=True, min_on_min=10)
+    wb_lang = load("WB", power_w=0.0, ist_an=False, nachfrage=True, min_on_min=240)
+
+    def _res(wb):
+        inp = plan_input(
+            now=lokal(14, 33),
+            storage_states=[
+                storage(f"L{i+1}", 92.0, capacity_kwh=3.7) for i in range(3)
+            ],
+            saldo_w=-4466.0,
+            modulateds=[wb],
+            wallbox_w=0.0,
+            priority_mode="auto",
+            weather_factor_tomorrow=0.25,
+        )
+        return coordination.akku_ladereservierung(inp, P.compute_plan(inp))
+
+    assert _res(wb_kurz) == 3600.0
+    assert _res(wb_lang) == _res(wb_kurz)
+
+
+def test_der_deckel_gilt_auch_fuer_die_kurze_frist():
+    """Gegenprobe zur Grenze selbst: 296 Wh Rest (92 % von 3,7 kWh bis 100 %)
+    liegen über der halben Nachtmarge, 148 Wh (96 %) darunter. Die Grenze läuft
+    damit über die Energie, nicht über einen SoC-Abstand — dieselbe Rechnung,
+    mit der der Actuator seit dem 19.08.2026 „fertig" von „antwortet nicht"
+    trennt."""
+    inp_f, res_f = _voll_am_nachmittag([96.0, 96.0, 96.0])
+    inp_b, res_b = _voll_am_nachmittag([92.0, 92.0, 92.0])
+    assert coordination.akku_ladereservierung(inp_f, res_f) == 0.0
+    assert coordination.akku_ladereservierung(inp_b, res_b) == 3600.0
