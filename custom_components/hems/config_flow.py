@@ -10,6 +10,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_BASELINE_W,
+    CONF_BATTERY_TO_EV,
     CONF_DEVICES,
     CONF_FREE_H,
     CONF_FREE_KWH,
@@ -302,6 +303,9 @@ GENERAL_SCHEMA = vol.Schema(
             0.1, 50, "kWh", 0.1
         ),
         vol.Required(CONF_FREE_H, default=DEFAULT_FREE_H): _number(0.25, 24, "h", 0.25),
+        vol.Required(
+            CONF_BATTERY_TO_EV, default=False
+        ): selector.BooleanSelector(),
     }
 )
 

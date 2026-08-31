@@ -23,6 +23,11 @@ CONF_INVERT_PV = "invert_pv_power"
 # Akkuleistung aus der gemessenen PV heraus (pv - batterie_w), damit die
 # Anzeige die reine Erzeugung zeigt.
 CONF_PV_MINUS_BATTERY = "pv_minus_battery"
+# Der Hausakku lädt die Wallbox grundsätzlich nicht (CONCEPT.md, "Modulierbare
+# Lasten weichen vor dem Speicher") — Entladen für ein Fahrzeug wäre eine
+# Mitkopplung mit der Überschussregelung. Dieser Schalter hebt genau diese
+# Sperre auf; Default False lässt bestehende Installationen unverändert.
+CONF_BATTERY_TO_EV = "battery_to_ev"
 CONF_BASELINE_W = "baseline_load_w"
 CONF_NIGHT_W = "night_load_w"
 CONF_DEVICES = "devices"

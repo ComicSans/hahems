@@ -4,6 +4,21 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 2.7.0 — Der Akku darf die Wallbox laden, wenn man das will
+
+HEMS lädt das E-Auto grundsätzlich nicht aus dem Hausakku (siehe 2.6.0,
+„Der Hausakku entlädt nicht mehr in die Wallbox"). Das bleibt der Standard,
+ist jetzt aber ein Grundwerte-Schalter statt eine feste Regel.
+
+**Neuer Schalter „Akku darf das E-Auto laden".** Steht er, hebt er die beiden
+Entlade-Schutzklauseln der Speicher-Regelung auf — bei Zwangsladung und wenn
+die Wallbox an ihrem Mindeststrom hängt. Der Akku deckt die Wallbox dann, wenn
+sie ohnehin läuft. Wer das Auto aktiv aus dem Akku laden will, kombiniert
+Zwangsladung mit dem Schalter. Default ist Aus: Ohne manuelle Änderung
+verhält sich HEMS unverändert wie bisher. Der Überschuss-Vorrang des Akkus vor
+der Wallbox (2.6.0) ist davon nicht betroffen — der Schalter wirkt
+ausschließlich auf das Entladen.
+
 ## 2.6.0 — Vorrang, der nichts kostet, wenn er nichts nützt
 
 Am 23. August 2026 speiste die Anlage 4466 W ins Netz, während das Auto mit

@@ -15,7 +15,8 @@
           "night_load_w": "Baseline load at night (W)",
           "priority_mode": "Priorities for surplus",
           "free_capacity_kwh": "Free capacity: energy needed (kWh)",
-          "free_capacity_h": "Free capacity: duration (h)"
+          "free_capacity_h": "Free capacity: duration (h)",
+          "battery_to_ev": "Battery may charge the EV"
         },
         "data_description": {
           "meter_entity": "Sensor with the current power at the grid connection point in watts. Expected: positive = import, negative = export.",
@@ -28,7 +29,8 @@
           "night_load_w": "Initial value for night-time consumption. HEMS learns the real value automatically from meter statistics after a few days.",
           "priority_mode": "Where should surplus go first? \"Automatic\" charges the battery before the EV for as long as it still needs charge. Once it is full, the EV gets the entire surplus. Hot-water base heating always has top priority.",
           "free_capacity_kwh": "The \"Capacity free\" binary sensor turns on when this much energy is available over the given duration without touching the reserve or the night coverage.",
-          "free_capacity_h": "Duration over which the energy demand must be covered. PV surplus expected within this window counts towards the free capacity."
+          "free_capacity_h": "Duration over which the energy demand must be covered. PV surplus expected within this window counts towards the free capacity.",
+          "battery_to_ev": "Allow the home battery to discharge into the wallbox when it is already running (forced charging, or hanging at its minimum current). Off by default: the battery never covers the EV, in line with the storage priority."
         }
       }
     },
@@ -375,7 +377,8 @@
           "night_load_w": "Baseline load at night (W)",
           "priority_mode": "Priorities for surplus",
           "free_capacity_kwh": "Free capacity: energy needed (kWh)",
-          "free_capacity_h": "Free capacity: duration (h)"
+          "free_capacity_h": "Free capacity: duration (h)",
+          "battery_to_ev": "Battery may charge the EV"
         },
         "data_description": {
           "meter_entity": "Sensor with the current power at the grid connection point in watts. Expected: positive = import, negative = export.",
@@ -388,7 +391,8 @@
           "night_load_w": "Fallback for night-time consumption until HEMS has learned it from statistics.",
           "priority_mode": "Where should surplus go first? \"Automatic\" charges the battery before the EV for as long as it still needs charge. Once it is full, the EV gets the entire surplus. Hot-water base heating always has top priority.",
           "free_capacity_kwh": "The \"Capacity free\" binary sensor turns on when this much energy is available over the given duration without touching the reserve or the night coverage.",
-          "free_capacity_h": "Duration over which the energy demand must be covered. PV surplus expected within this window counts towards the free capacity."
+          "free_capacity_h": "Duration over which the energy demand must be covered. PV surplus expected within this window counts towards the free capacity.",
+          "battery_to_ev": "Allow the home battery to discharge into the wallbox when it is already running (forced charging, or hanging at its minimum current). Off by default: the battery never covers the EV, in line with the storage priority."
         }
       },
       "add_heating": {

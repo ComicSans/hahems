@@ -18,8 +18,11 @@ Regler hinein:
   (`akku_ladereservierung`). Ein fertiger Akku reserviert nichts.
 - Der Lasten-Regler zieht sie voll ab, auch von den Minima laufender Lasten
   (`_modulated_control`). Fängt der Akku an zu laden, weicht das Auto.
-- Der Speicher-Regler entlädt nicht mehr in die Wallbox (`_storage_control`).
-  Vorrang, der beim Entladen wieder abgegeben wird, ist keiner.
+- Der Speicher-Regler entlädt standardmäßig nicht mehr in die Wallbox
+  (`_storage_control`). Vorrang, der beim Entladen wieder abgegeben wird, ist
+  keiner. Der Grundwerte-Schalter `battery_to_ev` hebt diese eine Sperre
+  gezielt auf; die Reservierung hier — der Vorrang beim Verteilen von
+  Überschuss — bleibt davon unberührt, sie zählt nicht als Entladen.
 
 Reihenfolge: Die Reservierung entsteht VOR der Speicher-Regelung (siehe
 `compute_plan`) und kann deren Zuteilung deshalb nicht kennen. Sie rechnet

@@ -170,7 +170,7 @@ def test_akku_laedt_nicht_gegen_netzbezug_wenn_wallbox_gedrosselt_wird():
     assert all(z.watt == 0 for z in r.regelung.zuteilung)
 
 
-def _haengende_wallbox(saldo, flags=None):
+def _haengende_wallbox(saldo, flags=None, battery_to_ev=False):
     """Ein Auto, das seinem Abschaltbefehl nicht folgt und weiter 1,8 kW zieht."""
     wb = load(
         "WB", min_a=6, max_a=16, phases=1, power_w=1841.0,
@@ -187,6 +187,7 @@ def _haengende_wallbox(saldo, flags=None):
             priority_mode="auto",
             gain_level="max",
             flags=flags,
+            battery_to_ev=battery_to_ev,
         )
     )
 
@@ -258,6 +259,40 @@ def test_zwang_bei_defizit_laesst_den_akku_in_ruhe():
     assert r.ev_regelung.lasten[0].strom_a == wb.min_a
     # Akku: entlädt nicht, um den Zwangsbezug zu decken.
     assert r.regelung.modus != "entladen"
+
+
+def test_schalter_akku_darf_wallbox_laden_bei_zwang():
+    """Gegenprobe zu oben mit aktivem Grundwerte-Schalter: Steht `battery_to_ev`,
+    hebt die Zwangsladungs-Bereinigung nicht mehr aus dem Saldo heraus — der
+    Regler sieht den Rohsaldo (dasselbe Deficit, das ohne Schalter beim Netz
+    blieb) und deckt ihn aus dem Akku. `ev_target_w` bleibt bei Zwang wie
+    bisher None (planner.py), das Vorsteuer-`elif` greift also nicht — keine
+    Doppelzählung."""
+    wb = load("WB", power_w=4200.0, ist_an=True, an_seit_s=3600, nachfrage=True)
+    r = P.compute_plan(
+        plan_input(
+            socs=[60, 60, 60],
+            saldo_w=4000.0,      # 4200 W Wallbox, 200 W Einspeisung sonst
+            modulateds=[wb],
+            wallbox_w=4200.0,
+            ev_force=True,
+            battery_to_ev=True,
+        )
+    )
+    # Akku: deckt jetzt den Zwangsbezug, statt ihn dem Netz zu überlassen.
+    assert r.regelung.modus == "entladen"
+    assert sum(zuteilung(r).values()) > 0
+
+
+def test_schalter_akku_darf_wallbox_laden_am_mindeststrom():
+    """Gegenprobe zu `test_akku_deckt_den_bezug_der_haengenden_wallbox_nicht`
+    mit aktivem Schalter: Hängt die Wallbox an ihrem Mindeststrom (Vorsteuer-
+    Delta null), greift der Entlade-Deckel nicht mehr — der Akku deckt die
+    volle Last, inklusive des Wallbox-Anteils."""
+    erst = _haengende_wallbox(1573.0, battery_to_ev=True)
+    zweit = _haengende_wallbox(1573.0, erst.flags, battery_to_ev=True)
+    assert zweit.regelung.modus == "entladen"
+    assert sum(zuteilung(zweit).values()) > 0
 
 
 # --- Reservierung nur bei echtem Ladebedarf (23.08.2026) --------------------

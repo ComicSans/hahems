@@ -436,9 +436,17 @@ class PlanInput:
     # den die Speicher-Regelung sieht, damit der Hausakku nicht still ins Auto
     # leerläuft ("Akku schonen"); das Zwangs-Delta kommt aus dem Netz.
     ev_force: bool = False
-    # Aktuelle Wallbox-Leistung (W, Bezug), nur für die Saldo-Bereinigung bei
-    # Zwangsladung; sonst ungenutzt.
+    # Aktuelle Wallbox-Leistung (W, Bezug), für die Saldo-Bereinigung bei
+    # Zwangsladung und für den Entlade-Deckel gegen Akkustrom ins Auto.
     wallbox_w: float | None = None
+    # Grundwerte-Schalter: darf der Hausakku die Wallbox laden? Default False
+    # hält die bisherige Sperre — der Akku entlädt grundsätzlich nicht in die
+    # Wallbox (CONCEPT.md, "Modulierbare Lasten weichen vor dem Speicher").
+    # Aktiv hebt er die beiden Entlade-Schutzklauseln in `_storage_control`
+    # auf (Zwangsladungs-Bereinigung und Entlade-Deckel); der Akku deckt die
+    # Wallbox dann, wenn sie ohnehin läuft. Der Überschuss-Vorrang
+    # (coordination.py) bleibt unberührt — dafür ist das kein Schalter.
+    battery_to_ev: bool = False
     weather_factor_tomorrow: float | None = None  # 0 = trüb, 1 = klar
     free_kwh: float = 0.0  # Energiebedarf für "Kapazität frei"
     free_h: float = 1.0  # Dauer, über die der Bedarf gedeckt sein soll

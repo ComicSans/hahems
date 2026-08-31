@@ -22,6 +22,7 @@ from .config_check import ConfigCheck, check_config
 from .const import (
     ALERT_CHANNELS,
     CONF_BASELINE_W,
+    CONF_BATTERY_TO_EV,
     CONF_DEVICES,
     CONF_FREE_H,
     CONF_FREE_KWH,
@@ -1213,6 +1214,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 goal=self.goal,
                 gain_level=self.gain_level,
                 ev_force=self.ev_force,
+                battery_to_ev=self._opt(CONF_BATTERY_TO_EV, False),
                 emergency_reserve=self.emergency_reserve,
                 wallbox_w=data.wallbox_w,
                 weather_factor_tomorrow=data.wetter_faktor_morgen,

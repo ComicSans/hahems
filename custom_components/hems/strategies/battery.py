@@ -229,9 +229,14 @@ def _storage_control(
     # E-Auto-Zwangsladung: die Wallbox-Last nicht ausregeln, sonst entlädt der
     # Regler den Hausakku, um den Netzbezug der Wallbox zu decken. Der
     # herausgerechnete Saldo lässt den Akku seinen SoC halten; das Zwangs-Delta
-    # bleibt beim Netz.
+    # bleibt beim Netz. Der Grundwerte-Schalter `battery_to_ev` hebt genau
+    # diese Bereinigung auf: Steht er, bleibt `saldo_w` unverändert, der Regler
+    # sieht den vollen Zwangsbezug und deckt ihn aus dem Akku. `ev_target_w`
+    # bleibt bei Zwangsladung planungsseitig None (planner.py) — das Vorsteuer-
+    # `elif` darunter greift also auch mit aktivem Schalter nicht, keine
+    # Doppelzählung des Wallbox-Deltas.
     saldo_w = inp.saldo_w
-    if inp.ev_force and inp.wallbox_w:
+    if inp.ev_force and inp.wallbox_w and not inp.battery_to_ev:
         saldo_w = inp.saldo_w - inp.wallbox_w
     elif ev_target_w is not None and inp.wallbox_w is not None:
         # Überschussregelung: HEMS stellt die Wallbox gleich auf ev_target_w.
@@ -303,7 +308,13 @@ def _storage_control(
     #
     # Bei Zwangsladung ändert die Klausel nichts: Dort ist `saldo_w` bereits um
     # die Wallbox bereinigt, beide Rechnungen fallen zusammen.
-    if soll > 0 and inp.wallbox_w:
+    #
+    # Auch diese Klausel steht unter dem Grundwerte-Schalter `battery_to_ev`:
+    # aktiv, entfällt der Deckel, und der Akku deckt die volle Last inklusive
+    # des Wallbox-Anteils — genau der Fall, den der Kommentar oben beschreibt
+    # ("Akkustrom ins Auto"), nur jetzt als bewusste Entscheidung statt als
+    # blinder Fleck.
+    if soll > 0 and inp.wallbox_w and not inp.battery_to_ev:
         fehler_ohne_ev = inp.saldo_w - inp.wallbox_w + offset
         soll = min(
             soll, max(0.0, bat_ist + fehler_ohne_ev * _gain(fehler_ohne_ev))
