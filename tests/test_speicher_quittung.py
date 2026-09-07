@@ -235,6 +235,15 @@ def test_quittung_schreibt_die_beobachtung_in_den_plan():
     assert "plan.speicher_nicht_uebernommen" in quelle
 
 
+def test_quittung_schreibt_die_entlade_verweigerung_getrennt():
+    # Zwei Leser, zwei Ansprüche (07.09.2026): Der Sensor-Weg
+    # (speicher_nicht_uebernommen) bleibt bestehen, bekommt aber ein zweites
+    # Feld daneben, das nur der Latch liest — siehe
+    # tasks/speicher-selbstsperre-ladepfad.md, Frage 1.
+    quelle = ast.unparse(_funktion("actuator.py", "_quittung_speicher"))
+    assert "plan.speicher_entladen_verweigert" in quelle
+
+
 def test_sensor_zeigt_die_quittung():
     quelle = (BASIS / "sensor.py").read_text(encoding="utf-8")
     assert "speicher_nicht_uebernommen" in quelle

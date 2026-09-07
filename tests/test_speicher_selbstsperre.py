@@ -84,12 +84,15 @@ def test_ruhender_voller_speicher_deckt_den_netzbezug():
 
 def test_stille_allein_verriegelt_niemanden():
     # Der 17.08.: Der Speicher schweigt seit Stunden, aber es lag nie ein
-    # Befehl an, dem er nicht gefolgt wäre. Wer nichts befohlen bekam, kann
-    # nichts verweigert haben.
+    # Entlade-Befehl an, dem er nicht gefolgt wäre. Wer nichts befohlen bekam,
+    # kann nichts verweigert haben. Seit dem 07.09.2026 ist eine
+    # Lade-Verweigerung ab jetzt derselbe Fall: Sie zählt hier so wenig wie gar
+    # kein Befehl, weil `entladen_verweigert` ausschließlich aus dem
+    # Entlade-Zweig der Quittung kommt (siehe `_quittung_speicher`).
     verriegelt: set[str] = set()
     for _ in range(50):
         assert not speicher_stumm_latch(
-            verriegelt, "L1", schweigt=True, nicht_gefolgt=False
+            verriegelt, "L1", schweigt=True, entladen_verweigert=False
         )
     assert verriegelt == set()
 
@@ -97,23 +100,25 @@ def test_stille_allein_verriegelt_niemanden():
 def test_schweigen_und_nichtausfuehrung_verriegeln():
     # Der 15.08.: eingefrorene 100 %, volle Anforderung, keine Leistung.
     verriegelt: set[str] = set()
-    assert speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+    assert speicher_stumm_latch(
+        verriegelt, "L1", schweigt=True, entladen_verweigert=True
+    )
 
 
 def test_verriegelung_haelt_ohne_weiteren_befehl():
     """Der Kern: Die Abmeldung darf ihren eigenen Beweis nicht löschen.
 
     Sobald L1 abgemeldet ist, teilt ihm die Regelung 0 W zu — und ohne Befehl
-    quittiert der Actuator nicht mehr, `nicht_gefolgt` fällt also auf False.
-    Ohne Verriegelung käme der ausgefallene Speicher damit im nächsten Zyklus
-    zurück in die Zuteilung, gewönne mit seinen eingefrorenen 100 % erneut die
-    Rangfolge und flackerte im 5-Minuten-Takt.
+    quittiert der Actuator nicht mehr, `entladen_verweigert` fällt also auf
+    False. Ohne Verriegelung käme der ausgefallene Speicher damit im nächsten
+    Zyklus zurück in die Zuteilung, gewönne mit seinen eingefrorenen 100 %
+    erneut die Rangfolge und flackerte im 5-Minuten-Takt.
     """
     verriegelt: set[str] = set()
-    speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+    speicher_stumm_latch(verriegelt, "L1", schweigt=True, entladen_verweigert=True)
     for _ in range(50):
         assert speicher_stumm_latch(
-            verriegelt, "L1", schweigt=True, nicht_gefolgt=False
+            verriegelt, "L1", schweigt=True, entladen_verweigert=False
         ), "abgemeldet bleibt abgemeldet, solange keine Meldung kommt"
 
 
@@ -121,21 +126,23 @@ def test_eine_frische_meldung_entriegelt_sofort():
     # Der Rückweg, und der einzige: Meldet das Gerät wieder, regelt HEMS im
     # nächsten Zyklus mit — ohne Neustart, ohne Quittierung von Hand.
     verriegelt: set[str] = set()
-    speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+    speicher_stumm_latch(verriegelt, "L1", schweigt=True, entladen_verweigert=True)
     assert not speicher_stumm_latch(
-        verriegelt, "L1", schweigt=False, nicht_gefolgt=False
+        verriegelt, "L1", schweigt=False, entladen_verweigert=False
     )
     assert verriegelt == set()
     # Und die Verriegelung greift danach wieder, wenn der Ausfall zurückkommt.
-    assert speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+    assert speicher_stumm_latch(
+        verriegelt, "L1", schweigt=True, entladen_verweigert=True
+    )
 
 
 def test_verriegelung_trennt_die_speicher():
     # Ein Ausfall darf nicht die gesunden Nachbarn mitnehmen.
     verriegelt: set[str] = set()
-    speicher_stumm_latch(verriegelt, "L1", schweigt=True, nicht_gefolgt=True)
+    speicher_stumm_latch(verriegelt, "L1", schweigt=True, entladen_verweigert=True)
     assert not speicher_stumm_latch(
-        verriegelt, "L2", schweigt=True, nicht_gefolgt=False
+        verriegelt, "L2", schweigt=True, entladen_verweigert=False
     )
     assert verriegelt == {"L1"}
 
@@ -174,6 +181,50 @@ def test_erster_zyklus_ohne_vorlauf_stuerzt_nicht_ab():
     quelle = ast.unparse(_funktion("coordinator.py", "_async_update_data"))
     assert "self.data is not None" in quelle
     assert "self.data.plan is not None" in quelle
+
+
+def test_offen_kommt_aus_der_entladen_verweigert_liste():
+    """Vierter Fund derselben Ursache (07.09.2026): Nur eine
+    Entlade-Verweigerung darf den Latch füttern.
+
+    Vorher bildete `offen` sich aus `speicher_nicht_uebernommen`, dem
+    Sammelfeld für beide Richtungen — eine Lade-Verweigerung (voller,
+    ruhender Speicher, Zuteilung unter der Ausnahme-Schwelle) landete darin
+    genauso wie eine echte Entlade-Verweigerung, und beide verriegelten
+    gleich. Diese Naht pinnt die neue Quelle, damit kein künftiger Umbau
+    `offen` wieder aufs Sammelfeld zurückzieht.
+    """
+    quelle = (BASIS / "coordinator.py").read_text(encoding="utf-8")
+    assert "self.data.plan.speicher_entladen_verweigert" in quelle
+    assert "stale=self._stumm(s, offen)" in quelle
+
+
+def test_nur_der_entlade_zweig_fuettert_den_latch():
+    """Die Naht im Actuator, die zur obigen im Coordinator gehört.
+
+    `plan.speicher_entladen_verweigert` darf ausschließlich unter
+    `not laden_soll` beschrieben werden — schreibt auch der Lade-Zweig
+    hierher, verriegelt ein voller ruhender Speicher sich wieder über einen
+    Ladeauftrag, den er physisch nicht annehmen kann (derselbe Fehlalarm wie
+    vorher über `speicher_nicht_uebernommen`, nur unter neuem Namen).
+    """
+    knoten = _funktion("actuator.py", "_quittung_speicher")
+    treffer = [
+        zweig
+        for zweig in ast.walk(knoten)
+        if isinstance(zweig, ast.If)
+        and any(
+            isinstance(aufruf, ast.Call)
+            and isinstance(aufruf.func, ast.Attribute)
+            and aufruf.func.attr == "append"
+            and "speicher_entladen_verweigert" in ast.unparse(aufruf.func.value)
+            for aufruf in ast.walk(zweig)
+            if isinstance(aufruf, ast.Call)
+        )
+    ]
+    assert len(treffer) == 1, "genau ein Append auf speicher_entladen_verweigert"
+    bedingung = ast.unparse(treffer[0].test)
+    assert "not laden_soll" in bedingung
 
 
 def test_ohne_leistungssensor_quittiert_der_actuator_nicht():

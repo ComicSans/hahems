@@ -176,8 +176,10 @@ CONTROL_LEAD_POWER_W = 30.0
 # Wert einfach stehen lässt.
 #
 # Schweigen allein meldet niemanden ab — das entscheidet `_stumm` im
-# Coordinator, und es verlangt zusätzlich einen Befehl, den der Speicher
-# nachweislich nicht ausgeführt hat. Grund ist der 17.08.2026: Eine
+# Coordinator, und es verlangt zusätzlich einen ENTLADE-Befehl, den der
+# Speicher nachweislich nicht ausgeführt hat (nur diese Richtung ist ein
+# Ausfallbeweis, seit 07.09.2026, siehe
+# tasks/speicher-selbstsperre-ladepfad.md). Grund ist der 17.08.2026: Eine
 # push-basierte Integration schreibt den Zustand nur bei Wertänderung, ein
 # ruhender voller Akku ändert nichts — und wurde so ohne jeden Ausfall
 # abgemeldet, was die Regelung in eine sich selbst haltende Sperre führte.

@@ -35,8 +35,10 @@ class StorageState:
     power_w: float | None = None
     cold_reserve: bool = False
     # Der Speicher ist ausgefallen: Seine SoC-Entität schweigt seit
-    # STORAGE_STALE_MIN Minuten UND er hat einen Befehl ≠ 0 nicht ausgeführt.
-    # Setzt der Coordinator (`_stumm`; die Frist braucht Zeitstempel aus HA),
+    # STORAGE_STALE_MIN Minuten UND er hat einen Entlade-Befehl ≠ 0 nicht
+    # ausgeführt (nur die Entlade-Richtung verriegelt, siehe
+    # `speicher_stumm_latch`). Setzt der Coordinator (`_stumm`; die Frist
+    # braucht Zeitstempel aus HA),
     # auswerten muss es die Regelung: `soc` und `power_w` sind dann Fiktion,
     # und wer einer Fiktion Leistung zuteilt, hält den Rest der Anlage still.
     # Anders als `soc = None` (Wert nie lesbar) ist das ein Wert, der bloß
@@ -359,20 +361,27 @@ class PlanFlags:
 
 
 def speicher_stumm_latch(
-    verriegelt: set[str], name: str, *, schweigt: bool, nicht_gefolgt: bool
+    verriegelt: set[str], name: str, *, schweigt: bool, entladen_verweigert: bool
 ) -> bool:
     """Verriegelung „Speicher ausgefallen": zwei Auslöser, ein Rückweg.
 
-    Verriegelt wird, wenn die SoC-Entität schweigt UND der Speicher einem Befehl
-    ≠ 0 nicht gefolgt ist. Entriegelt wird ausschließlich über eine frische
-    Meldung (`schweigt` fällt auf False) — nie dadurch, dass HEMS aufhört zu
-    befehlen. Die Begründung beider Richtungen steht bei `HemsCoordinator._stumm`;
-    hier steht sie HA-frei, damit der Übergang über mehrere Zyklen prüfbar ist
-    (`tests/test_speicher_selbstsperre.py`). `verriegelt` wird dabei verändert.
+    Verriegelt wird, wenn die SoC-Entität schweigt UND der Speicher einem
+    **Entlade**-Befehl ≠ 0 nicht gefolgt ist. Nur diese Richtung ist ein
+    Ausfallbeweis: Entladen kann jeder gesunde Speicher mit SoC über der
+    Reserve, eine Verweigerung ist also eindeutig. Laden verweigert ein
+    gesundes Gerät aus vielen physikalischen Gründen (voll, CV-Taper, zu
+    kalt/warm, Zellausgleich) — mehrdeutig, kein Auslöser mehr (vierter Fund
+    derselben Ursache, 07.09.2026, siehe
+    tasks/speicher-selbstsperre-ladepfad.md). Entriegelt wird ausschließlich
+    über eine frische Meldung (`schweigt` fällt auf False) — nie dadurch, dass
+    HEMS aufhört zu befehlen. Die Begründung beider Richtungen steht bei
+    `HemsCoordinator._stumm`; hier steht sie HA-frei, damit der Übergang über
+    mehrere Zyklen prüfbar ist (`tests/test_speicher_selbstsperre.py`).
+    `verriegelt` wird dabei verändert.
     """
     if not schweigt:
         verriegelt.discard(name)
-    elif nicht_gefolgt:
+    elif entladen_verweigert:
         verriegelt.add(name)
     return name in verriegelt
 
@@ -614,12 +623,29 @@ class PlanResult:
     # die ein „aus" quittiert und weiterläuft, stünde sonst im Lastfluss als
     # abgeschaltet, während sie Strom zieht.
     heizung_nicht_uebernommen: list[str] = field(default_factory=list)
-    # Speicher, die zugeteilte Ladeleistung nicht ziehen (Namen). Wie oben vom
-    # Actuator eingetragen, nicht geplant: Die Planung kennt nur die Zuteilung,
-    # nicht die Messung. Ohne diesen Rückweg sieht ein Speicher, der den
-    # Ladebefehl entgegennimmt und stehen bleibt, in Empfehlung und Lastfluss
-    # aus wie einer, der lädt — während der Überschuss ins Netz geht.
+    # Speicher, die zugeteilte Leistung nicht umsetzen (Namen) — beide
+    # Richtungen, Laden wie Entladen. Wie oben vom Actuator eingetragen, nicht
+    # geplant: Die Planung kennt nur die Zuteilung, nicht die Messung. Ohne
+    # diesen Rückweg sieht ein Speicher, der den Befehl entgegennimmt und
+    # stehen bleibt, in Empfehlung und Lastfluss aus wie einer, der arbeitet —
+    # während der Überschuss ins Netz geht bzw. der Bezug aus dem Netz kommt.
+    # Dieses Feld ist der Melde-Weg (Sensor, Log). Wer einen Ausfallbeweis
+    # braucht, nimmt `speicher_entladen_verweigert` darunter.
     speicher_nicht_uebernommen: list[str] = field(default_factory=list)
+    # Speicher, die einen Entlade-Befehl nicht ausgeführt haben (Namen) — echte
+    # Teilmenge von `speicher_nicht_uebernommen`, vom Actuator im selben Zug
+    # geschrieben. Zwei Leser mit verschiedenem Anspruch auf ein Feld, das
+    # beide Richtungen führt: Der Sensor (und das Log) soll jede
+    # Nicht-Ausführung sehen, auch beim Laden — ein voller, ruhender Speicher
+    # ist dafür ein legitimer Grund, kein Ausfall. Der Latch
+    # (`speicher_stumm_latch`) darf dagegen nur einen Ausfallbeweis bekommen,
+    # und den liefert ausschließlich das Entladen (Frage 1,
+    # tasks/speicher-selbstsperre-ladepfad.md): Eine Lade-Verweigerung ist
+    # physikalisch mehrdeutig und verriegelt seit dem 07.09.2026 nicht mehr.
+    # Deshalb ein eigenes Feld statt eines Filters auf das alte — der Latch
+    # braucht eine Quelle, die niemand versehentlich um den Lade-Fall
+    # erweitert.
+    speicher_entladen_verweigert: list[str] = field(default_factory=list)
     # Empfehlung der Saldo-Regelung über alle Speicher (None ohne Daten).
     regelung: ControlResult | None = None
     # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).

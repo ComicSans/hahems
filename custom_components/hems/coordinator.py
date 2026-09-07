@@ -447,7 +447,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Befehl quittiert der Actuator nicht mehr — der Beweis für die
         # Abmeldung verschwände also genau dadurch, dass sie wirkt, und der
         # Ausfall käme im Takt von 5 Minuten immer wieder in die Zuteilung
-        # zurück. Entriegelt wird ausschließlich über eine frische Meldung.
+        # zurück. Entriegelt wird ausschließlich über eine frische Meldung. Nur
+        # eine Entlade-Verweigerung verriegelt seit dem 07.09.2026 — siehe
+        # `_stumm`.
         self._speicher_stumm: set[str] = set()
         # Fairness-Akkumulator für die Lastrotation: geladene Energie je Last
         # (kWh) am laufenden lokalen Kalendertag, aus der gemessenen Leistung
@@ -632,8 +634,15 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
 
         **Verriegeln** braucht beides: Die SoC-Entität schweigt seit
         STORAGE_STALE_MIN Minuten UND der Speicher ist im letzten Zyklus einem
-        Befehl ≠ 0 nicht gefolgt (`offen`, aus `_quittung_speicher` im Actuator,
-        Frist SPEICHER_QUITTUNG_FRIST).
+        **Entlade**-Befehl ≠ 0 nicht gefolgt (`offen`, aus
+        `plan.speicher_entladen_verweigert`, geschrieben in
+        `_quittung_speicher` im Actuator, Frist SPEICHER_QUITTUNG_FRIST). Eine
+        Lade-Verweigerung verriegelt seit dem 07.09.2026 nicht mehr — sie ist
+        physikalisch mehrdeutig (voll, CV-Taper, Zellausgleich …), kein
+        Ausfallbeweis. Sie bleibt eine Warnung
+        (`plan.speicher_nicht_uebernommen`, Sensor und Log), nur der Rückweg
+        zum Latch ist ihr entzogen. Vierter Fund derselben Ursache, siehe
+        tasks/speicher-selbstsperre-ladepfad.md.
 
         Schweigen allein genügt ausdrücklich nicht. `_abgemeldet` misst nur, dass
         keine Meldung mehr kommt, und das ist kein Ausfallbeweis: Eine
@@ -665,7 +674,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             self._speicher_stumm,
             s.name,
             schweigt=self._abgemeldet(s.soc_entity, STORAGE_STALE_MIN),
-            nicht_gefolgt=s.name in offen,
+            entladen_verweigert=s.name in offen,
         )
 
     def _abgemeldet(self, entity_id: str | None, frist_min: float) -> bool:
@@ -1116,11 +1125,14 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         if sunset is None or sunrise is None:
             return data  # Polarnacht/-tag: ohne Sonnenzeiten keine Planung
 
-        # Speicher, die im letzten Zyklus einen Befehl nicht ausgeführt haben
-        # (Quittung des Actuators). Nur sie dürfen abgemeldet werden — siehe
-        # `_stumm`.
+        # Speicher, die im letzten Zyklus einen ENTLADE-Befehl nicht ausgeführt
+        # haben (Quittung des Actuators). Nur sie dürfen abgemeldet werden —
+        # siehe `_stumm`. Bewusst NICHT `speicher_nicht_uebernommen`: Das Feld
+        # führt beide Richtungen (für Sensor und Log), aber eine
+        # Lade-Verweigerung ist kein Ausfallbeweis und darf den Latch nicht
+        # mehr füttern (07.09.2026).
         offen = set(
-            self.data.plan.speicher_nicht_uebernommen
+            self.data.plan.speicher_entladen_verweigert
             if self.data is not None and self.data.plan is not None
             else ()
         )

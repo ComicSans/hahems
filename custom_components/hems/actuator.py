@@ -96,12 +96,14 @@ _CALL_THROTTLE = timedelta(minutes=5)
 # steht in Empfehlung und Lastfluss als ladend, während der Überschuss ins Netz
 # geht: am 14.08.2026 26 Minuten lang unbemerkt, rund 1,2 kW.
 #
-# Gilt in BEIDE Richtungen. Bis dahin war nur das Laden quittiert, und der
-# Entladefall blieb strukturell unsichtbar — am 15.08.2026 fünfeinhalb Stunden
-# lang: Die Zuteilung stand auf einem Hyper 2000, dessen Telemetrie seit 12:54
-# eingefroren war, die anderen beiden bekamen 0 W, und das Haus zog derweil
-# 1,1 kW aus dem Netz bei 95,7 % gemeldetem SoC. Wer nur eine Richtung prüft,
-# meldet genau die Hälfte der Fälle.
+# Gilt als WARNUNG in BEIDE Richtungen — bis dahin war nur das Laden quittiert,
+# und der Entladefall blieb strukturell unsichtbar — am 15.08.2026 fünfeinhalb
+# Stunden lang: Die Zuteilung stand auf einem Hyper 2000, dessen Telemetrie
+# seit 12:54 eingefroren war, die anderen beiden bekamen 0 W, und das Haus zog
+# derweil 1,1 kW aus dem Netz bei 95,7 % gemeldetem SoC. Wer nur eine Richtung
+# prüft, meldet genau die Hälfte der Fälle. Für die Verriegelung
+# (`speicher_stumm_latch`) gilt das seit dem 07.09.2026 NICHT mehr: Nur eine
+# Entlade-Verweigerung ist ein Ausfallbeweis, siehe `_quittung_speicher`.
 #
 # Fünf Minuten, weil das Anlaufen eines Speichers Sekunden dauert, ein
 # Deadband-Durchgang der Regelung aber kurz auf 0 W führen kann — die Frist
@@ -452,11 +454,30 @@ class Actuator:
         tut, ist von einem arbeitenden Gerät nur an der Messung zu
         unterscheiden. Ohne Leistungssensor gibt es nichts zu quittieren.
 
-        **Beide Richtungen.** Ein nicht ausgeführtes Entladen kostet dasselbe
-        wie ein nicht ausgeführtes Laden, nur andersherum: Der Bezug, den der
-        Speicher decken sollte, kommt aus dem Netz. Und weil die Zuteilung
-        greedy bündelt, hängt an einem stummen Speicher regelmäßig die GANZE
-        Anforderung — die übrigen stehen dann mit 0 W daneben.
+        **Beide Richtungen — als Warnung.** Ein nicht ausgeführtes Entladen
+        kostet dasselbe wie ein nicht ausgeführtes Laden, nur andersherum: Der
+        Bezug, den der Speicher decken sollte, kommt aus dem Netz. Und weil die
+        Zuteilung greedy bündelt, hängt an einem stummen Speicher regelmäßig
+        die GANZE Anforderung — die übrigen stehen dann mit 0 W daneben.
+        `plan.speicher_nicht_uebernommen` bekommt deshalb beide Richtungen, für
+        Sensor, Log und Entscheidungs-Log — der Betreiber soll eine Einheit,
+        die nicht lädt, weiterhin sehen.
+
+        **Nur die Entlade-Richtung verriegelt** (`plan.speicher_entladen_verweigert`,
+        gelesen von `HemsCoordinator._stumm` → `speicher_stumm_latch`). Der
+        Schaden, gegen den der Latch existiert, ist entlade-spezifisch: Die
+        greedy-Zuteilung bündelt beim Entladen auf eine Einheit, beim Laden
+        geht der Anteil einer toten Einheit nur anteilig und gedeckelt ins
+        Netz. Und Entladen ist der einzige Befehl, den jeder gesunde Speicher
+        mit SoC über der Reserve ausführen kann — eine Verweigerung ist also
+        eindeutig. Eine Lade-Verweigerung dagegen ist mehrdeutig aus
+        physikalischen Gründen (voll, CV-Taper, zu kalt/warm, Zellausgleich,
+        geräteseitiger Ziel-SoC) und kein Ausfallbeweis mehr; vierter Fund
+        derselben Ursache am 07.09.2026, siehe
+        tasks/speicher-selbstsperre-ladepfad.md. Vor dieser Änderung schrieb
+        auch der Lade-Zweig hierher, und ein voller ruhender Speicher
+        verriegelte sich selbst über einen Ladeauftrag, den er physisch nicht
+        annehmen konnte.
 
         Die Uhr merkt sich die Richtung mit: Ein Wechsel laden ⇄ entladen ist
         ein neuer Befehl und startet die Frist neu, statt die Wartezeit der
@@ -526,6 +547,11 @@ class Actuator:
             )
         if s.name not in plan.speicher_nicht_uebernommen:
             plan.speicher_nicht_uebernommen.append(s.name)
+        if not laden_soll and s.name not in plan.speicher_entladen_verweigert:
+            # Nur der Entlade-Zweig füttert den Latch — siehe Docstring oben
+            # und Frage 1 in tasks/speicher-selbstsperre-ladepfad.md. Der
+            # Lade-Zweig schreibt dieses Feld nie.
+            plan.speicher_entladen_verweigert.append(s.name)
 
     # --- E-Auto (nur Zwangsladung) -----------------------------------------
 
