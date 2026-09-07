@@ -14,8 +14,14 @@
 > meldet: deterministisch, in Sekunden, für null Token, und es fängt, was ein
 > Modell nur manchmal fängt.
 
-In `scripts/` liegt genau eine Datei: `mirror-setup.sh`. Es gibt kein
-Lint-Skript und keinen Hook, der eines aufriefe.
+In `scripts/` liegt genau eine Datei: `mirror-setup.sh`. Ein Lint-Skript gibt
+es nicht.
+
+Ein Hook erwartet es sehr wohl: Jeder Commit aus dieser Sitzung quittierte mit
+`local-ci: Dieser Commit trägt keinen Lint-Beleg. Als ungeprüft vermerkt
+(sim_usage source=ci)`. Er blockiert nicht, er protokolliert — die Gegenstelle
+zu diesem Hook fehlt also, und jeder Commit dieses Projekts geht als ungeprüft
+durch.
 
 Beobachtet an drei Codern hintereinander (Subtasks A, B und C der Aufgabe
 „Speicher-Selbstsperre über den Lade-Pfad"): Jeder suchte zuerst nach
