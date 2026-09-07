@@ -58,6 +58,13 @@ def _feldtabelle() -> set[str]:
 def test_abgemeldeter_speicher_bekommt_keine_entladeleistung():
     # Die Lage vom 15.08.2026, auf drei Speicher eingedampft: L1 steht auf
     # eingefrorenen 100 %, L2 und L3 leben und stehen darunter.
+    #
+    # Zugleich der Beleg, dass die Freischwimm-Probe (tests/test_speicher_
+    # freischwimmen.py) hier nicht mehr greift als bisher: bat_ist = 0 (L1
+    # zählt stale nicht mehr mit), fehler = 1100 + 25 = 1125, gain = 0.65 ->
+    # soll_wunsch = 731.25. L3 (Anteil 1,78 kWh) gewinnt die Rangfolge vor L2
+    # (1,56 kWh) und deckt greedy allein die vollen 731.25 W -> Rest 0, keine
+    # Probe für L1.
     r = P.compute_plan(
         plan_input(
             saldo_w=1100,

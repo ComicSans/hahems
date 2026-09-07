@@ -279,6 +279,11 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             # mehr und ist aus der Zuteilung genommen — HEMS regelt dann
             # bewusst mit weniger Speichern, als konfiguriert sind.
             "abgemeldet": d.plan.regelung.abgemeldet_namen,
+            # Steht hier ein Name, hat der Entlade-Zweig ihm probeweise den
+            # ungedeckten Rest zugeteilt (Freischwimm-Probe) — er steht dann
+            # zugleich in `abgemeldet` und in `zuteilung`. Folgt er, liefert
+            # das den Beweis, der ihn entriegelt.
+            "probe": d.plan.regelung.probe_namen,
             # Ladestrategie über den Tag: geplanter Deckel, Abendziel, geplanter
             # Ladebeginn (None = läuft/jetzt), Mittagspause und der Fall
             # "lieber laden als einspeisen" (Deckel überfahren).

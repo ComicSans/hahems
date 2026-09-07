@@ -665,6 +665,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         zugleich der schnellste: Meldet das Gerät wieder, regelt HEMS im nächsten
         Zyklus mit, ohne Neustart und ohne Quittierung von Hand.
 
+        Diese Meldung muss nicht von außen kommen: Die Freischwimm-Probe in
+        `_storage_control` (`strategies/battery.py`) teilt einem verriegelten
+        Speicher probeweise den ungedeckten Rest zu (nie Leistung, die
+        `known` zusteht). Folgt er, tickt sein SoC, und genau diese frische
+        Meldung ist es, die hier entriegelt — kein zweiter Eingang am Latch.
+
         Ohne Leistungssensor ist eine Nichtausführung nicht feststellbar — dann
         verriegelt nie etwas. Bewusst so herum: Ein zu Unrecht abgemeldeter
         Speicher legt die ganze Regelung still, ein zu Unrecht mitgeführter

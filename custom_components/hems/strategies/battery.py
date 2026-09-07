@@ -272,6 +272,14 @@ def _storage_control(
     max_ent = sum(s.max_discharge_w for s in known)
     max_lad = sum(s.max_charge_w for s in known)
     soll = max(-max_lad, min(bat_ist + fehler * gain, max_ent))
+    # Ungekappte Forderung für die Freischwimm-Probe weiter unten (Frage 2,
+    # tasks/speicher-selbstsperre-ladepfad.md): dieselbe Formel wie `soll`,
+    # nur OHNE die max_ent-Kappung — sonst verschwindet genau der Rest, den
+    # `known` nicht decken kann, den die Probe aber sehen muss. Läuft durch
+    # dieselben Wallbox-Klauseln wie `soll` (unten), damit „kein Akkustrom
+    # ins Auto" auch für die Probe gilt — die Klauseln deckeln sonst nur das
+    # bereits gekappte `soll`.
+    soll_wunsch = max(-max_lad, bat_ist + fehler * gain)
 
     # Asymmetrie gegen Laden-in-den-Netzbezug: Die Wallbox-Herausrechnung oben
     # soll den Akku nur davon abhalten, FÜR die Wallbox zu ENTLADEN — sie darf
@@ -287,6 +295,9 @@ def _storage_control(
     if soll < 0 and inp.saldo_w > saldo_w:
         fehler_roh = inp.saldo_w + offset
         soll = max(-max_lad, min(0.0, max(soll, bat_ist + fehler_roh * _gain(fehler_roh))))
+        soll_wunsch = max(
+            -max_lad, min(0.0, max(soll_wunsch, bat_ist + fehler_roh * _gain(fehler_roh)))
+        )
 
     # Gegenstück beim ENTLADEN: kein Akkustrom ins Auto (23.08.2026). Die
     # Vorsteuerung oben (`saldo + (ev_target − wallbox_w)`) hält den Regler nur
@@ -318,6 +329,9 @@ def _storage_control(
         fehler_ohne_ev = inp.saldo_w - inp.wallbox_w + offset
         soll = min(
             soll, max(0.0, bat_ist + fehler_ohne_ev * _gain(fehler_ohne_ev))
+        )
+        soll_wunsch = min(
+            soll_wunsch, max(0.0, bat_ist + fehler_ohne_ev * _gain(fehler_ohne_ev))
         )
 
     ctrl = ControlResult(
@@ -464,6 +478,33 @@ def _storage_control(
             for s in known
         ]
         ctrl.zuteilung = _verteile(anteile, soll, laden=False)
+        # Freischwimm-Probe (Frage 2, tasks/speicher-selbstsperre-ladepfad.md):
+        # `known` ist oben zuerst und unverändert zugeteilt worden — Invariante,
+        # nicht verhandelbar. Bleibt danach ungedeckter Rest, bekommen die
+        # verriegelten (`stale`) Speicher probeweise GENAU diesen Rest, mit
+        # derselben Anteil-Formel wie `known` (Energie über der Reserve,
+        # Kaltreserve-Regel), gerechnet auf ihren letzten bekannten SoC.
+        # Absichtlich das Rest-Kriterium, nicht „known am Deckel": Ein
+        # bekannter Speicher an der Reserve hat anteil ≤ 0, bekommt 0 W,
+        # zählt aber weiter in max_ent — ein Deckel-Kriterium (Σ Zuteilung ≥
+        # max_ent) verfehlt genau diesen Fall.
+        rest = soll_wunsch - sum(z.watt for z in ctrl.zuteilung)
+        if rest >= CONTROL_MIN_SETPOINT_W:
+            stale_anteile = [
+                (
+                    s,
+                    max(0.0, (s.soc - s.reserve_soc) / 100 * s.capacity_kwh)
+                    if (not s.cold_reserve or reserve_aktiv)
+                    else 0.0,
+                )
+                for s in inp.storages
+                if s.stale and s.soc is not None
+            ]
+            probe = _verteile_entladen(stale_anteile, rest)
+            for name, watt in probe.items():
+                if watt > 0:
+                    ctrl.zuteilung.append(StorageSetpoint(name=name, watt=round(watt)))
+                    ctrl.probe_namen.append(name)
     elif soll < -CONTROL_DEADBAND_W:
         ctrl.modus = "laden"
         # Freie Kapazität bis zum Ladedeckel (tagsüber < 100 %, zum Abend voll)

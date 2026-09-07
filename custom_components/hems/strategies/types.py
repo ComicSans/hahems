@@ -128,6 +128,18 @@ class ControlResult:
     # aber Überschuss übrig, den auch die Lasten nicht nehmen. Dann wird über
     # den Deckel hinaus geladen — Einspeisen ist die schlechtere Verwendung.
     laden_statt_einspeisen: bool = False
+    # Freischwimm-Probe (Frage 2, tasks/speicher-selbstsperre-ladepfad.md):
+    # Namen verriegelter (`stale`) Speicher, denen der Entlade-Zweig
+    # probeweise den ungedeckten Rest zugeteilt hat — rest = soll_wunsch −
+    # Σ Zuteilung(known), nur wenn rest ≥ CONTROL_MIN_SETPOINT_W. Kostet dem
+    # arbeitenden Speicher nichts: `known` wird zuerst und unverändert
+    # zugeteilt, die Probe verteilt ausschließlich, was `known` nicht decken
+    # kann. Sie liefert damit den Beweis, den der Latch heute sonst nicht
+    # bekommt — folgt die Einheit, tickt ihr SoC, meldet der Sensor, und die
+    # bestehende Entriegelung über eine frische Meldung greift von selbst.
+    # Eine probierte Einheit steht zugleich in `zuteilung` und in
+    # `abgemeldet_namen`; ohne dieses Feld widerspräche sich der Sensor.
+    probe_namen: list[str] = field(default_factory=list)
 
 
 @dataclass
