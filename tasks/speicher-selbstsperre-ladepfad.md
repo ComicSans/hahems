@@ -357,22 +357,22 @@ gemessen falsch liegt.
 - [x] (A) Ein Speicher, der einem **Entlade**-Auftrag nicht folgt, wird weiterhin
       verriegelt (Befund vom 15.08.2026 bleibt abgedeckt); der Entlade-Zweig
       schreibt weiterhin in das Feld, aus dem `offen` gebildet wird.
-- [ ] Ein zu Unrecht verriegelter Speicher findet ohne Reload und ohne
+- [x] (B) Ein zu Unrecht verriegelter Speicher findet ohne Reload und ohne
       Quittierung von Hand zurück in die Zuteilung, sobald ungedeckter Rest
       besteht (Modus `entladen`, `rest ≥ CONTROL_MIN_SETPOINT_W`).
-- [ ] Ein Freischwimm-Versuch nimmt dem arbeitenden Speicher keine Leistung weg:
+- [x] (B) Ein Freischwimm-Versuch nimmt dem arbeitenden Speicher keine Leistung weg:
       `zuteilung[known]` ist mit und ohne verriegelte Nachbarn identisch, über
       ein Raster von Saldo-Werten (kein Zyklus, in dem der Netzbezug durch die
       Probe steigt).
-- [ ] Die Probe greift auch, wenn ein bekannter Speicher an der Reserve steht
+- [x] (B) Die Probe greift auch, wenn ein bekannter Speicher an der Reserve steht
       (`anteil ≤ 0`, 0 W zugeteilt) und ein verriegelter voller daneben — der
       Fall, den ein Deckel-Kriterium statt des Rest-Kriteriums verfehlt.
-- [ ] Keine Probe, wenn `known` die Forderung deckt; keine Probe im Modus
+- [x] (B) Keine Probe, wenn `known` die Forderung deckt; keine Probe im Modus
       `laden`; keine Probe an eine verriegelte Einheit unter der Reserve; keine
       Probe unter `CONTROL_MIN_SETPOINT_W`.
-- [ ] Ein probierter Speicher steht im Sensor `speicher_regelung` als `probe`,
+- [x] (B) Ein probierter Speicher steht im Sensor `speicher_regelung` als `probe`,
       nicht nur als `abgemeldet`.
-- [ ] `test_abgemeldeter_speicher_bekommt_keine_entladeleistung`
+- [x] (B) `test_abgemeldeter_speicher_bekommt_keine_entladeleistung`
       (`tests/test_speicher_abgemeldet.py:58-75`) bleibt grün: bei
       `saldo = 1100` decken L2/L3 die Forderung, kein Rest, keine Probe.
 - [ ] Nach Subtask C gibt es keinen Aufrufer von `ladeauftrag_in_frist_erfuellbar`
@@ -658,6 +658,38 @@ im Schnitt.
    Umsetzung nicht, muss aber vor dem Commit rein, weil er explizit
    zugesagt war.
 
+## Beobachtungen Coder B
+
+**Dauer der Probe-Phase (offene Messung aus Frage 2):** Aus dem Code ableitbar,
+nicht gemessen — ein realer Lauf bleibt die verlässliche Zahl.
+
+- Der Coordinator-Zyklus steht auf 60 s (`coordinator.py:404`,
+  `update_interval=timedelta(seconds=60)`).
+- `_stumm` entriegelt, sobald `schweigt` auf `False` kippt — unabhängig von
+  `SPEICHER_QUITTUNG_FRIST` (die gilt nur für die Quittung/Warnung, nicht für
+  den Latch). `schweigt` kommt aus `_abgemeldet(soc_entity, STORAGE_STALE_MIN)`
+  und prüft `last_reported`; eine einzelne frische Meldung setzt das sofort
+  zurück. Die Entriegelung braucht also nur die ERSTE echte SoC-Änderung nach
+  Probe-Beginn, nicht 15 Minuten Stille-Ende.
+- Diese erste Änderung ist ein SoC-Tick (bei den Hyper 2000: 37 Wh je 1 % auf
+  3,7 kWh). Bei der Probe-Leistung aus der Beispielrechnung der Entscheidung
+  (rund 555 W, `f·g/(1+g)` bei g = 0,65) dauert ein Tick rechnerisch rund
+  4 Minuten (37 Wh / 555 W). Mit den Zahlen dieses Subtasks
+  (`test_szene_070926_verriegelte_probe_deckt_den_rest`: Rest 932 W, L1 bekommt
+  greedy den ganzen Rest statt eines Anteils, also näher an voller Rest- als an
+  Anteil-Leistung) fiele der erste Tick eher schneller.
+- Gesamtdauer bis zur Entriegelung ≈ Zeit bis zum ersten Tick + höchstens ein
+  60-s-Zyklus (der Latch braucht einen Durchlauf, um `schweigt=False` zu sehen)
+  ≈ 4–5 Minuten bzw. 4–5 Zyklen. Das deckt sich mit der Erwartung „ein bis
+  zwei SoC-Ticks" aus der Entscheidung — ein einzelner Tick allein braucht bei
+  dieser Leistung schon einen Großteil davon.
+- Nicht aus dem Code ableitbar: das reale Meldeintervall der Zendure-
+  Integration (push-basiert, Cloud-Anbindung) — die Rechnung oben unterstellt,
+  dass ein SoC-Tick gemeldet wird, sobald er auftritt. Liegt die reale
+  Meldeverzögerung der Integration signifikant über einem Coordinator-Zyklus,
+  verlängert sich die Probe-Phase entsprechend. Das ist die Lücke, die nur ein
+  Lauf am echten Gerät schließt.
+
 ### Nicht geprüft
 
 - Kein Testlauf (weder einzelne Klassen noch Vollsuite) — das übernimmt der
@@ -670,3 +702,178 @@ im Schnitt.
 - Subtask B/C nicht bewertet, da nicht Teil dieses Diffs (Abwesenheit nur
   über leere `git diff`-Ausgabe verifiziert, nicht inhaltlich gegen die
   spätere Umsetzung geprüft).
+
+## Review Subtask B (07.09.2026)
+
+**Verdikt: angenommen mit Auflagen.**
+
+Geprüft: `git diff HEAD` für `strategies/battery.py`, `strategies/types.py`,
+`sensor.py`, `coordinator.py`, `tests/test_speicher_abgemeldet.py`, plus die
+neue, unversionierte `tests/test_speicher_freischwimmen.py` (`git status`:
+`??`). HEAD ist `90785a4`, Subtask A bereits committet und nicht erneut
+geprüft. `tasks/…md` selbst (Abschnitt „Beobachtungen Coder B“) ist
+Aufgabenverwaltung, nicht Review-Gegenstand. Kein Testlauf gefahren (Weisung);
+Beurteilung durch Lesen von Code, Kommentaren und Tests, inklusive
+Nachrechnen der Beispielzahlen von Hand.
+
+### Invariante hält
+
+`ctrl.zuteilung = _verteile(anteile, soll, laden=False)`
+(`battery.py:481`) berechnet die Zuteilung an `known` zuerst, mit derselben
+Formel wie vor diesem Diff. Der Probe-Block danach (`battery.py:483-508`)
+*hängt* nur neue `StorageSetpoint`-Einträge an dieselbe Liste an — er mutiert
+oder ersetzt keinen bestehenden Eintrag. `ctrl.soll_w` wird oben in der
+`ControlResult`-Konstruktion (`battery.py:333-339`) gesetzt und danach nicht
+mehr angefasst; `bat_ist` (Zeilen 226-228) ist von der Probe unerreichbar.
+Kein Pfad, auf dem die Probe `known` etwas wegnimmt oder `soll_w` verschiebt —
+bestätigt durch Nachrechnen der Szene 07.09. (`bat_ist=1200`, `soll_wunsch≈
+2132`, `soll=1200` gekappt, `rest≈932` → L1 bekommt den Rest, L2 bleibt exakt
+bei 1200) und durch `test_zuteilung_bekannter_unveraendert_ueber_saldo_raster`
+(`tests/test_speicher_freischwimmen.py:91-115`), das dieselbe Rechnung über
+sechs Saldo-Werte automatisiert.
+
+### Bedingung ist das Rest-Kriterium, nicht der Deckel
+
+`rest = soll_wunsch − Σ zuteilung(known)` (`battery.py:494`),
+`soll_wunsch` als ungekappte Fassung von `soll` (`battery.py:275-282`,
+`max(-max_lad, bat_ist + fehler*gain)` ohne `min(…, max_ent)`) — genau die
+von der Entscheidung verlangte Form. Durchgerechnet für
+`test_probe_greift_bei_reserve_nicht_bei_deckel`
+(`tests/test_speicher_freischwimmen.py:67-85`): L1 (known) steht an der
+Reserve, `anteil=0`, bekommt 0 W, zählt aber mit `max_discharge_w=1200` voll
+in `max_ent`. Ein Deckel-Kriterium (`Σ zuteilung ≥ max_ent`, also `0 ≥ 1200`)
+ließe keine Probe zu; das tatsächlich gebaute Rest-Kriterium
+(`rest = soll_wunsch − 0 > 0`) lässt sie zu und L2 bekommt sie. Test bestätigt
+das über zwei unabhängige Assertions (`z["L2"] > 0` UND
+`probe_namen == ["L2"]"`) — keine reine Attribut-Prüfung.
+
+Die Wallbox-Klauseln „kein Akkustrom ins Auto“ (`battery.py:296-302`,
+`330-335`) sind für `soll_wunsch` mitgeführt — beide Stellen aktualisieren
+`soll` und `soll_wunsch` mit demselben Deckel-Ausdruck, nur gegen den
+jeweils eigenen Vorwert genommen (`min`/`max`). Da `soll ≤ soll_wunsch` als
+Invariante durch beide Klauseln erhalten bleibt (beide monoton, gleicher
+zweiter Term) und der Probe-Block ausschließlich im Zweig `soll >
+CONTROL_DEADBAND_W` läuft, kann die Probe nie ohne die für `soll` bereits
+geltende Wallbox-Deckelung feuern. Korrekt umgesetzt — **aber ungetestet**:
+Keiner der neuen bzw. geänderten Tests setzt `wallbox_w`. Siehe Auflage 1.
+
+### Geltungsbereich der Probe korrekt eingeschränkt
+
+- Nur Modus `entladen`: Probe-Block liegt vollständig innerhalb
+  `if soll > CONTROL_DEADBAND_W:` (`battery.py:478-508`), der Lade-Zweig
+  (`elif soll < -CONTROL_DEADBAND_W`) ist unverändert. Bestätigt durch
+  `test_keine_probe_im_lademodus`.
+- Verriegelte Einheit unter der Reserve: `stale_anteile` verwendet dieselbe
+  `anteil`-Formel wie `known` (Reserve-Subtraktion), `_verteile_entladen`
+  überspringt `anteil ≤ 0`. Bestätigt durch `test_keine_probe_unter_der_reserve`.
+  Nachgerechnet: L1 bekommt trotz auslösender Bedingung (`rest=932≥60`) 0 W,
+  weil `anteil=0`.
+- `known` deckt die Forderung: `rest` fällt auf 0, Bedingung
+  `rest ≥ CONTROL_MIN_SETPOINT_W` greift nicht. Bestätigt durch
+  `test_keine_probe_wenn_known_die_forderung_deckt`, nachgerechnet identisch
+  zur Rechnung, die jetzt auch als Kommentar in
+  `test_abgemeldeter_speicher_bekommt_keine_entladeleistung`
+  (`tests/test_speicher_abgemeldet.py:60-66`) steht — Zahlen stimmen
+  überein (Rest 0 bei saldo 1100).
+- Unter `CONTROL_MIN_SETPOINT_W`: explizite Schranke, nachgerechnet in
+  `test_keine_probe_unter_dem_mindest_setpoint` (Rest 32,5 W < 60 W).
+- Frühausstieg „alle stale“ (`battery.py:192-212`): im Diff nicht berührt.
+
+Alle vier „keine Probe“-Tests prüfen zusätzlich zur `probe_namen`-Liste auch
+`"L1" not in _zuteilung(r)` (Mitgliedschaft im Zuteilungs-Dict) — ein Bug, der
+nur die Buchführung in `probe_namen` verfehlt, aber trotzdem Watt zuteilt,
+würde auch auffallen.
+
+### Zu den acht Tests, „schwaches Rot“
+
+Der im Auftrag zitierte Coder-Befund („alle acht am fehlenden Attribut
+`probe_namen` gescheitert“) trifft nicht auf alle acht zu — nachvollzogen
+durch Prüfen der jeweils ERSTEN Assertion, die gegen den Stand vor diesem
+Diff (kein `probe_namen`-Feld, keine Probe-Logik) auslösen würde:
+
+- `test_szene_070926_verriegelte_probe_deckt_den_rest` und
+  `test_probe_greift_bei_reserve_nicht_bei_deckel`: scheitern zuerst an
+  `z["L1"]`/`z["L2"]` mit **KeyError** (die Einheit fehlt im
+  Zuteilungs-Dict), nicht am Attribut — sie erreichen die
+  `probe_namen`-Zeile gar nicht.
+- `test_keine_probe_wenn_known_die_forderung_deckt`,
+  `test_keine_probe_im_lademodus`, `test_keine_probe_unter_der_reserve`,
+  `test_keine_probe_unter_dem_mindest_setpoint`: scheitern tatsächlich zuerst
+  (teils nach einer bereits pass­ierenden Vor-Assertion) an
+  `r.regelung.probe_namen` mit **AttributeError**.
+- `test_probe_sichtbar_im_sensor`: scheitert an einer reinen
+  String-Prüfung (`'"probe"' in sensor.py`), keine Berührung mit
+  `probe_namen`. Entspricht dem etablierten Muster
+  `test_sensor_und_log_zeigen_den_ausfall`
+  (`tests/test_speicher_abgemeldet.py:216-218`,
+  `"abgemeldet" in sensor.py`) — keine neue Schwäche.
+- `test_zuteilung_bekannter_unveraendert_ueber_saldo_raster`: berührt
+  `probe_namen` gar nicht und wäre gegen den Stand vor diesem Diff
+  **bereits grün** gewesen (die Invariante — `known` unberührt von stale
+  Nachbarn — galt schon vorher, weil `known` stale Speicher immer
+  ausgeschlossen hat). Das ist kein Mangel: Der Test ist als
+  Regressionsschutz für die Probe gedacht, nicht als Rot-vor-Umbau-Beleg
+  (die Entscheidung verlangt das für diesen Test auch nicht), und er würde
+  eine künftige Verletzung der Invariante zuverlässig fangen (geprüft durch
+  Kopfrechnen: jede Änderung, die `known`-Zuteilung zwischen „mit“ und „ohne“
+  stale Nachbarn divergieren ließe, träfe auf einen der sechs Saldo-Werte).
+
+Zusammengefasst: Die pauschale Coder-Aussage ist ungenau, aber das
+eigentliche Ergebnis ist besser als sie nahelegt — sechs der acht Tests
+prüfen tatsächliches Verhalten (Zuteilungs-Mitgliedschaft, Watt-Werte,
+Invarianz über ein Raster), nicht nur Attribut-Existenz. Zwei folgen einem
+bereits etablierten, im Projekt akzeptierten String-Pin-Muster.
+
+### Umfang sauber auf Subtask B begrenzt
+
+`actuation.py`, `actuator.py` unverändert; `ladeauftrag_in_frist_erfuellbar`
+weiterhin vorhanden und aufgerufen (`actuator.py:501`,
+`strategies/coordination.py:134`) — Subtask C nicht angefangen. Aus B
+vorhanden: `ControlResult.probe_namen` (`types.py:130-142`), Sensor-Attribut
+`probe` (`sensor.py:282-286`), Docstring-Nachzug in `HemsCoordinator._stumm`
+(`coordinator.py:668-673`). Nichts davon fehlt gegenüber dem
+„Ändert“-Abschnitt im Schnitt.
+
+### Kommentare wahr
+
+`battery.py:275-282` (Begründung `soll_wunsch`), `battery.py:483-494`
+(Begründung Rest- vs. Deckel-Kriterium), `types.py:130-141`
+(`probe_namen`-Kommentar), `sensor.py:282-286`, `coordinator.py:668-673`
+— alle gegen den tatsächlichen Code geprüft, keine Abweichung gefunden.
+
+### Auflage (vor Commit zu beheben)
+
+1. **Fehlende Regressionsprüfung für die Wallbox-Klausel in `soll_wunsch`**
+   (`custom_components/hems/strategies/battery.py:296-302, 330-335`; Tests:
+   `tests/test_speicher_freischwimmen.py`,
+   `tests/test_speicher_abgemeldet.py`). Kein Test in beiden Dateien setzt
+   `wallbox_w` (geprüft per Volltextsuche — kein Treffer). Die Entscheidung
+   nennt genau diesen Punkt ausdrücklich als Stelle, an der man es sonst
+   falsch baut („damit ‚kein Akkustrom ins Auto‘ auch für die Probe gilt“).
+   Der Code setzt es korrekt um (nachgerechnet: beide Klauseln aktualisieren
+   `soll` und `soll_wunsch` mit demselben Deckel-Ausdruck), aber ohne
+   Nachsteller kann ein künftiger Umbau genau diese Kopplung lösen, ohne dass
+   ein Test es bemerkt — die Art Lücke, gegen die dieses Projekt laut eigener
+   Historie („vierter Fund derselben Ursache“) besonders empfindlich ist. Zu
+   ergänzen: ein Test mit aktivem `wallbox_w` (und `battery_to_ev=False`),
+   der zeigt, dass die Probe im Entlade-Zweig nicht mehr Rest beansprucht,
+   als nach Abzug der Wallbox-Last verbleibt (Spiegelung von
+   `test_gegenstueck_kein_akkustrom_ins_auto` o. ä., falls ein solcher Test
+   für `soll` bereits existiert — sonst neu). Reine Testergänzung, keine
+   Code-Änderung nötig.
+
+### Nicht geprüft
+
+- Kein Testlauf (weder einzelne Klassen noch Vollsuite) — Weisung, übernimmt
+  der Koordinator über den Broker.
+- Subtask A (bereits committet) nicht erneut geprüft.
+- `tasks/…md`-Abschnitt „Beobachtungen Coder B“ nur überflogen, nicht
+  inhaltlich geprüft (Aufgabenverwaltung, kein Review-Gegenstand laut
+  Auftrag).
+- Laufzeitverhalten (Home-Assistant-nahe Pfade, `_stumm`/Coordinator-Zyklus)
+  nicht ausführbar geprüft — wie im Projekt üblich nur durch Lesen.
+- Ob im Projekt bereits ein existierender Test die Wallbox-Klausel für
+  `soll` (nicht `soll_wunsch`) abdeckt, habe ich nicht verifiziert (wäre die
+  Vorlage für die in Auflage 1 verlangte Ergänzung) — nur per Volltextsuche
+  in den beiden hier geänderten Testdateien geprüft, nicht im gesamten
+  Testbaum.
