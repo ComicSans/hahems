@@ -275,6 +275,13 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             ],
             "kaltreserve_aktiv": d.plan.regelung.reserve_aktiv,
             "kaltreserve_speicher": d.plan.regelung.reserve_namen,
+            # True heißt: die Entladeleistung liegt über dem, was ein
+            # einzelner Speicher tragen kann, und wird deshalb anteilig auf
+            # alle verteilt statt auf einen gebündelt. Die Zuteilung sieht in
+            # beiden Betriebsarten völlig verschieden aus (1200/100 gegen
+            # 650/650) — ohne diese Angabe ist ein Wechsel der Betriebsart von
+            # einem Regelfehler nicht zu unterscheiden.
+            "parallel_entladen": d.plan.regelung.parallel_aktiv,
             # Steht hier ein Name, meldet dieser Speicher seit Minuten nichts
             # mehr und ist aus der Zuteilung genommen — HEMS regelt dann
             # bewusst mit weniger Speichern, als konfiguriert sind.

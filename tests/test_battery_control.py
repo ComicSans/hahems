@@ -1,12 +1,16 @@
 """Charakterisierung der Saldo-Speicherregelung (`_storage_control`).
 
-Laden verteilt parallel (proportional zur freien Kapazität), Entladen greedy
-mit Auswahl-Hysterese (ein Akku zur Zeit, gegen Verschleiß).
+Laden verteilt parallel (proportional zur freien Kapazität). Entladen greedy
+mit Auswahl-Hysterese (ein Akku zur Zeit, gegen Verschleiß) — aber nur, solange
+ein einzelner Speicher das Soll allein tragen kann; darüber anteilig auf alle,
+weil dort ohnehin mehrere laufen und das Bündeln nur noch Führungswechsel
+kostet (siehe CONTROL_PARALLEL_ON/OFF).
 """
 from __future__ import annotations
 
 from factories import plan_input, storage, switchable, zuteilung
 from hems import planner as P
+from hems.strategies.types import PlanFlags
 
 from hems.const import CONTROL_MIN_SETPOINT_W
 
@@ -61,6 +65,7 @@ def test_laden_grosser_ueberschuss_alle_unter_max():
 def test_entladen_konzentriert_auf_einen_akku():
     r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=1500))
     assert r.regelung.modus == "entladen"
+    assert r.regelung.parallel_aktiv is False
     z = zuteilung(r)
     assert z["L1"] == 991
     assert z["L2"] == 0
@@ -69,17 +74,94 @@ def test_entladen_konzentriert_auf_einen_akku():
 
 def test_entladen_arbeitender_akku_behaelt_fuehrung():
     # L1 entlädt bereits (power_w>0) und behält trotz minimal niedrigerem SoC
-    # die Führung (Hysterese-Bonus); Überlauf geht auf den nächsten.
+    # die Führung (Hysterese-Bonus). Soll (1011 W) liegt unter dem
+    # Einzelmaximum, also bleibt es beim Bündeln — der Überlauf-Fall gehört
+    # jetzt in die Parallel-Verteilung weiter unten.
     ss = [
         storage("L1", 60, power_w=800.0),
         storage("L2", 61, power_w=0.0),
         storage("L3", 61, power_w=0.0),
     ]
-    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500))
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=300))
     z = zuteilung(r)
-    assert z["L1"] == 1200
-    assert z["L2"] == 591
+    assert r.regelung.parallel_aktiv is False
+    assert z["L1"] == 1011
+    assert z["L2"] == 0
     assert z["L3"] == 0
+
+
+def test_entladen_mitlaeufer_stiehlt_die_fuehrung_nicht():
+    """Regression 07.09.2026: Führungs-Ping-Pong bei geteilter Zuteilung.
+
+    Muss die Zuteilung splitten, steht der Mitläufer bei rund 100 W — über
+    CONTROL_LEAD_POWER_W (30 W). Solange das als „arbeitet" zählte, bekam er
+    denselben Hysterese-Bonus wie die Führung, der Bonus hob sich auf, und die
+    Rangfolge kippte bei jedem 1-%-SoC-Crossover: gemessen drei Wechsel in fünf
+    Minuten, je rund 70 s voller Netzbezug. Führung ist deshalb nicht mehr
+    „über 30 W", sondern „trägt den Hauptteil" (CONTROL_LEAD_SHARE).
+
+    Ungleiche Entladegrenzen, damit greedy hier überhaupt splittet und der Fall
+    nicht schon von der Parallel-Verteilung abgefangen wird: Soll 1230 W liegt
+    unter 1.05 × 1200 W (größtes Einzelmaximum), also bleibt es bei greedy.
+    L2 hat den höheren SoC — ohne den Anteils-Vorbehalt zöge er an L1 vorbei.
+    """
+    ss = [
+        storage("L1", 67, max_discharge_w=1200.0, power_w=1200.0),
+        storage("L2", 68, max_discharge_w=300.0, power_w=100.0),
+    ]
+    r = P.compute_plan(
+        plan_input(storage_states=ss, saldo_w=-165, gain_level="normal")
+    )
+    z = zuteilung(r)
+    assert r.regelung.parallel_aktiv is False
+    assert z["L1"] == 1200
+    assert z["L2"] == 0
+
+
+# --- Entladen: parallel oberhalb des Einzelmaximums ---------------------------
+def test_entladen_ueber_einzelmaximum_verteilt_parallel():
+    # Soll 1641 W > 1.05 × 1200 W: kein Speicher trägt das allein. Statt
+    # 1200/441/0 (greedy) anteilig auf alle drei — gleiche SoCs, gleiche
+    # Anteile, also gleiche Leistung. Damit bleiben die SoCs gekoppelt und es
+    # entsteht gar kein Crossover, an dem die Führung kippen könnte.
+    r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=2500))
+    assert r.regelung.modus == "entladen"
+    assert r.regelung.parallel_aktiv is True
+    z = zuteilung(r)
+    assert z["L1"] == z["L2"] == z["L3"] == 547
+    assert sum(z.values()) == 1641
+
+
+def test_entladen_parallel_haelt_in_der_hysterese():
+    # Läuft die Verteilung bereits parallel, bleibt sie es bis 0.85 ×
+    # Einzelmaximum. Soll 1121 W (= 0.93 ×) liegt in der Hysterese: kein
+    # Rückfall auf greedy, sonst flatterte die Betriebsart an der Grenze.
+    r = P.compute_plan(
+        plan_input(
+            socs=[60, 60, 60],
+            saldo_w=1700,
+            flags=PlanFlags(parallel_entladen=True),
+        )
+    )
+    assert r.regelung.parallel_aktiv is True
+    z = zuteilung(r)
+    assert z["L1"] == z["L2"] == z["L3"] > 0
+
+
+def test_entladen_parallel_faellt_unter_der_schwelle_zurueck():
+    # Soll 991 W (= 0.83 × Einzelmaximum) liegt unter CONTROL_PARALLEL_OFF:
+    # Ein Speicher trägt das mit Abstand allein, also wieder bündeln.
+    r = P.compute_plan(
+        plan_input(
+            socs=[60, 60, 60],
+            saldo_w=1500,
+            flags=PlanFlags(parallel_entladen=True),
+        )
+    )
+    assert r.regelung.parallel_aktiv is False
+    z = zuteilung(r)
+    assert z["L1"] == 991
+    assert z["L2"] == z["L3"] == 0
 
 
 # --- Kaltreserve --------------------------------------------------------------

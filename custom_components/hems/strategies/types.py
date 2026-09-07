@@ -119,6 +119,12 @@ class ControlResult:
     zuteilung: list[StorageSetpoint] = field(default_factory=list)
     reserve_aktiv: bool = False
     reserve_namen: list[str] = field(default_factory=list)
+    # Entlade-Zuteilung läuft anteilig auf alle statt gebündelt auf einen.
+    # Gehört sichtbar gemacht: Die beiden Betriebsarten sehen in der Zuteilung
+    # völlig verschieden aus (1200/100 gegen 650/650), und ohne diese Angabe
+    # ist ein Wechsel der Betriebsart von einem Regelfehler nicht zu
+    # unterscheiden.
+    parallel_aktiv: bool = False
     # Speicher, die nicht mehr melden und deshalb aus der Zuteilung genommen
     # wurden (siehe StorageState.stale). Steht hier ein Name, regelt HEMS
     # bewusst ohne diesen Speicher — das gehört sichtbar gemacht, sonst ist
@@ -352,6 +358,12 @@ class PlanFlags:
     # Kaltreserve der Saldo-Regelung: Reserve-Speicher entladen mit, solange
     # der mittlere SoC der übrigen unten ist.
     kaltreserve: bool = False
+    # Entladen läuft parallel (anteilig auf alle) statt greedy (ein Akku
+    # trägt), weil das Soll über dem Einzelmaximum liegt. Gehalten, weil die
+    # Betriebsart sonst an der Grenze zwischen beiden Verteilungen flattert —
+    # Schwellen und Begründung bei CONTROL_PARALLEL_ON/OFF. Start konservativ
+    # False: greedy ist die Betriebsart, die auf die Nachtgrundlast passt.
+    parallel_entladen: bool = False
     # E-Auto: Überschuss reicht (mit Marge) für die Wallbox-Mindestleistung.
     # Start konservativ False, damit der erste Lauf nach einem Neustart nicht
     # sofort "E-Auto laden" meldet, ohne den Momentanüberschuss zu kennen.

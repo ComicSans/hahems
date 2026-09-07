@@ -168,6 +168,31 @@ RESERVE_SOC_OFF = 45.0
 # (über dem Mess-/Standby-Rauschen, unter dem kleinsten Setpoint von 60 W).
 CONTROL_LEAD_HYST_SOC = 12.0
 CONTROL_LEAD_POWER_W = 30.0
+# Anteil an der Gesamt-Entladeleistung, ab dem ein Speicher als FÜHRUNG gilt
+# und damit den Hysterese-Bonus bekommt. Die absolute Schwelle LEAD_POWER_W
+# allein reicht nicht: Muss die Zuteilung splitten (Soll über dem
+# Einzelmaximum), steht der Mitläufer bei 70–120 W und liegt damit ebenfalls
+# über 30 W. Dann bekommen BEIDE den Bonus, er hebt sich auf, und die
+# Rangfolge fällt auf den rohen SoC zurück — die Führung kippt bei jedem
+# 1-%-Crossover. Am 07.09.2026 an drei Hyper 2000 gemessen: drei Wechsel in
+# fünf Minuten, je rund 70 s voller Netzbezug (~1100 W), weil die abgelöste
+# Einheit sofort gekappt wird und die neue erst einen Zyklus später steht.
+# Ein Anteil über 0.5 kann nur EINEM Speicher zufallen — damit ist der Bonus
+# eindeutig und die Hysterese wirkt wieder so, wie sie beschrieben ist.
+CONTROL_LEAD_SHARE = 0.5
+
+# Entladen parallel statt greedy, sobald KEIN einzelner Speicher das Soll
+# allein tragen kann. Das Bündeln auf einen Akku ist gegen Verschleiß gedacht;
+# in diesem Regime läuft der zweite ohnehin mit (greedy: 1200 W + 100 W), der
+# Vorteil ist also dahin, während der Führungswechsel seine volle Lücke kostet.
+# Anteilig aufgeteilt (650 W + 650 W) bleiben die SoCs gekoppelt, es entsteht
+# gar kein Crossover und damit kein Wechsel.
+#
+# Schmitt-Trigger auf `soll / größtes Einzelmaximum`, damit die Betriebsart an
+# der Grenze nicht flattert. ON liegt bewusst ÜBER 1.0: Bei soll == Einzel-
+# maximum trägt ein Akku die Last exakt allein, dort ist greedy richtig.
+CONTROL_PARALLEL_ON = 1.05
+CONTROL_PARALLEL_OFF = 0.85
 
 # Wie viele Minuten die SoC-Entität eines Speichers geschwiegen haben muss,
 # damit er abgemeldet werden DARF. Gemessen wird `last_reported`, nicht
