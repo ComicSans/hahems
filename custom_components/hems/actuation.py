@@ -255,35 +255,40 @@ def speicher_folgt(gemessen_w: float | None, *, laden: bool) -> bool:
     return speicher_laedt(gemessen_w) if laden else speicher_entlaedt(gemessen_w)
 
 
-def ladeauftrag_in_frist_erfuellbar(
-    *,
-    ist_soc: float | None,
-    grenze_soc: float | None,
-    capacity_kwh: float,
-    zugeteilt_w: float,
-    frist_h: float,
-) -> bool:
-    """Ob ein Ladeauftrag innerhalb der Quittungsfrist zu Ende geht.
+# Physisches Ladeende (SoC-%), nicht der dynamische Lade-Deckel: Ein Zendure
+# Hyper 2000 meldet 100 % faktisch nie (siehe Befund 07.09.2026,
+# tasks/speicher-selbstsperre-ladepfad.md — L1/L3 standen bei 99 % im
+# CV-Taper, `soc_limit = 1` vom Gerät selbst). Bewusst NICHT `plan.lade_deckel_soc`:
+# Bei einem Deckel von 80 % und Ist-SoC 79 ist der Akku nicht im Taper, und
+# eine Schwelle gegen den Deckel würde dort einen echten Ausfall als „fertig"
+# maskieren — das war der Fehler von `ladeauftrag_in_frist_erfuellbar`
+# (bis 07.09.2026, siehe Git-Historie), der außerdem gegen `lade_deckel_soc`
+# statt gegen das physische Ladeende rechnete.
+SPEICHER_VOLL_SOC = 99.0
 
-    Trifft das zu, sagt ein Speicher, der keine Leistung mehr nimmt, nichts über
-    seine Gesundheit: Er ist fertig. Genau daran ist die Quittung am 19.08.2026
-    gescheitert — sie wertete „nimmt nicht auf" als Verweigerung und ließ die
-    Verriegelung in ``_stumm`` zuschnappen, obwohl die drei Hyper 2000 bei 99 %
-    standen und einwandfrei liefen. Weil ein voller Akku zugleich seinen
-    push-basierten SoC-Sensor verstummen lässt, traten beide Auslöser der
-    Verriegelung gemeinsam auf — sie sind eben nicht unabhängig, wie der Fix vom
-    17.08.2026 angenommen hatte. Das Haus zog daraufhin 800 W aus dem Netz.
 
-    Verglichen wird die freie Kapazität bis zur Ladegrenze mit der Energie, die
-    die zugeteilte Leistung in der Frist liefern würde. Bewusst nicht „SoC nahe
-    der Grenze": Wie viel Kopf ein Prozentpunkt trägt, hängt an der Kapazität,
-    und wie schnell er aufgebraucht ist, an der Zuteilung. 36 Wh Rest sind bei
-    800 W nach knapp drei Minuten weg, bei 60 W nicht.
+def ladeauftrag_am_ladeschluss(ist_soc: float | None) -> bool:
+    """Ob ein Speicher physisch am Ladeschluss steht — die Lade-Warnung endet dort.
 
-    Ohne SoC oder Grenze ist nichts zu rechnen; dann bleibt es bei der Quittung
-    — ein Speicher ohne SoC nimmt an der Zuteilung ohnehin nicht teil.
+    Ersetzt seit 07.09.2026 `ladeauftrag_in_frist_erfuellbar`
+    (vierter Fund derselben Ursache, tasks/speicher-selbstsperre-ladepfad.md):
+    Die Frist-Rechnung modellierte den Akku als Verbraucher, der bis zur
+    Grenze alles nimmt, was zugeteilt ist. Im CV-Taper nimmt er, was das BMS
+    zulässt, unabhängig von der Zuteilung — die Zuteilung ist eine Obergrenze,
+    keine Nachfrage. Deshalb trug die alte Ausnahme erst ab einer bestimmten
+    Mindestzuteilung und scheiterte darunter immer wieder an einer neuen Zahl.
+    Dazu rechnete sie gegen `plan.lade_deckel_soc`, nicht gegen das physische
+    Ladeende — beim Befund vom 07.09. lagen L1/L3 bei 99 % und die
+    Nachmittags-Zuteilung darunter, die Ausnahme griff nicht, der Latch schnappte.
+
+    Diese Funktion ersetzt nur die **Warnung** (`_quittung_speicher` in
+    `actuator.py`), nicht mehr die Verriegelung — die hängt seit derselben
+    Änderung ausschließlich am Entlade-Zweig
+    (`PlanResult.speicher_entladen_verweigert`). Ein voller, ruhender Speicher
+    bleibt darum unverriegelt, unabhängig von der Höhe der Zuteilung; die
+    Warnung selbst bleibt unter der Schwelle scharf.
+
+    ``None`` (kein SoC-Sensor oder unbekannt) ist kein Nachweis für „fertig" —
+    dann bleibt es bei der Quittung.
     """
-    if ist_soc is None or grenze_soc is None or capacity_kwh <= 0:
-        return False
-    frei_wh = max(0.0, (grenze_soc - ist_soc) / 100 * capacity_kwh * 1000)
-    return frei_wh <= max(0.0, zugeteilt_w) * frist_h
+    return ist_soc is not None and ist_soc >= SPEICHER_VOLL_SOC

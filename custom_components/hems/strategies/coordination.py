@@ -31,7 +31,6 @@ Regler daraus macht, entscheidet er selbst, einen Takt später.
 """
 from __future__ import annotations
 
-from ..actuation import ladeauftrag_in_frist_erfuellbar
 from ..const import (
     PRIORITY_AUTO,
     PRIORITY_BATTERY_FIRST,
@@ -65,14 +64,54 @@ def akku_hat_vorrang(inp: PlanInput) -> bool:
     return inp.priority_mode in (PRIORITY_BATTERY_FIRST, PRIORITY_AUTO)
 
 
+def _kapazitaet_in_frist_erschoepft(
+    *,
+    ist_soc: float | None,
+    grenze_soc: float | None,
+    capacity_kwh: float,
+    zugeteilt_w: float,
+    frist_h: float,
+) -> bool:
+    """Ob die freie Kapazität bis ``grenze_soc`` in ``frist_h`` aufgebraucht wäre.
+
+    Bis 07.09.2026 lebte diese Rechnung als `ladeauftrag_in_frist_erfuellbar`
+    in `actuation.py` und bediente zwei verschiedene Fragen: hier „wie viel
+    Überschuss darf der Akku vor der Wallbox reservieren", dort „hat ein
+    Ladeauftrag noch Aussicht, in der Quittungsfrist gemessen zu werden". Die
+    zweite Frage ist an einem realen Akku im CV-Taper falsch gestellt — die
+    Zuteilung ist dort eine Obergrenze, keine Nachfrage, und die Funktion wurde
+    im Zuge von tasks/speicher-selbstsperre-ladepfad.md (Subtask C) durch die
+    feste physische Schwelle `SPEICHER_VOLL_SOC` ersetzt (siehe
+    `ladeauftrag_am_ladeschluss` in `actuation.py`).
+
+    Diese erste Frage bleibt dagegen eine Kapazitätsfrage, keine
+    Gesundheitsfrage: `zugeteilt_w` ist hier `max_charge_w`, also tatsächlich
+    die technische Obergrenze der Ladeleistung — nicht eine Regler-Zuteilung,
+    die ein volles BMS unterschreiten könnte. „Reicht die freie Kapazität für
+    das, was das Gerät MAXIMAL ziehen könnte, in der verbleibenden Zeit" ist
+    an dieser Obergrenze eine ehrliche Frage, an einer Regler-Zuteilung wäre
+    sie es nicht. Deshalb blieb die Arithmetik hier, nur umgezogen und
+    umbenannt.
+    """
+    if ist_soc is None or grenze_soc is None or capacity_kwh <= 0:
+        return False
+    frei_wh = max(0.0, (grenze_soc - ist_soc) / 100 * capacity_kwh * 1000)
+    return frei_wh <= max(0.0, zugeteilt_w) * frist_h
+
+
 def akku_ladereservierung(inp: PlanInput, res: PlanResult) -> float:
     """Überschuss (W), den der Akku vor der Wallbox reservieren darf.
 
     Reserviert wird nur für Speicher, die den reservierten Betrag auch längere
-    Zeit aufnehmen können. Maßstab ist `ladeauftrag_in_frist_erfuellbar` — genau
-    das Prädikat, mit dem der Actuator seit dem 19.08.2026 „fertig" von
-    „antwortet nicht" trennt: Ist die freie Kapazität bis zum Ladedeckel kleiner
-    als das, was die volle Ladeleistung in der Frist liefern würde, ist der
+    Zeit aufnehmen können. Maßstab ist `_kapazitaet_in_frist_erschoepft` — bis
+    07.09.2026 lebte dasselbe Prädikat als `ladeauftrag_in_frist_erfuellbar`
+    in `actuation.py`; dort ist es inzwischen entfallen (Subtask C,
+    tasks/speicher-selbstsperre-ladepfad.md), weil es dort gegen eine
+    Regler-Zuteilung rechnete, die ein volles BMS unterschreiten kann — eine
+    Gesundheitsfrage, die die Rechnung nicht beantworten kann. Hier rechnet
+    sie gegen `max_charge_w`, die technische Obergrenze, und bleibt eine
+    Kapazitätsfrage: Ist die freie Kapazität bis zum Ladedeckel kleiner als
+    das, was die volle Ladeleistung in der Frist liefern würde, ist der
     Speicher fertig und reserviert nichts.
 
     Die Frist ist die längste Mindestlaufzeit der modulierbaren Lasten. Das ist
@@ -131,7 +170,7 @@ def akku_ladereservierung(inp: PlanInput, res: PlanResult) -> float:
         if s.max_charge_w <= 0:
             return True
         marge_wh = STORAGE_NIGHT_MARGIN_SOC / 100 * s.capacity_kwh * 1000
-        return ladeauftrag_in_frist_erfuellbar(
+        return _kapazitaet_in_frist_erschoepft(
             ist_soc=s.soc,
             grenze_soc=ziel,
             capacity_kwh=s.capacity_kwh,

@@ -7,6 +7,9 @@ echt greift — und dass ein laufendes Auto nie abgeregelt wird.
 """
 from __future__ import annotations
 
+import ast
+import inspect
+
 from factories import load, lokal, plan_input, storage, zuteilung
 from hems import planner as P
 from hems.strategies import coordination
@@ -348,7 +351,16 @@ def test_frist_trennt_fertigen_akku_vom_ladebedarf():
     füllen in einer 10-Minuten-Mindestlaufzeit 200 Wh, bei 3,7 kWh Kapazität
     also gut 5 Prozentpunkte. Darunter ist der Akku fertig, bevor das Auto
     seine Mindestlaufzeit überhaupt hinter sich hätte — dieselbe Rechnung, mit
-    der der Actuator seit dem 19.08.2026 „fertig" von „antwortet nicht" trennt.
+    der der Actuator vom 19.08.2026 bis zum 07.09.2026 „fertig" von „antwortet
+    nicht" trennte. Seit Subtask C trennt der Actuator das über die feste
+    physische Schwelle `SPEICHER_VOLL_SOC` (`ladeauftrag_am_ladeschluss`); die
+    Frist-Arithmetik lebt seither nur noch hier, und zwar zu Recht: Sie rechnet
+    gegen `max_charge_w`, eine Konfigurationsobergrenze, die mit dem Überschuss
+    nicht schwankt — „reicht die Kapazität für das, was das Gerät MAXIMAL
+    ziehen könnte" ist an dieser Obergrenze eine ehrliche Frage. Im
+    Quittungs-Pfad ging stattdessen eine schwankende Regler-Zuteilung ein, und
+    genau das Schwanken erzeugte am 07.09.2026 den Fehlalarm (Zuteilung ist
+    eine Obergrenze für den Akku, keine Nachfrage).
 
     Beide Stände liegen unter dem Ladedeckel; allein die Frist entscheidet."""
     inp_f, res_f = _voll_am_nachmittag([96.0, 96.0, 96.0])
@@ -415,12 +427,65 @@ def test_lange_mindestlaufzeit_schaltet_den_vorrang_nicht_stumm_ab():
     assert _res(wb_lang) == _res(wb_kurz)
 
 
+def test_fertig_rechnet_gegen_max_charge_w_nicht_gegen_die_zuteilung():
+    """Auflage aus dem Review von Subtask C (07.09.2026,
+    `tasks/speicher-selbstsperre-ladepfad.md`).
+
+    `_kapazitaet_in_frist_erschoepft` zog am 19.08.2026 als
+    `ladeauftrag_in_frist_erfuellbar` in `actuation.py` ein und wurde in
+    Subtask C hierher verschoben, weil `_fertig` (in `akku_ladereservierung`)
+    dieselbe Arithmetik für eine andere Frage braucht. Das trägt nur, weil der
+    einzige verbliebene Aufruf `zugeteilt_w=s.max_charge_w` übergibt — eine
+    Konfigurationsobergrenze, die mit dem gerade verfügbaren Überschuss nicht
+    schwankt. Die gelöschte Fassung übergab dort eine Regler-Zuteilung, und
+    genau deren Schwanken erzeugte am 07.09.2026 den Fehlalarm: Bei 37 Wh
+    Restkapazität trug die Rechnung erst ab 444 W Zuteilung, der
+    Nachmittags-Restüberschuss lag darunter. Ein Ergebnis-Test sieht das
+    Argument nicht — tauschte ein künftiger Umbau `s.max_charge_w` gegen einen
+    Zuteilungswert, bliebe es unbemerkt, und die Falle vom 07.09. stünde an
+    einer Stelle wieder offen, an der niemand sie sucht. Deshalb hier
+    strukturell gepinnt, nicht über einen Wert.
+    """
+    baum = ast.parse(inspect.getsource(coordination))
+    fertig = next(
+        (
+            knoten
+            for knoten in ast.walk(baum)
+            if isinstance(knoten, ast.FunctionDef) and knoten.name == "_fertig"
+        ),
+        None,
+    )
+    assert fertig is not None, "_fertig nicht in coordination.py gefunden"
+    aufrufe = [
+        k
+        for k in ast.walk(fertig)
+        if isinstance(k, ast.Call)
+        and isinstance(k.func, ast.Name)
+        and k.func.id == "_kapazitaet_in_frist_erschoepft"
+    ]
+    assert len(aufrufe) == 1, "genau ein Aufruf der Arithmetik in _fertig"
+    zugeteilt = next(
+        (kw.value for kw in aufrufe[0].keywords if kw.arg == "zugeteilt_w"), None
+    )
+    assert zugeteilt is not None, "zugeteilt_w wird nicht als Keyword übergeben"
+    assert isinstance(zugeteilt, ast.Attribute) and zugeteilt.attr == "max_charge_w", (
+        "zugeteilt_w muss aus max_charge_w kommen, nicht aus einer "
+        "Regler-Zuteilung — sonst öffnet sich die Falle vom 07.09.2026 wieder"
+    )
+
+
 def test_der_deckel_gilt_auch_fuer_die_kurze_frist():
     """Gegenprobe zur Grenze selbst: 296 Wh Rest (92 % von 3,7 kWh bis 100 %)
     liegen über der halben Nachtmarge, 148 Wh (96 %) darunter. Die Grenze läuft
-    damit über die Energie, nicht über einen SoC-Abstand — dieselbe Rechnung,
-    mit der der Actuator seit dem 19.08.2026 „fertig" von „antwortet nicht"
-    trennt."""
+    damit über die Energie, nicht über einen SoC-Abstand — bis zum 07.09.2026
+    dieselbe Rechnung, mit der auch der Actuator „fertig" von „antwortet
+    nicht" trennte. Seit Subtask C fragt der Actuator dafür nur noch die feste
+    physische Schwelle `SPEICHER_VOLL_SOC` ab; die Frist-Arithmetik rechnet nur
+    noch hier weiter, und zwar zu Recht: `max_charge_w` ist eine technische
+    Obergrenze, die mit dem Überschuss nicht schwankt, die Frage bleibt also
+    eine ehrliche Kapazitätsfrage. Der Quittungs-Pfad rechnete gegen eine
+    schwankende Regler-Zuteilung — genau das Schwanken maskierte am
+    07.09.2026 den vollen, fertigen Akku als offenen Ladeauftrag."""
     inp_f, res_f = _voll_am_nachmittag([96.0, 96.0, 96.0])
     inp_b, res_b = _voll_am_nachmittag([92.0, 92.0, 92.0])
     assert coordination.akku_ladereservierung(inp_f, res_f) == 0.0

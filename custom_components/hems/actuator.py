@@ -23,7 +23,7 @@ from homeassistant.util import dt as dt_util
 
 from . import entity_domain
 from .actuation import (
-    ladeauftrag_in_frist_erfuellbar,
+    ladeauftrag_am_ladeschluss,
     plan_soc_set,
     plan_ww_action,
     speicher_folgt,
@@ -407,9 +407,7 @@ class Actuator:
                     ),
                     ohne_drossel=True,
                 )
-            self._quittung_speicher(
-                s, plan, laedt_soll, entlaedt_soll, zugeteilt_w=watt
-            )
+            self._quittung_speicher(s, plan, laedt_soll, entlaedt_soll)
             if not s.charge_setpoint_entity and not s.discharge_setpoint_entity:
                 continue
             if ctrl.modus == "laden":
@@ -444,8 +442,6 @@ class Actuator:
         plan: PlanResult,
         laden_soll: bool,
         entladen_soll: bool,
-        *,
-        zugeteilt_w: float = 0.0,
     ) -> None:
         """Kommandierte Speicherleistung gegen die gemessene halten.
 
@@ -488,27 +484,25 @@ class Actuator:
         zusätzliches Schreiben, sondern jemanden, der hinschaut.
 
         **Nur beim Laden gilt die Ausnahme für den fertigen Auftrag**
-        (`ladeauftrag_in_frist_erfuellbar`). Ein voller Akku, der keine Ladung
-        mehr nimmt, ist fertig, kein Ausfall — der 19.08.2026 steht bei jener
-        Funktion. Der Entlade-Zweig bleibt unangetastet: Dort war der Befund vom
-        15.08.2026 echt (eingefrorene 100 %, volle Anforderung, keine Leistung),
-        und ein „voller" Speicher ist genau der, der entladen können muss.
+        (`ladeauftrag_am_ladeschluss`). Ein voller Akku, der keine Ladung mehr
+        nimmt, ist fertig, kein Ausfall — die Schwelle steht gegen das
+        physische Ladeende (`SPEICHER_VOLL_SOC`), nicht gegen `lade_deckel_soc`
+        oder `laden_statt_einspeisen`: Beide beschreiben, WIE VIEL geladen
+        werden soll, nicht, WANN ein Akku physisch nichts mehr aufnimmt. Bis
+        07.09.2026 rechnete die Ausnahme gegen den Deckel und über eine
+        Frist-Formel, die den Akku als Verbraucher modellierte statt als
+        BMS im Taper — vierter Fund derselben Ursache,
+        tasks/speicher-selbstsperre-ladepfad.md. Der Entlade-Zweig bleibt
+        unangetastet: Dort war der Befund vom 15.08.2026 echt (eingefrorene
+        100 %, volle Anforderung, keine Leistung), und ein „voller" Speicher
+        ist genau der, der entladen können muss.
         """
         if not (laden_soll or entladen_soll) or not s.power_entity:
             self._leistung_seit.pop(s.name, None)
             self._speicher_gemeldet.discard(s.name)
             return
-        if laden_soll and ladeauftrag_in_frist_erfuellbar(
-            ist_soc=self._num_state(s.soc_entity),
-            # Über den Deckel hinaus geladen wird nur, wenn der Überschuss sonst
-            # einspeisen würde — dann ist 100 % die Grenze, gegen die zu rechnen
-            # ist (siehe `laden_statt_einspeisen` in der Speicher-Strategie).
-            grenze_soc=100.0
-            if plan.regelung and plan.regelung.laden_statt_einspeisen
-            else plan.lade_deckel_soc,
-            capacity_kwh=s.capacity_kwh,
-            zugeteilt_w=zugeteilt_w,
-            frist_h=SPEICHER_QUITTUNG_FRIST.total_seconds() / 3600,
+        if laden_soll and ladeauftrag_am_ladeschluss(
+            self._num_state(s.soc_entity)
         ):
             # Wie „kein Befehl": Uhr und Meldeflagge zurück, damit ein späterer
             # echter Ladeauftrag mit voller Frist neu anläuft.

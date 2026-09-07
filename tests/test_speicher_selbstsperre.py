@@ -36,6 +36,7 @@ bloß die Form des Ausdrucks.
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 
 from factories import plan_input, storage, zuteilung
@@ -242,7 +243,7 @@ def test_ohne_leistungssensor_quittiert_der_actuator_nicht():
     assert "not s.power_entity" in quelle
 
 
-# --- Der fertige Ladeauftrag (19.08.2026) -----------------------------------
+# --- Der fertige Ladeauftrag: physische Schwelle statt Frist-Rechnung ------
 #
 # Der Fix vom 17.08. verlangt für die Verriegelung zwei Auslöser: Schweigen UND
 # Nichtausführung. Das trägt nur, solange beide unabhängig sind — und genau das
@@ -250,56 +251,85 @@ def test_ohne_leistungssensor_quittiert_der_actuator_nicht():
 # nimmt keine Ladung mehr an (also „folgt er nicht"), beides aus derselben
 # Ursache. Am Abend des 19.08. verriegelten so alle drei Hyper 2000 nacheinander,
 # jeder exakt 15 Minuten nach seiner letzten Meldung, und das Haus zog 800 W.
+#
+# Der Fix vom 19.08. — `ladeauftrag_in_frist_erfuellbar`, bis 07.09.2026 hier
+# getestet — verglich freie Kapazität bis zur Ladegrenze mit der Energie, die
+# die zugeteilte Leistung in der Quittungsfrist liefern würde. Das modellierte
+# den Akku als Verbraucher, der bis zur Grenze alles nimmt, was zugeteilt ist.
+# Im CV-Taper nimmt er, was das BMS zulässt, unabhängig von der Zuteilung — die
+# Zuteilung ist eine Obergrenze, keine Nachfrage. Die Ausnahme trug deshalb erst
+# ab einer Mindestzuteilung und scheiterte darunter an der nächsten Zahl: Am
+# 07.09.2026 (vierter Fund derselben Ursache,
+# tasks/speicher-selbstsperre-ladepfad.md) standen L1/L3 bei 99 % im Taper,
+# der Nachmittags-Restüberschuss lag unter der Mindestzuteilung, die Ausnahme
+# griff nicht. Dazu rechnete sie gegen `plan.lade_deckel_soc`, nicht gegen das
+# physische Ladeende — bei einem Deckel von 80 % und Ist-SoC 79 hätte sie
+# „fertig" gesagt, obwohl der Akku nicht im Taper ist und ein echter Ausfall
+# damit maskiert würde.
+#
+# Seit 07.09.2026 (Subtask C) gilt stattdessen die feste physische Schwelle
+# `SPEICHER_VOLL_SOC = 99.0` (`ladeauftrag_am_ladeschluss`): Sie fragt nur
+# noch, ob der Akku physisch am Ladeschluss steht — kein SoC-Abstand, keine
+# Zuteilung, kein Deckel. Die Verriegelung ist davon ohnehin nicht mehr
+# betroffen (Subtask A: nur eine Entlade-Verweigerung verriegelt) — hier geht
+# es nur noch um die Warnung.
 
 
 def test_voller_akku_meldet_keinen_ausfall():
-    # 99 % bei 3,6 kWh sind 36 Wh Rest — die 800 W zugeteilte Leistung hätte sie
-    # in knapp drei Minuten geliefert, also lange vor Ablauf der 5-Minuten-Frist.
-    assert A.ladeauftrag_in_frist_erfuellbar(
-        ist_soc=99.0,
-        grenze_soc=100.0,
-        capacity_kwh=3.6,
-        zugeteilt_w=800.0,
-        frist_h=5 / 60,
-    )
+    # 99 % ist physisch am Ladeschluss — unabhängig von der Zuteilung, die die
+    # alte Frist-Rechnung noch gebraucht hätte.
+    assert A.ladeauftrag_am_ladeschluss(99.0)
 
 
 def test_halbvoller_akku_muss_weiter_quittieren():
-    # 90 % bei 3,6 kWh sind 360 Wh — in fünf Minuten nicht zu füllen. Nimmt er
-    # hier nichts auf, ist das ein Befund und kein Feierabend.
-    assert not A.ladeauftrag_in_frist_erfuellbar(
-        ist_soc=90.0,
-        grenze_soc=100.0,
-        capacity_kwh=3.6,
-        zugeteilt_w=800.0,
-        frist_h=5 / 60,
+    # Unter der Schwelle bleibt die Warnung scharf. Nimmt er hier nichts auf,
+    # ist das ein Befund und kein Feierabend.
+    assert not A.ladeauftrag_am_ladeschluss(90.0)
+
+
+def test_ohne_soc_bleibt_es_bei_der_quittung():
+    # Kein SoC-Sensor oder unbekannter Zustand heißt nicht „fertig" — sonst
+    # fiele ein Speicher ohne Messung stillschweigend aus der Warnung.
+    assert not A.ladeauftrag_am_ladeschluss(None)
+
+
+def test_grenze_ist_physisch_nicht_der_deckel():
+    """Szene 07.09.2026 gegen die Regel, die den Fund verursacht hat.
+
+    L1/L3 standen bei `ist_soc = 99` physisch im Taper — unabhängig davon, ob
+    die Nachmittags-Zuteilung 300 W oder 3000 W betrug, das ist am Ladeschluss.
+    Bei `ist_soc = 79` und einem Ladedeckel von 80 % ist der Akku dagegen NICHT
+    im Taper: Eine Regel, die wieder gegen `plan.lade_deckel_soc` rechnet,
+    würde hier fälschlich „fertig" sagen und einen echten Ausfall maskieren —
+    genau die Maskierung, die Frage 4 in
+    tasks/speicher-selbstsperre-ladepfad.md ausdrücklich verbietet.
+
+    `ladeauftrag_am_ladeschluss` nimmt gar keinen Deckel mehr entgegen — das
+    ist keine Zufälligkeit der Beispielwerte, sondern die Eigenschaft, die
+    hier gepinnt wird: Ein bloßer Wertetest (`ladeauftrag_am_ladeschluss(79.0)
+    is False`) ginge auch dann noch grün, wenn jemand `grenze_soc` als
+    optionalen Parameter wieder einführt und `plan.lade_deckel_soc` am
+    Aufruf-Ort erneut hineinreicht — deshalb zusätzlich die strukturelle Probe
+    auf Signatur und Aufruf-Ort.
+    """
+    assert A.ladeauftrag_am_ladeschluss(99.0)
+    assert not A.ladeauftrag_am_ladeschluss(79.0)
+
+    signatur = inspect.signature(A.ladeauftrag_am_ladeschluss)
+    assert set(signatur.parameters) == {"ist_soc"}, (
+        "keine Deckel-Parameter an der Funktion selbst"
     )
 
-
-def test_kleine_zuteilung_verlaengert_die_erwartung():
-    # Dieselben 36 Wh Rest, aber nur 60 W zugeteilt: Das dauert 36 Minuten, der
-    # Speicher müsste in der Frist also sehr wohl Leistung ziehen. Deshalb wird
-    # gegen die zugeteilte Leistung gerechnet und nicht gegen einen SoC-Abstand.
-    assert not A.ladeauftrag_in_frist_erfuellbar(
-        ist_soc=99.0,
-        grenze_soc=100.0,
-        capacity_kwh=3.6,
-        zugeteilt_w=60.0,
-        frist_h=5 / 60,
-    )
-
-
-def test_ohne_soc_oder_grenze_bleibt_es_bei_der_quittung():
-    # Nichts zu rechnen heißt nicht „fertig". Ein Speicher ohne SoC nimmt an der
-    # Zuteilung ohnehin nicht teil, hier darf also nichts stillschweigend
-    # entschärft werden.
-    for kwargs in (
-        {"ist_soc": None, "grenze_soc": 100.0},
-        {"ist_soc": 99.0, "grenze_soc": None},
-    ):
-        assert not A.ladeauftrag_in_frist_erfuellbar(
-            capacity_kwh=3.6, zugeteilt_w=800.0, frist_h=5 / 60, **kwargs
-        )
+    # AST statt Text: Der Docstring erklärt bewusst, warum NICHT mehr gegen den
+    # Deckel gerechnet wird und nennt beide Namen dabei selbst — eine reine
+    # Textsuche über die unparste Quelle träfe also auch dort.
+    attribute_namen = {
+        knoten.attr
+        for knoten in ast.walk(_funktion("actuator.py", "_quittung_speicher"))
+        if isinstance(knoten, ast.Attribute)
+    }
+    assert "lade_deckel_soc" not in attribute_namen
+    assert "laden_statt_einspeisen" not in attribute_namen
 
 
 def test_die_ausnahme_gilt_nur_beim_laden():
@@ -311,12 +341,4 @@ def test_die_ausnahme_gilt_nur_beim_laden():
     beim Entladen die Bedingung, unter der er liefern MUSS.
     """
     quelle = ast.unparse(_funktion("actuator.py", "_quittung_speicher"))
-    assert "laden_soll and ladeauftrag_in_frist_erfuellbar" in quelle
-
-
-def test_die_frist_der_ausnahme_ist_die_der_quittung():
-    # Zwei Fristen, die auseinanderlaufen können, wären eine Fehlerquelle ohne
-    # Gegenwert: Die Ausnahme fragt genau, ob der Auftrag VOR der Meldung fertig
-    # war, und „vor der Meldung" ist SPEICHER_QUITTUNG_FRIST.
-    quelle = ast.unparse(_funktion("actuator.py", "_quittung_speicher"))
-    assert "SPEICHER_QUITTUNG_FRIST.total_seconds() / 3600" in quelle
+    assert "laden_soll and ladeauftrag_am_ladeschluss" in quelle
