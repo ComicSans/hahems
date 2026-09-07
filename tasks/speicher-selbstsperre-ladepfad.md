@@ -342,7 +342,7 @@ gemessen falsch liegt.
 
 ## Abnahme
 
-- [ ] Regressionstest gegen die **kaputte** Fassung rot: Eine
+- [x] (A) Regressionstest gegen die **kaputte** Fassung rot: Eine
       Lade-Verweigerung (gemessen 0 W nach `SPEICHER_QUITTUNG_FRIST`,
       beliebige Zuteilung, beliebiger SoC) landet **nicht** in dem Feld, aus
       dem `coordinator.py` `offen` bildet. Heute landet sie in
@@ -351,10 +351,10 @@ gemessen falsch liegt.
 - [ ] Die Szene vom 07.09. (`ist_soc = 99`, `capacity_kwh = 3.7`, Zuteilung
       unterhalb 444 W, Frist 5 min) erzeugt nach Subtask C auch keine
       Warnung mehr; vor Subtask C bleibt die Warnung, verriegelt aber nicht.
-- [ ] Ein voller, ruhender Speicher wird durch einen Ladeauftrag, den er nicht
+- [x] (A) Ein voller, ruhender Speicher wird durch einen Ladeauftrag, den er nicht
       annehmen kann, nicht mehr verriegelt — unabhängig von der Höhe der
       Zuteilung.
-- [ ] Ein Speicher, der einem **Entlade**-Auftrag nicht folgt, wird weiterhin
+- [x] (A) Ein Speicher, der einem **Entlade**-Auftrag nicht folgt, wird weiterhin
       verriegelt (Befund vom 15.08.2026 bleibt abgedeckt); der Entlade-Zweig
       schreibt weiterhin in das Feld, aus dem `offen` gebildet wird.
 - [ ] Ein zu Unrecht verriegelter Speicher findet ohne Reload und ohne
