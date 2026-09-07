@@ -877,3 +877,212 @@ vorhanden: `ControlResult.probe_namen` (`types.py:130-142`), Sensor-Attribut
   Vorlage für die in Auflage 1 verlangte Ergänzung) — nur per Volltextsuche
   in den beiden hier geänderten Testdateien geprüft, nicht im gesamten
   Testbaum.
+
+## Review Subtask C (07.09.2026)
+
+**Verdikt: angenommen mit Auflage.**
+
+Geprüft: `git diff HEAD` für genau die vier im Auftrag genannten Dateien
+(`actuation.py`, `actuator.py`, `strategies/coordination.py`,
+`tests/test_speicher_selbstsperre.py`; `git status --porcelain` bestätigt,
+dass sonst nichts geändert ist). HEAD ist `4cb7460`, Subtask A/B bereits
+committet und nicht erneut geprüft. Kein Testlauf gefahren (Weisung);
+Beurteilung durch Lesen von Code, Kommentaren und Tests, inklusive
+Nachrechnen der AST-Prüfungen von Hand und Nachschlagen der
+Konfigurationsherkunft von `max_charge_w`.
+
+### Die Relokation — die zu bewertende Abweichung
+
+Frage 4 der Entscheidung sagt „entfällt ersatzlos". Der Coder hat die
+Rechnung nicht gelöscht, sondern als private Funktion
+`_kapazitaet_in_frist_erschoepft` von `actuation.py` nach
+`strategies/coordination.py:67-90` verschoben, weil `akku_ladereservierung`
+(`coordination.py:169-179`, `_fertig`) dieselbe Arithmetik für eine andere
+Frage nutzt. Das ist eine bewusste Abweichung von der wörtlichen Vorgabe, und
+sie trägt — aus zwei Gründen, die beide im Code nachprüfbar sind, nicht nur
+in der Docstring-Behauptung:
+
+1. **Andere Eingangsgröße.** Im gelöschten Pfad war `zugeteilt_w` eine
+   Regler-Zuteilung: ein Wert, der mit dem gerade verfügbaren Überschuss
+   schwanken und beliebig klein werden kann, unabhängig vom Ladezustand des
+   Geräts. Genau das erzeugte den Fehlalarm vom 07.09.: Bei kleiner Zuteilung
+   sagte die Formel „nicht fertig", obwohl der Akku physisch voll war. Am
+   verbliebenen Aufrufer (`coordination.py:177`) ist `zugeteilt_w` dagegen
+   `s.max_charge_w` — ein Konfigurationswert des Geräts
+   (`config_flow.py` `STORAGE_SCHEMA`, `vol.Required("max_charge_w", …)`,
+   Minimum 100 W), der mit dem aktuellen Überschuss nicht schwankt. Der
+   Nenner der Formel kann hier nicht klein werden, wenn wenig Überschuss da
+   ist — die Bedingung, unter der der 07.09.-Fehlalarm entstand, entfällt
+   strukturell. Die verbleibende Fehlerrichtung ist die entgegengesetzte
+   („fertig zu früh" bei z. B. 96 % SoC, keine Reservierung, obwohl das BMS
+   noch 1200 W nähme) — das ist der dokumentierte, akzeptierte Preis des
+   23.08.-Fixes (`coordination.py:122-132`), nicht ein neuer Fund.
+2. **Andere Konsequenzklasse.** Der gelöschte Pfad speiste über die Quittung
+   in ein Latch, das sich selbst hält und ohne externen Beweis nicht mehr
+   löst — das war der ganze Schaden vom 19.08./07.09. `akku_ladereservierung`
+   hat kein Gedächtnis: Sie wird jeden Zyklus neu aus dem aktuellen Plan
+   berechnet, ihr schlechtester Fall ist eine für einen Zyklus suboptimale
+   Leistungsreservierung zugunsten der Wallbox, kein Ausschluss eines
+   Speichers aus der Regelung.
+
+Damit ist die Frage aus dem Auftrag beantwortet: Der Coder trägt keinen
+Denkfehler weiter, sondern trennt zwei tatsächlich verschiedene Fragen, die
+zufällig dieselbe Arithmetik teilen — eine Gesundheitsfrage (entfällt zu
+Recht) und eine Kapazitätsfrage (bleibt zu Recht).
+
+**Verhalten von `akku_ladereservierung` unverändert:** Der Aufruf an der
+einzigen Stelle (`coordination.py:169-179`) ist bytegleich zum Stand vor
+diesem Diff bis auf den Funktionsnamen — `ist_soc`, `grenze_soc=ziel` (nicht
+der Deckel, unverändert seit 23.08.), `capacity_kwh`, `zugeteilt_w`,
+`frist_h` alle identisch übergeben. `tests/test_coordination.py` selbst hat
+in diesem Diff einen leeren Diff (`git diff HEAD -- tests/test_coordination.py`
+liefert nichts); die dort unverändert stehenden Tests
+`test_frist_trennt_fertigen_akku_vom_ladebedarf`,
+`test_voller_akku_reserviert_nichts_und_das_auto_startet`,
+`test_der_deckel_gilt_auch_fuer_die_kurze_frist` decken genau den 23.08.-Fix
+und sind von der Umbenennung nicht betroffen, da sie ausschließlich über
+`coordination.akku_ladereservierung(...)` gehen, keinen internen Funktions-
+oder Modulnamen pinnen.
+
+**Form der Verschiebung — `coordination.py` statt `actuation.py`:** Richtig
+so. `actuation.py:1-11` erklärt sich selbst als Aktuierungs-Schicht für den
+`Actuator` und sagt ausdrücklich „Dieses Modul importiert nur die
+Standardbibliothek." Vor diesem Diff durchbrach `strategies/coordination.py`
+mit `from ..actuation import ladeauftrag_in_frist_erfuellbar` genau das:
+Ein Planungsmodul importierte aus der Aktuierungsschicht. Nach diesem Diff
+ist `actuation.py` ausschließlich noch von `actuator.py` importiert (per
+Grep über den ganzen Baum verifiziert) — die Verschiebung stellt die vom
+Modul selbst behauptete Schichtentrennung wieder her, statt sie zu verletzen.
+Die Funktion ist `_`-privat, hat nur einen Aufrufer, und der sitzt jetzt im
+selben Modul. Besser aufgehoben in `actuation.py` wäre sie nur gewesen, wenn
+sie von mehreren Stellen der Aktuierungsschicht gebraucht würde — das ist
+nicht der Fall.
+
+### Auflage (vor Commit zu beheben)
+
+1. **Die Rechtfertigung der Relokation hängt vollständig an
+   `zugeteilt_w=s.max_charge_w` (`custom_components/hems/strategies/
+   coordination.py:177`) — und genau diese Zeile ist nach diesem Diff
+   ungepinnt.** Die beiden Tests, die vorher direkt gegen die Arithmetik von
+   `ladeauftrag_in_frist_erfuellbar` liefen
+   (`test_kleine_zuteilung_verlaengert_die_erwartung`,
+   `test_ohne_soc_oder_grenze_bleibt_es_bei_der_quittung`, beide gelöscht in
+   `tests/test_speicher_selbstsperre.py`), sind mit der Funktion aus
+   `actuation.py` verschwunden — die Entscheidung sagt für sie „entfallen mit
+   der Rechnung", aber die Rechnung ist nicht entfallen, sie ist umgezogen.
+   Für `_kapazitaet_in_frist_erschoepft` selbst und für den Aufrufer in
+   `coordination.py` existiert keine direkte Testabdeckung mehr außer den
+   integrativen `test_coordination.py`-Tests, die die Formel nur über einen
+   Ergebniswert sehen, nicht über das Argument, das die ganze Sicherheit
+   dieses Reviews trägt. Vertauscht ein künftiger Umbau `zugeteilt_w` gegen
+   eine Regler-Zuteilung (etwa weil jemand die Reservierung „genauer" an die
+   tatsächlich verfügbare Leistung koppeln will), öffnet sich exakt die Falle
+   vom 07.09. wieder — an einer Stelle, die kein bestehender Test bemerkt.
+   Genau die Art Lücke, vor der das Arbeitsmodell warnt (Tests, die eine Naht
+   pinnen, damit ein Coder sie nicht unbemerkt wieder aufreißt), und genau
+   das Muster, das dieses Projekt laut eigener Historie viermal getroffen
+   hat. Zu ergänzen: ein AST- oder Signatur-Pin (Stil wie die übrigen Pins in
+   `test_speicher_selbstsperre.py` bzw. `test_coordination.py`), der verlangt,
+   dass der Aufruf von `_kapazitaet_in_frist_erschoepft` in `_fertig`
+   `zugeteilt_w=s.max_charge_w` (oder strukturell: ein `ast.Attribute` mit
+   `.attr == "max_charge_w"` am `zugeteilt_w`-Keyword) trägt. Reine
+   Testergänzung, keine Code-Änderung nötig.
+
+### Übrige Punkte — keine Beanstandung
+
+- **Schwelle gegen das physische Ladeende, nicht den Deckel** (Punkt 1 im
+  Auftrag): `SPEICHER_VOLL_SOC = 99.0` (`actuation.py`, neu), `actuator.py`
+  ruft `ladeauftrag_am_ladeschluss(self._num_state(s.soc_entity))` ohne
+  Deckel-Parameter. Der 79/80-Test
+  (`test_grenze_ist_physisch_nicht_der_deckel`,
+  `tests/test_speicher_selbstsperre.py`) wäre gegen eine Fassung rot, die
+  wieder gegen den Deckel rechnet: Die Signatur-Prüfung
+  (`set(signatur.parameters) == {"ist_soc"}`) fängt jede Wiedereinführung
+  eines `grenze_soc`-Parameters an der Funktion selbst, die AST-Prüfung auf
+  `_quittung_speicher` fängt zusätzlich jeden Aufruf-Ort-Rückfall, der
+  `plan.lade_deckel_soc` oder `laden_statt_einspeisen` wieder in die Nähe des
+  Aufrufs zöge — nachvollzogen, dass gegen den heutigen Code beide
+  Assertions grün sind und `lade_deckel_soc`/`laden_statt_einspeisen` sonst
+  nirgends als `ast.Attribute` in der Funktion vorkommen.
+- **Quittung betrifft nur die Warnung** (Punkt 2): Der Append auf
+  `plan.speicher_entladen_verweigert` (`actuator.py:544-548`, gated auf
+  `not laden_soll`) ist von diesem Diff nicht berührt — der Diff ändert an
+  `_quittung_speicher` ausschließlich Signatur, Docstring und den
+  Ausnahme-Aufruf oberhalb dieser Zeilen.
+- **`zugeteilt_w`-Parameter vollständig entfernt** (Punkt 3): Signatur
+  (`actuator.py`) und Aufruf (`actuator.py:410`) bereinigt; die Variable
+  `watt` selbst bleibt für `laedt_soll`/`entlaedt_soll` und die
+  Setpoint-Schreibung erhalten. Kein verbliebener Verweis auf den Parameter
+  im Baum außer dem legitim weitergeführten in
+  `_kapazitaet_in_frist_erschoepft`.
+- **Wissen der gelöschten Frist-Tests erhalten** (Punkt 4): Der
+  Kommentar-Block über den alten Tests
+  (`tests/test_speicher_selbstsperre.py`, vor `test_voller_akku_meldet_keinen_ausfall`)
+  ist umgeschrieben, nicht ersatzlos gestrichen — er erklärt jetzt Herkunft,
+  Fehler und Ablösung der alten Funktion sowie die neue Schwelle.
+- **AST-Prüfung nicht stumpf geworden** (Punkt 5): Die Umstellung von
+  Substring- auf `ast.Attribute`-Namensmenge ist notwendig und korrekt:
+  Der alte Aufruf enthielt `plan.lade_deckel_soc` und
+  `plan.regelung.laden_statt_einspeisen` als echte `ast.Attribute`-Knoten,
+  eine reine Textsuche hätte auch im (jetzt existierenden) erklärenden
+  Docstring-Text angeschlagen (`ast.Constant`, kein `ast.Attribute` —
+  deshalb korrekt ignoriert). Der Test bleibt an eine reale strukturelle
+  Naht gebunden, nicht an Prosa.
+- **Kommentare wahr** (Punkt 6), mit einer kleinen Ungenauigkeit ohne
+  Auflagen-Charakter: `actuation.py:264` schreibt der Funktion selbst („der
+  Fehler von `ladeauftrag_in_frist_erfuellbar`") die Deckel-Rechnung zu; sie
+  nahm `grenze_soc` als Parameter entgegen, der *Aufrufer* in `actuator.py`
+  reichte `plan.lade_deckel_soc` hinein. Ungenau, nicht falsch — die
+  historische Zuordnung „diese Funktion rechnete effektiv gegen den Deckel"
+  stimmt im Ergebnis für den einzigen Aufrufer, den es damals gab.
+
+### Umfang: sauber auf Subtask C begrenzt
+
+Genau die vier genannten Dateien geändert, sonst nichts (`git status
+--porcelain` leer bis auf diese vier). `tests/test_speicher_quittung.py`,
+`tests/test_coordination.py`, `strategies/battery.py`, `sensor.py`,
+`coordinator.py`, `types.py` unverändert. Kein Test instanziiert `Actuator`
+oder ruft `_quittung_speicher`/`_kapazitaet_in_frist_erschoepft` mit
+`zugeteilt_w` als Keyword — die Parameter-Entfernung kann daher keinen
+bestehenden Testaufruf gebrochen haben (per Volltextsuche über den
+Testbaum geprüft).
+
+### Abnahme — zu den zwei offenen Punkten
+
+- „Nach Subtask C gibt es keinen Aufrufer von
+  `ladeauftrag_in_frist_erfuellbar` mehr" — wörtlich erfüllt: Das Symbol
+  existiert nicht mehr im Baum (per Grep bestätigt, nur noch
+  Kommentar-Erwähnungen). Wer „entfällt ersatzlos" aus Frage 4 wörtlich
+  meint, sollte aber wissen: Die Arithmetik selbst ist nicht entfallen,
+  sondern unter `_kapazitaet_in_frist_erschoepft` in `coordination.py`
+  weitergeführt — siehe Abschnitt „Die Relokation" oben. Das ist die
+  Abweichung, die der Architekt ausdrücklich gegenzeichnen oder verwerfen
+  können muss.
+- „Szene vom 07.09. erzeugt nach Subtask C auch keine Warnung mehr" — durch
+  `test_voller_akku_meldet_keinen_ausfall` (99 % → `True`, ganz ohne
+  Zuteilungs-Parameter) strukturell erfüllt: Die neue Ausnahme hängt an
+  keiner Zuteilungshöhe mehr, „unterhalb 444 W" kann also gar nicht mehr
+  scheitern.
+- „Volle Suite grün" — nicht von mir geprüft, laut Auftrag Sache des
+  Koordinators; gemeldet: 376 Fälle, 0 Fehler.
+
+### Nicht geprüft
+
+- Kein Testlauf (weder einzelne Klassen noch Vollsuite) — Weisung, übernimmt
+  der Koordinator über den Broker.
+- Subtask A/B (bereits committet) nicht erneut geprüft.
+- `tasks/…md` selbst nur für die im Auftrag genannten Abschnitte gelesen,
+  nicht als Ganzes inhaltlich geprüft.
+- Laufzeitverhalten (Home-Assistant-nahe Pfade) nicht ausführbar geprüft —
+  wie im Projekt üblich nur durch Lesen der AST-Nähte.
+
+### Optional (Stil, außerhalb des Diff-Umfangs)
+
+- `tests/test_coordination.py:350-351` und `:421-423` — der Kommentar
+  „dieselbe Rechnung, mit der der Actuator seit dem 19.08.2026 ‚fertig' von
+  ‚antwortet nicht' trennt" ist seit diesem Diff nicht mehr wahr: Der
+  Actuator trennt das seit Subtask C über die feste physische Schwelle
+  (`ladeauftrag_am_ladeschluss`), nicht mehr über dieselbe Frist-Arithmetik.
+  Die Datei liegt außerhalb der vier für dieses Review benannten Dateien,
+  deshalb keine Auflage — aber ein direkter Folgeeffekt der Relokation, den
+  jemand beim nächsten Anfassen dieser Datei richtigstellen sollte.
