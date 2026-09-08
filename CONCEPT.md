@@ -116,6 +116,16 @@ Alterungs-Optimierung, kein Selbstzweck. Dieselbe Abwägung hebt Deckel und
 Pause ganz auf, sobald die Nachtdeckung auf dem Spiel steht — und der Schalter
 „Speicher als Notstromreserve" kehrt sie um: Bereitschaft schlägt Lebensdauer.
 
+**Geladen wird gegen Einspeisung, nicht gegen den Zähler.** Der Speicher-Regler
+kennt nur eine Ladequelle: Überschuss, der sonst ins Netz ginge. Steht der Saldo
+im Bezug, lädt er nicht — auch nicht mit Ziel *Vollladen* oder als
+Notstromreserve, die beide nur das Ladeziel und das Tempo ändern. Genau eine
+Ausnahme gibt es, und sie ist ein ausdrücklicher Eingriff des Betreibers: der
+Schalter „Speicher-Zwangsladung", der den Sollwert fest auf die volle
+Ladeleistung stellt und den Netzbezug in Kauf nimmt. Er endet von selbst, sobald
+der Speicher voll ist — ein Netzlade-Pfad, den man vergessen kann, wäre eine
+Dauerrechnung.
+
 **Modulierbare Lasten weichen vor dem Speicher.** Lässt der Ertrag nach, wird
 zuerst der Ladestrom heruntergeregelt, erst danach hilft der Akku. Sonst
 finanzierte der Speicher das Laden. Das gilt auch für eine Wallbox, die ihrem

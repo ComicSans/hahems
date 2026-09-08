@@ -381,6 +381,7 @@ class HemsData:
         # Laufzeit-Steuerung (aus Select/Switch), fürs Dashboard mitgeführt.
         self.ziel: str = GOAL_SELF_CONSUMPTION
         self.ev_zwang: bool = False
+        self.speicher_zwang: bool = False
         self.config_check: ConfigCheck | None = None
         self.plan: PlanResult = PlanResult()
         # Pro-Speicher-Momentaufnahme für die Lastfluss-Karte
@@ -412,11 +413,15 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._check_signature: tuple | None = None
         # Signatur der zuletzt zugestellten Meldungen (verhindert Zyklus-Lärm).
         self._alert_signature: tuple | None = None
-        # Optimierungsziel, E-Auto-Zwangsladung und Notstromreserve (von
-        # Select bzw. Switch gesetzt, in RestoreEntity persistiert).
+        # Optimierungsziel, E-Auto-Zwangsladung, Notstromreserve und
+        # Speicher-Zwangsladung (von Select bzw. Switch gesetzt, in
+        # RestoreEntity persistiert). Die Zwangsladung setzt zusätzlich der
+        # Coordinator selbst zurück, sobald der Plan ihr Ziel als erreicht
+        # meldet — siehe `_async_update_data`.
         self.goal: str = GOAL_SELF_CONSUMPTION
         self.ev_force: bool = False
         self.emergency_reserve: bool = False
+        self.battery_force: bool = False
         # Regel-Aggressivität (min/normal/max), vom Select gesetzt und in
         # RestoreEntity persistiert. Default aggressiv, damit Ladelücken zügig
         # geschlossen werden.
@@ -1234,6 +1239,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 ev_force=self.ev_force,
                 battery_to_ev=self._opt(CONF_BATTERY_TO_EV, False),
                 emergency_reserve=self.emergency_reserve,
+                battery_force=self.battery_force,
                 wallbox_w=data.wallbox_w,
                 weather_factor_tomorrow=data.wetter_faktor_morgen,
                 free_kwh=float(self._opt(CONF_FREE_KWH, DEFAULT_FREE_KWH)),
@@ -1345,8 +1351,25 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             for h in reg.heatings
         ]
 
+        # Ende der Speicher-Zwangsladung: Der Plan meldet, dass kein meldender
+        # Speicher mehr unter dem physischen Ladeende steht — der Auftrag ist
+        # erfüllt (siehe `PlanResult.speicher_zwang_fertig`). Der Zwang ist
+        # eine Aktion mit Ende, kein Betriebsmodus: Bliebe er stehen, kaufte
+        # HEMS jede Nacht den Eigenverbrauch aus dem Netz zurück, sobald der
+        # SoC wieder sinkt. Der Schalter zieht über den Listener nach.
+        #
+        # Erst hier und nicht vor der Aktuierung: Der Plan dieses Zyklus regelt
+        # in dieser Lage bereits wieder nach dem Saldo (der Zwang teilt vollen
+        # Speichern nichts mehr zu) — abgeschaltet wird also nichts anderes
+        # kommandiert, als ohnehin schon geplant ist.
+        if data.plan.speicher_zwang_fertig and self.battery_force:
+            _LOGGER.info(
+                "HEMS: Speicher-Zwangsladung beendet – Ziel-SoC erreicht"
+            )
+            self.battery_force = False
         data.ziel = self.goal
         data.ev_zwang = self.ev_force
+        data.speicher_zwang = self.battery_force
 
         # Config-Sanity-Check (speist binary_sensor.hems_konfiguration). Fehler/
         # Überlappungen nur bei Änderung loggen, nicht jeden 60-s-Zyklus.
@@ -1410,7 +1433,12 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         if self.changelog is None:
             return
         snap = decision_snapshot(
-            self.mode, self.goal, self.ev_force, data.plan, self.emergency_reserve
+            self.mode,
+            self.goal,
+            self.ev_force,
+            data.plan,
+            self.emergency_reserve,
+            self.battery_force,
         )
         prev, self._decisions = self._decisions, snap
         if prev is None:

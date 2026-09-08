@@ -221,6 +221,17 @@ CONTROL_PARALLEL_OFF = 0.85
 # stummer Speicher nennenswert Energie kostet.
 STORAGE_STALE_MIN = 15.0
 
+# Physisches Ladeende (SoC-%), nicht der dynamische Lade-Deckel: Ein Zendure
+# Hyper 2000 meldet 100 % faktisch nie (siehe Befund 07.09.2026,
+# Aufgabe „Speicher-Selbstsperre", Git 129880c — L1/L3 standen bei 99 % im
+# CV-Taper, `soc_limit = 1` vom Gerät selbst). Bewusst NICHT `plan.lade_deckel_soc`:
+# Bei einem Deckel von 80 % und Ist-SoC 79 ist der Akku nicht im Taper, und
+# eine Schwelle gegen den Deckel würde dort einen echten Ausfall als „fertig"
+# maskieren — das war der Fehler von `ladeauftrag_in_frist_erfuellbar`
+# (bis 07.09.2026, siehe Git-Historie), der außerdem gegen `lade_deckel_soc`
+# statt gegen das physische Ladeende rechnete.
+SPEICHER_VOLL_SOC = 99.0
+
 # Akku-Ladestrategie über den Tag. Für die kalendarische Alterung zählt nicht
 # der Spitzen-SoC, sondern die ZEIT bei hohem SoC. Der Ladedeckel ist deshalb
 # keine feste Kurve mehr, sondern die Rückwärtsrechnung des Nachtbedarfs:

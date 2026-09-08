@@ -547,6 +547,9 @@
       },
       "notstromreserve": {
         "name": "Speicher als Notstromreserve"
+      },
+      "speicher_zwang": {
+        "name": "Speicher-Zwangsladung"
       }
     }
   },

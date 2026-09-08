@@ -24,6 +24,7 @@ from ..const import (
     GOAL_ZERO_FEEDIN,
     RESERVE_SOC_OFF,
     RESERVE_SOC_ON,
+    SPEICHER_VOLL_SOC,
     STORAGE_AFTERNOON_FROM_H,
     STORAGE_FULL_BY_LEAD_H,
     STORAGE_MORNING_UNTIL_H,
@@ -337,6 +338,44 @@ def _storage_control(
             soll_wunsch, max(0.0, bat_ist + fehler_ohne_ev * _gain(fehler_ohne_ev))
         )
 
+    # Speicher-Zwangsladung: der Sollwert kommt nicht mehr aus dem Saldo,
+    # sondern steht auf der vollen Ladeleistung — auch gegen Netzbezug. Das ist
+    # der einzige Pfad in HEMS, der Netzstrom in den Speicher schiebt, und er
+    # ist ausdrücklich eine Anweisung des Betreibers, keine Regelentscheidung
+    # (siehe `PlanInput.battery_force`).
+    #
+    # Bewusst NACH beiden Wallbox-Klauseln: Die deckeln das Laden gegen den
+    # echten Saldo bzw. gegen die Wallbox-Last — genau die Deckel, die einen
+    # Zwang wirkungslos machten. `fehler_w` bleibt unberührt und damit
+    # informativ: Der Sensor zeigt weiter, was der Regler ohne den Zwang täte.
+    #
+    # Nur meldende Speicher unter dem PHYSISCHEN Ladeende nehmen teil. Beide
+    # Einschränkungen tragen: `known` schließt abgemeldete aus (ihr SoC ist
+    # keine Messung mehr), `SPEICHER_VOLL_SOC` die vollen. Die zweite ist keine
+    # Feinheit, sondern die Bedingung dafür, dass der Zwang überhaupt endet:
+    # Ein Zendure Hyper 2000 meldet 100 % faktisch nie, er steht bei 99 % im
+    # CV-Taper und nimmt nichts mehr. Ein Kriterium „SoC < 100" hielte den
+    # Zwang dort für immer offen und kommandierte drei sattten BMS dauerhaft
+    # die volle Ladeleistung — dieselbe Bugfamilie wie in der Aufgabe
+    # „Speicher-Selbstsperre" (Git 129880c).
+    #
+    # Ohne ladefähige Einheit (Summe 0) bleibt der normale Regelweg stehen: Ein
+    # Zwang, der niemanden erreicht, soll auch nichts kommandieren — und wenn
+    # der Grund die Fülle ist, ist er ohnehin gleich zu Ende (unten).
+    zwang_offen = [s for s in known if s.soc < SPEICHER_VOLL_SOC]
+    if inp.battery_force:
+        zwang_lad = sum(s.max_charge_w for s in zwang_offen)
+        if zwang_lad > 0:
+            soll = soll_wunsch = -zwang_lad
+        # Ende der Zwangsladung: kein meldender Speicher steht mehr unter dem
+        # physischen Ladeende. Der Coordinator legt den Schalter daraufhin
+        # selbst um; der Zwang ist eine Aktion mit Ende, kein Betriebsmodus
+        # (siehe `PlanResult.speicher_zwang_fertig`). Ab hier regelt wieder der
+        # Saldo — ein voller Akku, der den Hausverbrauch deckt, ist genau das,
+        # was der Zwang erreichen wollte.
+        elif not zwang_offen:
+            res.speicher_zwang_fertig = True
+
     ctrl = ControlResult(
         modus="pausiert",
         fehler_w=round(fehler, 0),
@@ -344,6 +383,7 @@ def _storage_control(
         reserve_aktiv=reserve_aktiv,
         reserve_namen=[s.name for s in inp.storages if s.cold_reserve],
         abgemeldet_namen=[s.name for s in inp.storages if s.stale],
+        zwang_aktiv=inp.battery_force and bool(zwang_offen),
     )
 
     def _verteile_entladen(
@@ -556,8 +596,21 @@ def _storage_control(
         deckel = res.lade_deckel_soc if res.lade_deckel_soc is not None else 100.0
 
         def _anteile(grenze: float) -> list[tuple[StorageState, float]]:
+            # Unter Zwang bleiben Speicher am physischen Ladeende außen vor:
+            # Ihre rechnerisch freie Kapazität (99 → 100 %) ist im CV-Taper
+            # nicht mehr abrufbar, ein Sollwert darauf erzeugt nur eine
+            # Lade-Quittung, die niemand einlösen kann. Ohne Zwang bleibt es
+            # beim Deckel — dort ist der Rest echter Überschuss, der sonst ins
+            # Netz ginge, und der darf auch die letzte Kilowattstunde füllen.
+            nur_offene = inp.battery_force
             return [
-                (s, max(0.0, (grenze - s.soc) / 100 * s.capacity_kwh)) for s in known
+                (
+                    s,
+                    0.0
+                    if nur_offene and s.soc >= SPEICHER_VOLL_SOC
+                    else max(0.0, (grenze - s.soc) / 100 * s.capacity_kwh),
+                )
+                for s in known
             ]
 
         ctrl.zuteilung = _verteile(_anteile(deckel), -soll, laden=True)

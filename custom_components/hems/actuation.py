@@ -7,11 +7,13 @@ so wie die Planungsregeln in ``strategies/`` HA-frei bleiben, damit die
 Testsuite sie erreicht (siehe planner-Docstring und CLAUDE.md: Aktuierung
 gehört hinter Tests).
 
-Dieses Modul importiert nur die Standardbibliothek.
+Dieses Modul importiert nur die Standardbibliothek und die eigenen Konstanten.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from .const import SPEICHER_VOLL_SOC
 
 # Steuer-Domains, die den Sollwert selbst tragen (water_heater.set_temperature
 # über das Attribut "temperature"). Alles andere (switch/input_boolean) schaltet
@@ -255,23 +257,12 @@ def speicher_folgt(gemessen_w: float | None, *, laden: bool) -> bool:
     return speicher_laedt(gemessen_w) if laden else speicher_entlaedt(gemessen_w)
 
 
-# Physisches Ladeende (SoC-%), nicht der dynamische Lade-Deckel: Ein Zendure
-# Hyper 2000 meldet 100 % faktisch nie (siehe Befund 07.09.2026,
-# tasks/speicher-selbstsperre-ladepfad.md — L1/L3 standen bei 99 % im
-# CV-Taper, `soc_limit = 1` vom Gerät selbst). Bewusst NICHT `plan.lade_deckel_soc`:
-# Bei einem Deckel von 80 % und Ist-SoC 79 ist der Akku nicht im Taper, und
-# eine Schwelle gegen den Deckel würde dort einen echten Ausfall als „fertig"
-# maskieren — das war der Fehler von `ladeauftrag_in_frist_erfuellbar`
-# (bis 07.09.2026, siehe Git-Historie), der außerdem gegen `lade_deckel_soc`
-# statt gegen das physische Ladeende rechnete.
-SPEICHER_VOLL_SOC = 99.0
-
 
 def ladeauftrag_am_ladeschluss(ist_soc: float | None) -> bool:
     """Ob ein Speicher physisch am Ladeschluss steht — die Lade-Warnung endet dort.
 
     Ersetzt seit 07.09.2026 `ladeauftrag_in_frist_erfuellbar`
-    (vierter Fund derselben Ursache, tasks/speicher-selbstsperre-ladepfad.md):
+    (vierter Fund derselben Ursache, Aufgabe „Speicher-Selbstsperre", Git 129880c):
     Die Frist-Rechnung modellierte den Akku als Verbraucher, der bis zur
     Grenze alles nimmt, was zugeteilt ist. Im CV-Taper nimmt er, was das BMS
     zulässt, unabhängig von der Zuteilung — die Zuteilung ist eine Obergrenze,

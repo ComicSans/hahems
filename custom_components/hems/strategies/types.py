@@ -146,6 +146,11 @@ class ControlResult:
     # Eine probierte Einheit steht zugleich in `zuteilung` und in
     # `abgemeldet_namen`; ohne dieses Feld widerspräche sich der Sensor.
     probe_namen: list[str] = field(default_factory=list)
+    # Speicher-Zwangsladung aktiv (Schalter): Der Sollwert kommt nicht aus dem
+    # Saldo, sondern steht fest auf der vollen Ladeleistung. Gehört sichtbar
+    # gemacht, weil `fehler_w` und `soll_w` dann nicht mehr zusammenpassen —
+    # ohne diese Angabe sähe die Regelung nach einem Reglerfehler aus.
+    zwang_aktiv: bool = False
 
 
 @dataclass
@@ -464,6 +469,21 @@ class PlanInput:
     # Regel-Schrittweite. Alterung ist dann zweitrangig — ein leerer Speicher
     # im Ausfall kostet mehr als ein paar Zyklen Lebensdauer.
     emergency_reserve: bool = False
+    # Speicher-Zwangsladung (Laufzeit-Schalter): Der Akku lädt mit voller
+    # Leistung, unabhängig vom Netzsaldo — also ausdrücklich AUS DEM NETZ, wenn
+    # kein Überschuss da ist. Das ist der einzige Pfad in HEMS, der Netzstrom
+    # in den Speicher schiebt; alles andere lädt nur gegen Export. Gedacht für
+    # Lagen, in denen der Ladestand mehr zählt als der Preis: angekündigter
+    # Ausfall, Kalibrierfahrt, ein Speicher, der vor dem Abend hochkommen muss.
+    # Wirkt zusätzlich wie `emergency_reserve` auf die Ladestrategie (Ziel-SoC
+    # 100 %, Deckel sofort statt just in time, keine Mittagspause) — ein Zwang,
+    # der an einem Tagesdeckel von 40 % endet, wäre keiner.
+    # Endet von selbst: Sobald kein meldender Speicher mehr unter dem
+    # physischen Ladeende (`SPEICHER_VOLL_SOC`) steht, meldet der Plan
+    # `speicher_zwang_fertig`, und der Coordinator legt den Schalter um. Ohne
+    # diese Selbstabschaltung bliebe ein vergessener Zwang stehen und kaufte
+    # jede Nacht den Eigenverbrauch aus dem Netz zurück.
+    battery_force: bool = False
     # E-Auto-Zwangsladung: lädt unabhängig von Überschuss und Wallbox-
     # Mindestleistung. Die Wallbox-Last wird dann aus dem Saldo herausgerechnet,
     # den die Speicher-Regelung sieht, damit der Hausakku nicht still ins Auto
@@ -664,12 +684,20 @@ class PlanResult:
     # ist dafür ein legitimer Grund, kein Ausfall. Der Latch
     # (`speicher_stumm_latch`) darf dagegen nur einen Ausfallbeweis bekommen,
     # und den liefert ausschließlich das Entladen (Frage 1,
-    # tasks/speicher-selbstsperre-ladepfad.md): Eine Lade-Verweigerung ist
+    # Aufgabe „Speicher-Selbstsperre", Git 129880c): Eine Lade-Verweigerung ist
     # physikalisch mehrdeutig und verriegelt seit dem 07.09.2026 nicht mehr.
     # Deshalb ein eigenes Feld statt eines Filters auf das alte — der Latch
     # braucht eine Quelle, die niemand versehentlich um den Lade-Fall
     # erweitert.
     speicher_entladen_verweigert: list[str] = field(default_factory=list)
+    # Speicher-Zwangsladung hat ihr Ziel erreicht: Der Zwang war aktiv, und
+    # kein meldender Speicher steht mehr unter dem physischen Ladeende
+    # (`SPEICHER_VOLL_SOC`, nicht 100 % — ein Zendure Hyper meldet 100 %
+    # faktisch nie). Der Coordinator schaltet den Schalter daraufhin selbst aus
+    # — der Zwang ist eine Aktion mit Ende, kein Betriebsmodus. Bewusst nur mit
+    # meldenden Speichern (`known`): Ein abgemeldeter Speicher hat keinen SoC,
+    # sondern nur einen zuletzt bekannten, und dürfte den Zwang nicht beenden.
+    speicher_zwang_fertig: bool = False
     # Empfehlung der Saldo-Regelung über alle Speicher (None ohne Daten).
     regelung: ControlResult | None = None
     # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).

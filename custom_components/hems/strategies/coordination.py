@@ -43,8 +43,9 @@ from .types import PlanInput, PlanResult
 def akku_hat_vorrang(inp: PlanInput) -> bool:
     """Ob der Akku beim Laden Vorrang vor den modulierbaren Lasten hat.
 
-    Notstromreserve überstimmt die Einstellung: eine Reserve, die hinter dem
-    Auto ansteht, ist im Ausfall keine. Sonst battery_first immer; ev_first nie;
+    Notstromreserve und Zwangsladung überstimmen die Einstellung: eine Reserve,
+    die hinter dem Auto ansteht, ist im Ausfall keine, und ein Zwang, der auf
+    das Auto wartet, ist keiner. Sonst battery_first immer; ev_first nie;
     auto ebenfalls immer — wer keine Priorität setzt, will den Akku zuerst voll
     haben (entschieden am 23.08.2026).
 
@@ -57,7 +58,7 @@ def akku_hat_vorrang(inp: PlanInput) -> bool:
     nichts, unabhängig vom Vorrang. Vorrang heißt jetzt „zuerst bedient", nicht
     mehr „blockiert vorsorglich".
     """
-    if inp.emergency_reserve:
+    if inp.emergency_reserve or inp.battery_force:
         return True
     if inp.priority_mode == PRIORITY_EV_FIRST:
         return False
@@ -80,8 +81,8 @@ def _kapazitaet_in_frist_erschoepft(
     Ladeauftrag noch Aussicht, in der Quittungsfrist gemessen zu werden". Die
     zweite Frage ist an einem realen Akku im CV-Taper falsch gestellt — die
     Zuteilung ist dort eine Obergrenze, keine Nachfrage, und die Funktion wurde
-    im Zuge von tasks/speicher-selbstsperre-ladepfad.md (Subtask C) durch die
-    feste physische Schwelle `SPEICHER_VOLL_SOC` ersetzt (siehe
+    im Zuge der Aufgabe „Speicher-Selbstsperre" (Git 129880c, Subtask C)
+    durch die feste physische Schwelle `SPEICHER_VOLL_SOC` ersetzt (siehe
     `ladeauftrag_am_ladeschluss` in `actuation.py`).
 
     Diese erste Frage bleibt dagegen eine Kapazitätsfrage, keine

@@ -301,6 +301,11 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
             else None,
             "lade_pause": d.plan.lade_pause,
             "laden_statt_einspeisen": d.plan.regelung.laden_statt_einspeisen,
+            # Zwangsladung: Der Sollwert kommt dann nicht aus dem Saldo,
+            # sondern steht auf der vollen Ladeleistung — `soll_w` und
+            # `fehler_w` passen in dieser Lage bewusst nicht zusammen, und
+            # ohne dieses Attribut sähe das nach einem Reglerfehler aus.
+            "zwangsladung": d.plan.regelung.zwang_aktiv,
             # Steht hier ein Name, hat HEMS diesem Speicher Ladeleistung
             # zugeteilt und er zieht sie messbar nicht — sonst sähe die
             # Regelung so aus, als liefe sie.
@@ -316,6 +321,7 @@ SENSORS: tuple[HemsSensorDescription, ...] = (
         attr_fn=lambda d: {
             "ziel": d.ziel,
             "ev_zwang": d.ev_zwang,
+            "speicher_zwang": d.speicher_zwang,
             # Wallbox-/Lastregelung (HEMS stellt den Ladestrom selbst)
             "wallbox_ueberschuss_w": d.plan.ev_regelung.ueberschuss_w
             if d.plan.ev_regelung

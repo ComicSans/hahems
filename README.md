@@ -132,6 +132,32 @@ die **Reserve-SoC** der Speicher-Rolle. Wer eine Reserve will, die auch über di
 Nacht stehen bleibt, hebt sie dort an — sonst ist der Speicher am Morgen wieder
 so leer wie sonst auch.
 
+Und er lädt **nicht aus dem Netz**: Er sammelt Überschuss schneller ein, aber
+ohne Überschuss bleibt auch er still. Wer wirklich einkaufen will, nimmt den
+Schalter darunter.
+
+### Speicher-Zwangsladung (aus dem Netz)
+
+`switch.hems_speicher_zwangsladung` (Panel: **Steuerung**) lädt den Akku mit
+voller Leistung, unabhängig vom Netzsaldo — also notfalls aus dem Netz. Das ist
+der einzige Weg in HEMS, der Netzstrom in den Speicher schiebt: Die
+Saldo-Regelung lädt sonst ausschließlich gegen Einspeisung, und auch das
+Optimierungsziel *Vollladen* ändert daran nichts (es hebt nur das Ladeziel auf
+100 %, nicht die Quelle). Gedacht für Lagen, in denen der Ladestand mehr zählt
+als der Preis: angekündigter Ausfall, Kalibrierfahrt, ein Speicher, der vor dem
+Abend hochkommen muss.
+
+Solange er steht, gelten dieselben Aufhebungen wie bei der Notstromreserve
+(Ziel 100 %, sofort statt just in time, keine Mittagspause, Ladevorrang vor den
+Lasten).
+
+**Er schaltet sich selbst wieder aus**, sobald kein meldender Speicher mehr
+unter dem physischen Ladeende (99 %) steht — ein Zendure Hyper meldet 100 %
+faktisch nie, er hängt am Ende im CV-Taper. Der Zwang ist eine Aktion mit Ende, kein Betriebsmodus:
+Bliebe er stehen, kaufte HEMS jede Nacht den Eigenverbrauch aus dem Netz zurück,
+sobald der Ladestand wieder sinkt. Ein Ausfall beendet ihn dagegen nicht — melden
+sich alle Speicher ab, bleibt der Schalter stehen.
+
 ## HEMS-Panel
 
 Die Integration registriert einen eigenen Eintrag **HEMS** in der Seitenleiste
@@ -139,7 +165,7 @@ mit folgenden Ansichten:
 
 - **Übersicht** — Lastfluss- und Entladeplan-Karte
 - **Steuerung** — Betriebsmodus, Optimierungsziel, Regel-Aggressivität,
-  E-Auto-Zwangsladung und Notstromreserve
+  E-Auto-Zwangsladung, Notstromreserve und Speicher-Zwangsladung
 - **Heizung** — Außentemperatur, Status (Frostschutz, Sommersperre, Heizgrenze),
   Vorlauf-Sollwert gegen Ist-Wert und die eingestellte Heizkurve
 - **Diagnose** — Fehler, Warnungen und Überlappungen auf einen Blick
@@ -205,7 +231,7 @@ funktioniert unabhängig davon.
 - `sensor.hems_lastfluss` — W, alle Flusswerte als Attribute
 - `sensor.hems_entladeplan` — W, geplante Akku-Entladung ins Haus; Stunden-Slots, SoC-Prognose und PV-Kurve als Attribute
 - `sensor.hems_warmwasser_soll` — °C, mit Status (aus / legionellenschutz / pv_boost / basis)
-- `sensor.hems_speicher_regelung` — Modus entladen / laden / pausiert; Zuteilung je Speicher sowie Ladeplan (`lade_ziel_soc`, `lade_start`, `lade_deckel_soc`, `lade_pause`, `laden_statt_einspeisen`) als Attribute
+- `sensor.hems_speicher_regelung` — Modus entladen / laden / pausiert; Zuteilung je Speicher sowie Ladeplan (`lade_ziel_soc`, `lade_start`, `lade_deckel_soc`, `lade_pause`, `laden_statt_einspeisen`, `zwangsladung`) als Attribute
 
 **Steuerung und Diagnose**
 
@@ -213,6 +239,8 @@ funktioniert unabhängig davon.
 - `select.hems_optimierungsziel` — eigenverbrauch / nulleinspeisung / vollladen
 - `switch.hems_e_auto_zwangsladung`
 - `switch.hems_speicher_als_notstromreserve` — Speicher auf Ausfall-Bereitschaft
+- `switch.hems_speicher_zwangsladung` — Akku voll laden, notfalls aus dem Netz;
+  endet von selbst bei erreichtem Ladestand
 - `binary_sensor.hems_konfiguration` — Config-Check für den Auto-Modus
 
 ## Weiterlesen

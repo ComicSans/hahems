@@ -547,6 +547,9 @@
       },
       "notstromreserve": {
         "name": "Storage as backup reserve"
+      },
+      "speicher_zwang": {
+        "name": "Force battery charging"
       }
     }
   },

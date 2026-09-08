@@ -238,9 +238,15 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     # dauerhaft auf 100 %, und eine Notstromreserve ist nur voll eine Reserve.
     # ziel_voll setzt das Nacht-Ziel (ziel_kwh) auf die volle Kapazität; der
     # Ladedeckel weiter unten fährt dieses Ziel dann sofort statt just in time.
+    #
+    # Die Zwangsladung steht aus demselben Grund hier wie die Notstromreserve:
+    # Ein Zwang, der an einem Tagesdeckel von 40 % endet, wäre keiner — und die
+    # Selbstabschaltung (battery.py) hängt am Deckel, also muss der auf dem
+    # Ziel stehen, nicht auf der Rampe.
     ziel_voll = (
         result.morgen_knapp
         or inp.emergency_reserve
+        or inp.battery_force
         or inp.goal in (GOAL_ZERO_FEEDIN, GOAL_FULL_CHARGE)
     )
     rampe = None
@@ -455,9 +461,16 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
         inp.flags.surplus, inp.saldo_w, on=SURPLUS_ON_W, off=SURPLUS_OFF_W
     )
     surplus_now = res.flags.surplus
-    # Bei Zwangsladung nicht früh aussteigen: die "E-Auto laden (Zwang)"-
-    # Empfehlung soll auch ohne jeden Überschuss erscheinen.
-    if not inp.ev_force and not surplus_now and res.ueberschuss_rest_kwh <= 0:
+    # Bei Zwangsladung nicht früh aussteigen: die "E-Auto laden (Zwang)"- und
+    # die Akku-Zwangs-Empfehlung sollen auch ohne jeden Überschuss erscheinen —
+    # beide laufen notfalls aus dem Netz, und wer Strom kauft, soll das in der
+    # Empfehlung lesen können statt "kein Überschuss".
+    if (
+        not inp.ev_force
+        and not inp.battery_force
+        and not surplus_now
+        and res.ueberschuss_rest_kwh <= 0
+    ):
         if res.speicher_bedarf_kwh > 0:
             prio.append(
                 f"kein Überschuss; Akku fehlt {res.speicher_bedarf_kwh} kWh bis Ziel-SoC"
@@ -491,7 +504,9 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
     # erklärt: Notstromreserve schlägt alles, dann die Vollladung wegen morgen,
     # zuletzt der Hinweis, dass die Ladung bewusst noch wartet (just in time) —
     # ohne ihn läse sich ein pausierter Akku bei Sonne wie ein Fehler.
-    if inp.emergency_reserve:
+    if inp.battery_force:
+        grund = " – Zwang, notfalls aus dem Netz"
+    elif inp.emergency_reserve:
         grund = " – Notstromreserve"
     elif res.morgen_knapp:
         grund = " – morgen wenig Ertrag"
