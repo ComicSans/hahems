@@ -2,7 +2,7 @@
 seinen eigenen Entriegelungs-Beweis, ohne dem arbeitenden Speicher etwas
 wegzunehmen.
 
-Anlass ist der 07.09.2026 (siehe tasks/speicher-selbstsperre-ladepfad.md):
+Anlass ist der 07.09.2026 (siehe Aufgabe „Speicher-Selbstsperre", Git 129880c):
 L1 und L3 standen bei 99 %, verriegelt (Entscheidung Frage 1), L2 hing an
 seiner Ausgangsgrenze bei 1200 W. Der Regler wollte 2116 W ausregeln, bekam
 aber nur 1200 W zugeteilt — 916 W kamen aus dem Netz, obwohl L1 und L3 gesund
@@ -119,7 +119,7 @@ def test_zuteilung_bekannter_unveraendert_ueber_saldo_raster():
 
 
 def test_probe_beachtet_die_wallbox_klausel_in_soll_wunsch():
-    # Review Subtask B, Auflage 1 (tasks/speicher-selbstsperre-ladepfad.md):
+    # Review Subtask B, Auflage 1 (Aufgabe „Speicher-Selbstsperre", Git 129880c):
     # "kein Akkustrom ins Auto" (battery.py:302-335) deckelt sowohl `soll` als
     # auch `soll_wunsch` — sonst bekäme die Probe über den Rest genau die
     # Leistung, die der Regler dem bekannten Speicher wegen der Wallbox

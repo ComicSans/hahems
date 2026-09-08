@@ -276,7 +276,7 @@ def _storage_control(
     max_lad = sum(s.max_charge_w for s in known)
     soll = max(-max_lad, min(bat_ist + fehler * gain, max_ent))
     # Ungekappte Forderung für die Freischwimm-Probe weiter unten (Frage 2,
-    # tasks/speicher-selbstsperre-ladepfad.md): dieselbe Formel wie `soll`,
+    # Aufgabe „Speicher-Selbstsperre", Git 129880c): dieselbe Formel wie `soll`,
     # nur OHNE die max_ent-Kappung — sonst verschwindet genau der Rest, den
     # `known` nicht decken kann, den die Probe aber sehen muss. Läuft durch
     # dieselben Wallbox-Klauseln wie `soll` (unten), damit „kein Akkustrom
@@ -521,7 +521,7 @@ def _storage_control(
         ctrl.zuteilung = _verteile(
             anteile, soll, laden=False, parallel=res.flags.parallel_entladen
         )
-        # Freischwimm-Probe (Frage 2, tasks/speicher-selbstsperre-ladepfad.md):
+        # Freischwimm-Probe (Frage 2, Aufgabe „Speicher-Selbstsperre", Git 129880c):
         # `known` ist oben zuerst und unverändert zugeteilt worden — Invariante,
         # nicht verhandelbar. Bleibt danach ungedeckter Rest, bekommen die
         # verriegelten (`stale`) Speicher probeweise GENAU diesen Rest, mit

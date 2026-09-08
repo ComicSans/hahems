@@ -429,7 +429,7 @@ def test_lange_mindestlaufzeit_schaltet_den_vorrang_nicht_stumm_ab():
 
 def test_fertig_rechnet_gegen_max_charge_w_nicht_gegen_die_zuteilung():
     """Auflage aus dem Review von Subtask C (07.09.2026,
-    `tasks/speicher-selbstsperre-ladepfad.md`).
+    Aufgabe „Speicher-Selbstsperre", Git 129880c).
 
     `_kapazitaet_in_frist_erschoepft` zog am 19.08.2026 als
     `ladeauftrag_in_frist_erfuellbar` in `actuation.py` ein und wurde in

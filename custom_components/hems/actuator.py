@@ -470,7 +470,7 @@ class Actuator:
         physikalischen Gründen (voll, CV-Taper, zu kalt/warm, Zellausgleich,
         geräteseitiger Ziel-SoC) und kein Ausfallbeweis mehr; vierter Fund
         derselben Ursache am 07.09.2026, siehe
-        tasks/speicher-selbstsperre-ladepfad.md. Vor dieser Änderung schrieb
+        Aufgabe „Speicher-Selbstsperre", Git 129880c. Vor dieser Änderung schrieb
         auch der Lade-Zweig hierher, und ein voller ruhender Speicher
         verriegelte sich selbst über einen Ladeauftrag, den er physisch nicht
         annehmen konnte.
@@ -492,7 +492,7 @@ class Actuator:
         07.09.2026 rechnete die Ausnahme gegen den Deckel und über eine
         Frist-Formel, die den Akku als Verbraucher modellierte statt als
         BMS im Taper — vierter Fund derselben Ursache,
-        tasks/speicher-selbstsperre-ladepfad.md. Der Entlade-Zweig bleibt
+        Aufgabe „Speicher-Selbstsperre", Git 129880c. Der Entlade-Zweig bleibt
         unangetastet: Dort war der Befund vom 15.08.2026 echt (eingefrorene
         100 %, volle Anforderung, keine Leistung), und ein „voller" Speicher
         ist genau der, der entladen können muss.
@@ -543,7 +543,7 @@ class Actuator:
             plan.speicher_nicht_uebernommen.append(s.name)
         if not laden_soll and s.name not in plan.speicher_entladen_verweigert:
             # Nur der Entlade-Zweig füttert den Latch — siehe Docstring oben
-            # und Frage 1 in tasks/speicher-selbstsperre-ladepfad.md. Der
+            # und Frage 1 in Aufgabe „Speicher-Selbstsperre", Git 129880c. Der
             # Lade-Zweig schreibt dieses Feld nie.
             plan.speicher_entladen_verweigert.append(s.name)
 

@@ -642,7 +642,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         Ausfallbeweis. Sie bleibt eine Warnung
         (`plan.speicher_nicht_uebernommen`, Sensor und Log), nur der Rückweg
         zum Latch ist ihr entzogen. Vierter Fund derselben Ursache, siehe
-        tasks/speicher-selbstsperre-ladepfad.md.
+        Aufgabe „Speicher-Selbstsperre", Git 129880c.
 
         Schweigen allein genügt ausdrücklich nicht. `_abgemeldet` misst nur, dass
         keine Meldung mehr kommt, und das ist kein Ausfallbeweis: Eine

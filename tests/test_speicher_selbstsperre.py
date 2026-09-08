@@ -260,7 +260,7 @@ def test_ohne_leistungssensor_quittiert_der_actuator_nicht():
 # Zuteilung ist eine Obergrenze, keine Nachfrage. Die Ausnahme trug deshalb erst
 # ab einer Mindestzuteilung und scheiterte darunter an der nächsten Zahl: Am
 # 07.09.2026 (vierter Fund derselben Ursache,
-# tasks/speicher-selbstsperre-ladepfad.md) standen L1/L3 bei 99 % im Taper,
+# Aufgabe „Speicher-Selbstsperre", Git 129880c) standen L1/L3 bei 99 % im Taper,
 # der Nachmittags-Restüberschuss lag unter der Mindestzuteilung, die Ausnahme
 # griff nicht. Dazu rechnete sie gegen `plan.lade_deckel_soc`, nicht gegen das
 # physische Ladeende — bei einem Deckel von 80 % und Ist-SoC 79 hätte sie
@@ -301,8 +301,8 @@ def test_grenze_ist_physisch_nicht_der_deckel():
     Bei `ist_soc = 79` und einem Ladedeckel von 80 % ist der Akku dagegen NICHT
     im Taper: Eine Regel, die wieder gegen `plan.lade_deckel_soc` rechnet,
     würde hier fälschlich „fertig" sagen und einen echten Ausfall maskieren —
-    genau die Maskierung, die Frage 4 in
-    tasks/speicher-selbstsperre-ladepfad.md ausdrücklich verbietet.
+    genau die Maskierung, die Frage 4 der Aufgabe „Speicher-Selbstsperre"
+    (Git 129880c) ausdrücklich verbietet.
 
     `ladeauftrag_am_ladeschluss` nimmt gar keinen Deckel mehr entgegen — das
     ist keine Zufälligkeit der Beispielwerte, sondern die Eigenschaft, die

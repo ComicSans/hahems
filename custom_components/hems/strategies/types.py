@@ -134,7 +134,7 @@ class ControlResult:
     # aber Überschuss übrig, den auch die Lasten nicht nehmen. Dann wird über
     # den Deckel hinaus geladen — Einspeisen ist die schlechtere Verwendung.
     laden_statt_einspeisen: bool = False
-    # Freischwimm-Probe (Frage 2, tasks/speicher-selbstsperre-ladepfad.md):
+    # Freischwimm-Probe (Frage 2, Aufgabe „Speicher-Selbstsperre", Git 129880c):
     # Namen verriegelter (`stale`) Speicher, denen der Entlade-Zweig
     # probeweise den ungedeckten Rest zugeteilt hat — rest = soll_wunsch −
     # Σ Zuteilung(known), nur wenn rest ≥ CONTROL_MIN_SETPOINT_W. Kostet dem
@@ -396,7 +396,7 @@ def speicher_stumm_latch(
     gesundes Gerät aus vielen physikalischen Gründen (voll, CV-Taper, zu
     kalt/warm, Zellausgleich) — mehrdeutig, kein Auslöser mehr (vierter Fund
     derselben Ursache, 07.09.2026, siehe
-    tasks/speicher-selbstsperre-ladepfad.md). Entriegelt wird ausschließlich
+    Aufgabe „Speicher-Selbstsperre", Git 129880c). Entriegelt wird ausschließlich
     über eine frische Meldung (`schweigt` fällt auf False) — nie dadurch, dass
     HEMS aufhört zu befehlen. Die Begründung beider Richtungen steht bei
     `HemsCoordinator._stumm`; hier steht sie HA-frei, damit der Übergang über

@@ -106,7 +106,7 @@ def akku_ladereservierung(inp: PlanInput, res: PlanResult) -> float:
     Zeit aufnehmen können. Maßstab ist `_kapazitaet_in_frist_erschoepft` — bis
     07.09.2026 lebte dasselbe Prädikat als `ladeauftrag_in_frist_erfuellbar`
     in `actuation.py`; dort ist es inzwischen entfallen (Subtask C,
-    tasks/speicher-selbstsperre-ladepfad.md), weil es dort gegen eine
+    Aufgabe „Speicher-Selbstsperre", Git 129880c), weil es dort gegen eine
     Regler-Zuteilung rechnete, die ein volles BMS unterschreiten kann — eine
     Gesundheitsfrage, die die Rechnung nicht beantworten kann. Hier rechnet
     sie gegen `max_charge_w`, die technische Obergrenze, und bleibt eine

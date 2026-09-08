@@ -5,8 +5,8 @@ Erledigtes wird geloescht, nicht abgehakt - die Historie steht im Git-Log.
 
 ## P0
 
-- [Speicher-Selbstsperre ueber den Lade-Pfad](tasks/speicher-selbstsperre-ladepfad.md) - voller Akku wird beim Laden faelschlich als ausgefallen verriegelt und findet nicht zurueck; die Anlage regelt mit einem statt drei Speichern und zieht Netzstrom
-
 ## P1
 
 ## P2
+
+- [Das Lint-Gate existiert nur als Regel, nicht als Skript](tasks/lint-gate-ohne-skript.md) - `scripts/` enthaelt kein Lint-Skript, der Hook vermerkt jeden Commit als ungeprueft, und jeder Coder erfindet die Baseline-Pruefung neu
