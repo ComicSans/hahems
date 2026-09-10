@@ -11,6 +11,7 @@ Dieses Modul importiert nur die Standardbibliothek und die eigenen Konstanten.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .const import SPEICHER_VOLL_SOC
@@ -255,6 +256,79 @@ def speicher_folgt(gemessen_w: float | None, *, laden: bool) -> bool:
     Laden und Entladen mit demselben Ablauf, nur die Richtung wechselt.
     """
     return speicher_laedt(gemessen_w) if laden else speicher_entlaedt(gemessen_w)
+
+
+#: Regler, die eine Geräte-Integration selbst mitbringt und die auf dieselben
+#: Geräte schreiben wie HEMS. Je Eintrag: die Teilstücke, die alle im
+#: Entity-Namen vorkommen müssen, der Zustand „abgeschaltet", und der
+#: Klartextname für die Meldung.
+#:
+#: Der Zendure-Manager ist der Anlass (Nacht vom 09.09.2026, Aufgabe
+#: „Der Speicher stand zwanzig Minuten still"). Steht er nicht auf `off`,
+#: verteilt er die Leistung selbst — er ruft `device.charge()` bzw.
+#: `device.discharge()` und überschreibt damit genau die Property-Wege
+#: (`ac_mode`, `input_limit`, `output_limit`), über die HEMS stellt. Zwei
+#: Regler auf einem Gerät heben sich gegenseitig auf, und von außen sieht das
+#: aus wie ein Speicher, der Befehle ignoriert.
+#:
+#: „zendure" UND „operation" müssen beide vorkommen, „manager" bewusst nicht:
+#: Der Gerätename steht im Entity-Namen und ist frei wählbar, `operation` ist
+#: der feste Schlüssel der Manager-Entität. Keine der Geräte-Entitäten der
+#: Integration heißt so (`ac_mode`, `fuse_group`, `connection`, `ble_adapter`,
+#: `grid_reverse`, `grid_off_mode`, `auto_heat`) — die Paarung trifft also den
+#: Manager und sonst nichts.
+FREMDREGLER: tuple[tuple[tuple[str, ...], str, str], ...] = (
+    (("zendure", "operation"), "off", "Zendure-Manager"),
+)
+
+
+def fremdregler_aktiv(
+    selects: Iterable[tuple[str, str]],
+) -> list[tuple[str, str, str, str]]:
+    """Nicht abgeschaltete Fremdregler unter den übergebenen Select-Entitäten.
+
+    ``selects`` sind Paare aus Entity-ID und Zustand; zurück kommen Tupel aus
+    Klartextname, Entity-ID, Ist-Zustand und erwartetem Aus-Zustand.
+
+    Die Erkennung läuft über den Entity-Namen, weil die Entity-ID des
+    Fremdreglers instanzabhängig ist und HEMS ihn nicht konfiguriert bekommt —
+    er gehört ja nicht zu HEMS. Wer seine Manager-Entität umbenennt, fällt aus
+    der Heuristik; das ist der Preis dafür, dass sie ohne Konfiguration
+    auskommt.
+
+    ``unknown``/``unavailable`` zählen nicht als Befund. Ein Regler, dessen
+    Zustand gerade nicht feststeht, ist kein Nachweis für einen aktiven
+    Regler — dieselbe Zurückhaltung wie bei der Start-Wache des Config-Checks.
+    """
+    treffer: list[tuple[str, str, str, str]] = []
+    for entity_id, zustand in selects:
+        name_klein = entity_id.lower()
+        for teile, aus, name in FREMDREGLER:
+            if not all(teil in name_klein for teil in teile):
+                continue
+            if zustand in (aus, "unknown", "unavailable", "", None):
+                continue
+            treffer.append((name, entity_id, zustand, aus))
+    return treffer
+
+
+def speicher_stumm_schaden(*, laden: bool, zwang_aktiv: bool) -> str:
+    """Was ein stummer Speicher konkret kostet — der Nachsatz der Warnung.
+
+    Beim Entladen ist der Schaden immer derselbe: Der Bezug, den der Speicher
+    decken sollte, kommt aus dem Netz. Beim Laden hängt er am Anlass. Aus
+    Überschuss geladen, geht der Überschuss ins Netz — so stand es hier fest
+    verdrahtet, seit die Warnung existiert. Bei Zwangsladung gibt es aber gar
+    keinen Überschuss, der irgendwohin gehen könnte; dort bleibt schlicht der
+    Auftrag liegen. In der Nacht vom 09.09.2026 war der feste Satz deshalb
+    genau falsch herum zu lesen: 1,3 kW Netzbezug, und im Log stand, der
+    Überschuss gehe ins Netz.
+    """
+    if not laden:
+        return "der Bezug kommt aus dem Netz"
+    if zwang_aktiv:
+        return "die Zwangsladung bleibt liegen"
+    return "der Überschuss geht ins Netz"
 
 
 

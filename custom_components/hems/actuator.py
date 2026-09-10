@@ -28,6 +28,7 @@ from .actuation import (
     plan_ww_action,
     speicher_folgt,
     speicher_modus_option,
+    speicher_stumm_schaden,
 )
 from .models import DeviceRegistry, Storage
 from .strategies.types import PlanResult
@@ -109,6 +110,38 @@ _CALL_THROTTLE = timedelta(minutes=5)
 # Deadband-Durchgang der Regelung aber kurz auf 0 W führen kann — die Frist
 # soll den Dauerfall melden, nicht jede Lücke.
 SPEICHER_QUITTUNG_FRIST = timedelta(minutes=5)
+
+# Frist, nach der ein stummer Speicher nicht nur gemeldet, sondern NACHGETRETEN
+# wird: Richtungs-Select und Leistungs-Setpoint gehen dann erneut raus, ohne
+# Vergleich gegen den Entity-Zustand und ohne Drossel.
+#
+# Anlass ist die Nacht vom 09. auf den 10.09.2026, erste Nacht mit
+# Speicher-Zwangsladung. Um 23:04 stellte HEMS beide Hyper 2000 auf „laden"
+# (ac_mode → input, Input-Limit 1200 W), gemessen wurde 20 Minuten lang 0 W,
+# der Watchdog meldete pflichtgemäß — und niemand schrieb nach. Zwei Befunde
+# aus der Historie dieser 20 Minuten, beide gegen die bisherige Annahme
+# „einmal schreiben genügt, das Gerät hält den Wert":
+#
+# - Das Gerät verwirft den Befehl von selbst. Das Input-Limit fiel nach jedem
+#   Schreiben binnen ein bis sieben Minuten auf einen eigenen Wert zurück
+#   (1200 → 702, → 832, → 715, einmal → 0). Dieselbe Sorte Rückzug wie beim
+#   Ziel-SoC am 14.08.2026, für den `ohne_drossel` schon existiert.
+# - Der Entity-Zustand des Richtungs-Selects ist nach einem Reload der
+#   Zendure-Integration WERTLOS. `ZendureSelect("acMode", …, current=1)` legt
+#   die Entität ohne Restore mit „input" an — sie zeigt „input", bis das Gerät
+#   von sich aus acMode meldet, egal was das Gerät wirklich tut. Um 23:08:57
+#   meldete L2 „output" (HEMS korrigierte zwei Sekunden später), um 23:23:16
+#   erneut; L3 meldete nach dem Reload gar nichts mehr und stand für HEMS
+#   unverrückbar auf „input". Der Vergleich `self._state(mode_entity) != want`
+#   schweigt genau dann, wenn er sprechen müsste.
+#
+# 90 Sekunden, weil das Anlaufen eines Zendure-Speichers nach dem Schreiben
+# rund eine Minute braucht (gemessen in derselben Nacht: Limit um 23:23:52
+# gesetzt, erste Leistung um 23:24:53) — kürzer würde jeder gesunde Anlauf
+# nachgetreten. Die Melde-Frist bleibt bei fünf Minuten: Nachtreten ist
+# billig und still, eine Warnung ins Log ist es nicht.
+SPEICHER_NACHTRETEN_FRIST = timedelta(seconds=90)
+
 
 class Actuator:
     """Schaltet die Empfehlung im Auto-Modus auf die konfigurierten Geräte."""
@@ -262,22 +295,36 @@ class Actuator:
             return None
 
     async def _set_number(
-        self, entity: str | None, value: float, *, ohne_drossel: bool = False
+        self,
+        entity: str | None,
+        value: float,
+        *,
+        ohne_drossel: bool = False,
+        erzwingen: bool = False,
     ) -> None:
-        """number.set_value, dedupliziert gegen den Ist-Wert."""
+        """number.set_value, dedupliziert gegen den Ist-Wert.
+
+        ``erzwingen`` hebt beides auf — Deduplizierung und Drossel. Gedacht für
+        den Nachtritt an einen stummen Speicher (siehe
+        ``SPEICHER_NACHTRETEN_FRIST``): Dort ist der Ist-Wert der Echo-Wert des
+        Geräts, und „Echo == Befehl" beweist nur, dass das Gerät den Wert
+        gespeichert hat, nicht dass es ihn ausführt. Genau in dieser Lage
+        schwiege die Deduplizierung dauerhaft.
+        """
         if not entity:
             return
-        cur = self._state(entity)
-        try:
-            if cur is not None and abs(float(cur) - value) < _EPS:
-                return
-        except ValueError:
-            pass
+        if not erzwingen:
+            cur = self._state(entity)
+            try:
+                if cur is not None and abs(float(cur) - value) < _EPS:
+                    return
+            except ValueError:
+                pass
         await self._call(
             "number",
             "set_value",
             entity,
-            ohne_drossel=ohne_drossel,
+            ohne_drossel=ohne_drossel or erzwingen,
             value=round(value),
         )
 
@@ -407,7 +454,10 @@ class Actuator:
                     ),
                     ohne_drossel=True,
                 )
-            self._quittung_speicher(s, plan, laedt_soll, entlaedt_soll)
+            # Der Rückgabewert ist der Nachtritt: „kommandiert, folgt seit
+            # SPEICHER_NACHTRETEN_FRIST nicht". Er hebt unten den Vergleich
+            # gegen den Entity-Zustand und die Deduplizierung auf.
+            nachtreten = self._quittung_speicher(s, plan, laedt_soll, entlaedt_soll)
             if not s.charge_setpoint_entity and not s.discharge_setpoint_entity:
                 continue
             if ctrl.modus == "laden":
@@ -426,15 +476,29 @@ class Actuator:
                 entlade_option=s.mode_discharge_option,
                 invers=invers,
             )
-            if s.mode_entity and want and self._state(s.mode_entity) != want:
+            # Beim Nachtritt OHNE Zustandsvergleich schreiben: Der Zustand der
+            # Select-Entität ist das Echo des Geräts, und ein Echo, das nach
+            # einem Reload der Geräte-Integration nur der Anlage-Default ist,
+            # bildet die Richtung des Geräts nicht ab — die Begründung mit den
+            # Messwerten steht bei `SPEICHER_NACHTRETEN_FRIST`.
+            if (
+                s.mode_entity
+                and want
+                and (nachtreten or self._state(s.mode_entity) != want)
+            ):
                 await self._call(
                     s.mode_entity.split(".")[0],
                     "select_option",
                     s.mode_entity,
+                    ohne_drossel=nachtreten,
                     option=want,
                 )
-            await self._set_number(s.charge_setpoint_entity, charge_w)
-            await self._set_number(s.discharge_setpoint_entity, discharge_w)
+            await self._set_number(
+                s.charge_setpoint_entity, charge_w, erzwingen=nachtreten
+            )
+            await self._set_number(
+                s.discharge_setpoint_entity, discharge_w, erzwingen=nachtreten
+            )
 
     def _quittung_speicher(
         self,
@@ -442,8 +506,13 @@ class Actuator:
         plan: PlanResult,
         laden_soll: bool,
         entladen_soll: bool,
-    ) -> None:
+    ) -> bool:
         """Kommandierte Speicherleistung gegen die gemessene halten.
+
+        Gibt zurück, ob **nachgetreten** werden muss: kommandiert, gemessen
+        nichts, und das seit `SPEICHER_NACHTRETEN_FRIST`. Der Aufrufer schreibt
+        dann Richtungs-Select und Setpoint erneut, ohne Zustandsvergleich und
+        ohne Drossel.
 
         Der Gegenpart zu den Quittungen bei Warmwasser und Heizung, und aus
         demselben Anlass: Ein Gerät, das den Befehl entgegennimmt und nichts
@@ -479,9 +548,15 @@ class Actuator:
         ein neuer Befehl und startet die Frist neu, statt die Wartezeit der
         alten Richtung zu erben.
 
-        Gemeldet, nicht nachgetreten: Die Setpoints gehen ohnehin jeden Zyklus
-        erneut raus, und ein Speicher, der sie ignoriert, braucht kein
-        zusätzliches Schreiben, sondern jemanden, der hinschaut.
+        **Gemeldet UND nachgetreten** (seit 10.09.2026). Bis dahin stand hier
+        „die Setpoints gehen ohnehin jeden Zyklus erneut raus" — das war
+        falsch: `_set_number` dedupliziert gegen den Entity-Zustand, und der
+        ist bei einem stummen Speicher der Echo-Wert des Geräts. Steht dort
+        der kommandierte Wert, schreibt HEMS nie wieder, obwohl das Gerät
+        nichts tut. Genau diese Lage stand in der Nacht vom 09.09.2026 zwanzig
+        Minuten still; die Messwerte stehen bei `SPEICHER_NACHTRETEN_FRIST`.
+        Die Meldung bleibt trotzdem: Ein Gerät, das auch den Nachtritt
+        ignoriert, braucht weiterhin jemanden, der hinschaut.
 
         **Nur beim Laden gilt die Ausnahme für den fertigen Auftrag**
         (`ladeauftrag_am_ladeschluss`). Ein voller Akku, der keine Ladung mehr
@@ -500,15 +575,17 @@ class Actuator:
         if not (laden_soll or entladen_soll) or not s.power_entity:
             self._leistung_seit.pop(s.name, None)
             self._speicher_gemeldet.discard(s.name)
-            return
+            return False
         if laden_soll and ladeauftrag_am_ladeschluss(
             self._num_state(s.soc_entity)
         ):
             # Wie „kein Befehl": Uhr und Meldeflagge zurück, damit ein späterer
-            # echter Ladeauftrag mit voller Frist neu anläuft.
+            # echter Ladeauftrag mit voller Frist neu anläuft. Und kein
+            # Nachtritt: Ein Akku am Ladeschluss nimmt nichts mehr an, da ist
+            # Schweigen die richtige Antwort, kein Nachschreiben im Minutentakt.
             self._leistung_seit.pop(s.name, None)
             self._speicher_gemeldet.discard(s.name)
-            return
+            return False
         now = dt_util.utcnow()
         vorher = self._leistung_seit.get(s.name)
         if vorher is None or vorher[0] != laden_soll:
@@ -523,9 +600,11 @@ class Actuator:
             # Es fließt — die Uhr läuft erst wieder ab der nächsten Lücke.
             self._leistung_seit[s.name] = (laden_soll, now)
             self._speicher_gemeldet.discard(s.name)
-            return
-        if now - vorher[1] < SPEICHER_QUITTUNG_FRIST:
-            return
+            return False
+        stumm_seit = now - vorher[1]
+        nachtreten = stumm_seit >= SPEICHER_NACHTRETEN_FRIST
+        if stumm_seit < SPEICHER_QUITTUNG_FRIST:
+            return nachtreten
         if s.name not in self._speicher_gemeldet:
             self._speicher_gemeldet.add(s.name)
             _LOGGER.warning(
@@ -535,9 +614,11 @@ class Actuator:
                 "lädt" if laden_soll else "entlädt",
                 SPEICHER_QUITTUNG_FRIST.total_seconds() // 60,
                 gemessen,
-                "der Überschuss geht ins Netz"
-                if laden_soll
-                else "der Bezug kommt aus dem Netz",
+                speicher_stumm_schaden(
+                    laden=laden_soll,
+                    zwang_aktiv=plan.regelung is not None
+                    and plan.regelung.zwang_aktiv,
+                ),
             )
         if s.name not in plan.speicher_nicht_uebernommen:
             plan.speicher_nicht_uebernommen.append(s.name)
@@ -546,6 +627,7 @@ class Actuator:
             # und Frage 1 in Aufgabe „Speicher-Selbstsperre", Git 129880c. Der
             # Lade-Zweig schreibt dieses Feld nie.
             plan.speicher_entladen_verweigert.append(s.name)
+        return nachtreten
 
     # --- E-Auto (nur Zwangsladung) -----------------------------------------
 

@@ -3,8 +3,10 @@
 Läuft jeden Zyklus im Coordinator und speist den Diagnose-Sensor
 `binary_sensor.hems_konfiguration`. Beantwortet die Scharfschalt-Frage:
 Was schaltet der Auto-Modus, existieren alle Steuer-Entitäten, passen die
-Domains — und (heuristisch) schreibt eine aktive Automation auf dieselbe
-Steuer-Entität wie HEMS (Überlappung, die im Auto-Modus zum Kampf führt)?
+Domains — und (heuristisch) schreibt ein Zweiter auf dieselben Geräte wie HEMS
+(Überlappung, die im Auto-Modus zum Kampf führt)? Zwei Sorten Zweite: eine
+aktive Automation (`_scan_overlaps`) und der Regler, den die Geräte-Integration
+selbst mitbringt (`_scan_fremdregler`, „Zendure-Manager deaktiviert?").
 
 Reine Prüf-Logik ohne Seiteneffekte; der Automations-Scan ist defensiv
 gekapselt (fällt bei HA-interner Änderung auf "nicht verfügbar" zurück, statt
@@ -22,6 +24,7 @@ from dataclasses import dataclass, field
 
 from homeassistant.core import CoreState, HomeAssistant
 
+from .actuation import fremdregler_aktiv
 from .const import DEFAULT_SWITCHABLE_EXPECTED_W, MODES_ACTUATING
 from .models import DeviceRegistry
 
@@ -31,7 +34,7 @@ class ConfigCheck:
     errors: list[str] = field(default_factory=list)  # Auto-Modus würde scheitern
     warnings: list[str] = field(default_factory=list)  # funktioniert, aber Vorsicht
     info: list[str] = field(default_factory=list)  # rein informativ
-    overlaps: list[str] = field(default_factory=list)  # Entity ⇄ aktive Automation
+    overlaps: list[str] = field(default_factory=list)  # Entity ⇄ zweiter Schreiber
     actuated: list[str] = field(default_factory=list)  # Rollen, die auto schaltet
     scan_ok: bool = True  # Automations-Überlappungsprüfung lief
     # Falsch, solange Home Assistant hochfährt. Ohne dieses Feld läse sich ein
@@ -340,6 +343,8 @@ def check_config(
 
     # --- Überlappung: aktive Automationen auf HEMS-Steuer-Entities ----------
     _scan_overlaps(hass, control_entities, c)
+    # --- Überlappung: der eigene Regler der Geräte-Integration --------------
+    _scan_fremdregler(hass, reg, c)
     return c
 
 
@@ -380,4 +385,51 @@ def _scan_overlaps(
         c.warnings.append(
             "Überlappung: aktive Automationen schreiben auf HEMS-Steuer-Entities "
             "(siehe Attribut 'ueberlappung') — vor dem Auto-Modus deaktivieren"
+        )
+
+
+def _scan_fremdregler(
+    hass: HomeAssistant, reg: DeviceRegistry, c: ConfigCheck
+) -> None:
+    """Den mitgelieferten Regler der Geräte-Integration suchen — „Zendure
+    Manager deaktiviert?".
+
+    Die Automations-Überlappung oben fängt fremde Automationen ab. Der zweite
+    Schreiber auf denselben Geräten ist aber oft gar keine Automation, sondern
+    die Geräte-Integration selbst: Der Zendure-Manager verteilt in jedem Modus
+    außer `off` die Leistung eigenständig auf dieselben Speicher, die HEMS
+    stellt. Von außen ist das nicht von einem defekten Speicher zu
+    unterscheiden — der Auto-Modus schreibt, der Manager schreibt dagegen, und
+    im Sensor steht ein Gerät, das seine Zuteilung „ignoriert".
+
+    Nur relevant, wenn HEMS überhaupt einen Speicher stellt: Ohne Setpoint-
+    oder Richtungs-Entity beobachtet HEMS nur, und dann darf der Manager
+    regeln, so viel er will.
+
+    Die Meldung geht in `overlaps`, nicht in `errors`: Es ist dieselbe Sorte
+    Befund wie eine konkurrierende Automation (nur im Auto-Modus ein Problem),
+    und die Erkennung ist eine Namensheuristik — die soll den Auto-Modus nicht
+    hart blockieren. Warum sie über den Namen läuft, steht bei `FREMDREGLER`.
+    """
+    stellt_speicher = any(
+        s.charge_setpoint_entity or s.discharge_setpoint_entity or s.mode_entity
+        for s in reg.storages
+    )
+    if not stellt_speicher:
+        return
+    try:
+        selects = [(st.entity_id, st.state) for st in hass.states.async_all("select")]
+    except Exception:  # noqa: BLE001
+        c.scan_ok = False
+        return
+    treffer = fremdregler_aktiv(selects)
+    for name, entity, zustand, aus in treffer:
+        c.overlaps.append(
+            f"{entity} ⇄ {name} steht auf „{zustand}“, nicht „{aus}“"
+        )
+    if treffer:
+        c.warnings.append(
+            "Der Regler der Geräte-Integration ist aktiv (siehe Attribut "
+            "'ueberlappung') — er verteilt die Leistung selbst und überschreibt "
+            "die Sollwerte von HEMS; vor dem Auto-Modus abschalten"
         )

@@ -4,6 +4,32 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 2.10.0 — Der Config-Check fragt jetzt „Zendure-Manager deaktiviert?"
+
+Die Überlappungsprüfung kannte bisher einen Zweiten: eine aktive Automation,
+die auf eine HEMS-Steuer-Entität schreibt. Der Regler, den die
+Geräte-Integration selbst mitbringt, fiel durch — und genau der ist der
+häufigere Fall.
+
+**Neuer Befund unter `ueberlappung`.** Steht ein `select.*`, dessen Name
+„zendure" und „operation" enthält, auf etwas anderem als `off`, meldet
+`binary_sensor.hems_konfiguration` das als Überlappung. Der Zendure-Manager
+verteilt in jedem anderen Modus die Leistung eigenständig auf dieselben
+Speicher, die HEMS stellt, und überschreibt dabei `ac_mode`, `input_limit` und
+`output_limit`.
+
+**Anpassungsbedarf:** Wer den Manager bewusst in einem `smart`-Modus betreibt
+und HEMS zugleich Speicher stellen lässt, bekommt nach dem Update im Auto-Modus
+ein rotes `binary_sensor.hems_konfiguration` und `bereit_fuer_auto` auf falsch.
+Das ist kein neuer Fehler, sondern ein bisher unsichtbarer: Zwei Regler auf
+einem Gerät heben sich gegenseitig auf. Auflösung ist, den Manager auf `off` zu
+stellen — HEMS steuert die Geräte über deren eigene Entitäten. Wer HEMS die
+Speicher nur beobachten lässt (kein Setpoint, kein Richtungs-Select), sieht die
+Meldung nicht.
+
+Im HEMS-Panel heißt der Abschnitt deshalb jetzt „Überlappung: wer schreibt
+sonst noch" statt „Überlappung mit aktiven Automationen".
+
 ## 2.7.0 — Der Akku darf die Wallbox laden, wenn man das will
 
 HEMS lädt das E-Auto grundsätzlich nicht aus dem Hausakku (siehe 2.6.0,

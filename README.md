@@ -66,6 +66,12 @@ am Eingabefeld, im Options-Flow wie im HEMS-Panel.
 > bestehende Automationen auf denselben Entitäten müssen deaktiviert sein — das
 > Attribut `ueberlappung` zeigt sie an. Zwei Regler auf einem Gerät arbeiten
 > gegeneinander.
+>
+> Dasselbe gilt für den Regler, den die Geräte-Integration selbst mitbringt.
+> Beim Zendure-Manager (`select.*_operation`) heißt „abgeschaltet" der Modus
+> `off`; in jedem anderen Modus verteilt er die Leistung eigenständig auf
+> dieselben Speicher und überschreibt HEMS' Sollwerte. Auch das steht unter
+> `ueberlappung`.
 
 Der Actuator ist bewusst konservativ: Er schreibt nur auf konfigurierte
 Steuer-Entitäten, nur bei Wertänderung, nie auf eine fehlende Empfehlung, und

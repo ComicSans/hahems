@@ -587,7 +587,7 @@ class HemsPanel extends HTMLElement {
       <div class="panel-card">
         <h2>Fehler</h2>${list(a.fehler)}
         <h2>Warnungen</h2>${list(a.warnungen)}
-        <h2>Überlappung mit aktiven Automationen</h2>${list(a.ueberlappung)}
+        <h2>Überlappung: wer schreibt sonst noch</h2>${list(a.ueberlappung)}
         <h2>Hinweise</h2>${list(a.hinweise)}
       </div>`;
   }
