@@ -134,10 +134,17 @@ def switchable_control(inp: PlanInput, res: PlanResult) -> SwitchableResult | No
         )
 
     def _block_ueberschritten(s) -> bool:
+        # 0 heißt „keine Obergrenze", nicht „sofort": `aus_seit_s >= 0` wäre in
+        # jedem Zyklus wahr, und die Last liefe dauerhaft an Überschuss und
+        # Mindestpause vorbei. Und nie vor Ablauf der Mindestpause — sonst hebt
+        # ein kurzer `max_block` den Schutz auf, den `min_off` bieten soll.
+        # Gemessen wird die Aus-Zeit am Stück, nicht pro Tag.
+        if s.max_block_min <= 0:
+            return False
         return (
             not s.ist_an
             and s.aus_seit_s is not None
-            and s.aus_seit_s >= s.max_block_min * 60
+            and s.aus_seit_s >= max(s.max_block_min, s.min_off_min) * 60
         )
 
     # Wichtigste Priorität (kleinste Zahl) zuerst; bei Gleichstand laufende

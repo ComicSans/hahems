@@ -12,7 +12,6 @@ anbieten.
 from __future__ import annotations
 
 import pytest
-
 from hems.entity_domain import (
     BETRIEBSART_FREMD,
     BETRIEBSART_HEIZEN,

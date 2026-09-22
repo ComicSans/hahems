@@ -45,7 +45,11 @@ blind wegzunehmen. Wer nicht messen kann, soll nicht regeln.
 """
 from __future__ import annotations
 
-from ..entity_domain import BETRIEBSART_FREMD, BETRIEBSART_KUEHLEN
+from ..entity_domain import (
+    BETRIEBSART_FREMD,
+    BETRIEBSART_HEIZEN,
+    BETRIEBSART_KUEHLEN,
+)
 from .types import HeatingResult, HeatingSetpoint, PlanInput, PlanResult, _latch
 
 # Mindestabstand zwischen Ein- und Aus-Schwelle, den `_ordnung` notfalls
@@ -133,7 +137,7 @@ def heating_control(inp: PlanInput, res: PlanResult) -> HeatingResult | None:
             res.flags.heizen[h.id] = inp.flags.heizen.get(h.id, False)
             if frost:
                 sp.zwang_an = True
-                sp.betriebsart = "heizen"
+                sp.betriebsart = BETRIEBSART_HEIZEN
                 sp.status = "frostschutz"
                 sp.grund = (
                     f"Frostschutz ({t:.0f} °C, aus dem Kühlbetrieb)"

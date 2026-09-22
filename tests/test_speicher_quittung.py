@@ -64,6 +64,19 @@ def test_ohne_laden_bleibt_der_deckel_der_deckel():
     )
 
 
+def test_ohne_laden_nie_unter_den_eigenen_stand():
+    # Der Deckel gilt dem Gesamtspeicher; ein einzelner kann weit darüber
+    # stehen (90 % neben zwei bei 40 %). Ein Ziel-SoC unter dem eigenen Ist
+    # wäre keine Grenze mehr, sondern eine Aufforderung, sich leer zu machen.
+    # Abgerundet, damit das ganzzahlige Schreiben keine Ladung freigibt.
+    assert (
+        plan_soc_set(
+            deckel_soc=57.0, laden_statt_einspeisen=False, laedt=False, ist_soc=90.6
+        )
+        == 90.0
+    )
+
+
 def test_deckel_auf_hoehe_des_ist_soc_bekommt_kopfraum():
     # Der Fall vom 14.08.2026: Deckel 26.7 bei Ist-SoC 26.7. Ohne Kopfraum
     # schreibt HEMS dem Gerät „du bist fertig" und wundert sich über 0 W.

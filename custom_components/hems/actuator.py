@@ -15,6 +15,7 @@ Prinzipien (wie die Referenz-Automationen):
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta
 
@@ -23,6 +24,7 @@ from homeassistant.util import dt as dt_util
 
 from . import entity_domain
 from .actuation import (
+    drossel_verwirft,
     ladeauftrag_am_ladeschluss,
     plan_soc_set,
     plan_ww_action,
@@ -74,6 +76,15 @@ WARMWASSER_QUITTUNG_FRIST = timedelta(minutes=2)
 # den Verdichter das Gegenteil von Anti-Takt.
 HEIZUNG_QUITTUNG_FRIST = timedelta(minutes=2)
 
+# Ausnahme davon für den Frostschutz: Ein nicht übernommenes EIN unter Frost
+# wird in diesem Abstand erneut geschrieben. „Wer ignoriert, ignoriert wieder"
+# gilt für ein Gerät, das den Befehl annimmt und nicht ausführt — nicht für
+# einen Befehl, der nie ankam: Ein Modbus-Gateway, das für Sekunden ausfällt,
+# verschluckt ihn, und ohne Wiederholung bliebe der Frostschutz dann bis zum
+# nächsten Lagewechsel aus. Ein EIN an einer stehenden Anlage taktet keinen
+# Verdichter; 15 Minuten halten den Bus trotzdem ruhig.
+HEIZUNG_ZWANG_WIEDERHOLUNG = timedelta(minutes=15)
+
 # Throttle für identische, wiederholte Service-Aufrufe. Alle Aufrufer prüfen
 # den Ist-Zustand vor jedem Aufruf (siehe Klassendoc) — _call wird also nur
 # dann Zyklus für Zyklus mit denselben Parametern erneut erreicht, wenn das
@@ -89,7 +100,16 @@ HEIZUNG_QUITTUNG_FRIST = timedelta(minutes=2)
 # lädt nicht. Nachschreiben ist da kein Spam, sondern die einzige Art, den Wert
 # zu halten. Für Schaltbefehle (WW, Heizung) bleibt „einmal schreiben, dann
 # melden" richtig: Ein Verdichter braucht kein Nachtreten im Minutentakt.
+#
+# Als Wiederholung gilt nur ein Aufruf, der dem unmittelbar vorigen auf
+# dieselbe Entität gleicht — ein Wert, der nach einem anderen zurückkehrt, ist
+# ein neuer Befehl (siehe `drossel_verwirft`).
 _CALL_THROTTLE = timedelta(minutes=5)
+
+# Obergrenze, wie lange ein Hintergrund-Aufruf auf seinen Service wartet. Ein
+# Handler, der nie zurückkehrt (tote Cloud-Anbindung), hinterließe sonst je
+# Zyklus einen hängenden Task; nach Ablauf gilt der Aufruf als fehlgeschlagen.
+_CALL_TIMEOUT_S = 60
 
 # Frist, nach der eine kommandierte Speicherleistung gemessen sein muss —
 # dieselbe Klasse wie WARMWASSER_QUITTUNG_FRIST und HEIZUNG_QUITTUNG_FRIST.
@@ -148,7 +168,13 @@ class Actuator:
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
-        self._last_call: dict[tuple, object] = {}
+        # (Domain, Service, Entität) → (Daten, Zeitpunkt) des letzten Aufrufs.
+        # Ein Eintrag je Ziel, nicht je Wert: Die Drossel vergleicht nur gegen
+        # den unmittelbar vorigen Aufruf (siehe `drossel_verwirft`).
+        self._last_call: dict[tuple, tuple[tuple, datetime]] = {}
+        # Ziele, deren letzter Aufruf fehlgeschlagen ist — die Warnung gehört
+        # einmal je Störung ins Log, nicht in jeden Zyklus.
+        self._call_gestoert: set[tuple] = set()
         # Steuer-Entity → (zuletzt geschriebene Warmwasser-Freigabe, Zeitpunkt).
         # Nur was tatsächlich rausging, siehe _apply_ww. Nach einem Neustart
         # leer: dann verhält sich die Aktuierung wie vor dieser Buchführung.
@@ -188,11 +214,19 @@ class Actuator:
         """Akku-Setpoints einmalig auf 0/0 (passiv) setzen — beim Verlassen des
         Auto-Modus, damit der Speicher nicht mit der zuletzt kommandierten Rate
         blind weiterläuft. WW/EV bleiben unangetastet (ein Sollwert ist
-        ungefährlich); ihre letzte Einstellung übernimmt der Nutzer."""
+        ungefährlich); ihre letzte Einstellung übernimmt der Nutzer.
+
+        Ohne Drossel: Die Freigabe läuft genau einmal, ein verworfener Aufruf
+        bekäme keinen zweiten Versuch — der Speicher liefe dann mit der letzten
+        Rate weiter, also genau das, wogegen diese Methode existiert."""
         for s in reg.storages:
             try:
-                await self._set_number(s.charge_setpoint_entity, 0.0)
-                await self._set_number(s.discharge_setpoint_entity, 0.0)
+                await self._set_number(
+                    s.charge_setpoint_entity, 0.0, ohne_drossel=True
+                )
+                await self._set_number(
+                    s.discharge_setpoint_entity, 0.0, ohne_drossel=True
+                )
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning(
                     "HEMS-Actuator: Akku-Freigabe %s fehlgeschlagen: %s", s.name, err
@@ -236,16 +270,58 @@ class Actuator:
         wieder verwirft — dort ist Nachschreiben die Aufgabe, nicht der Fehler
         (siehe Kommentar bei ``_CALL_THROTTLE``).
         """
-        key = (domain, service, entity, tuple(sorted(data.items())))
+        key = (domain, service, entity)
+        daten = tuple(sorted(data.items()))
         now = dt_util.utcnow()
-        last = self._last_call.get(key)
-        if not ohne_drossel and last is not None and now - last < _CALL_THROTTLE:
+        if not ohne_drossel and drossel_verwirft(
+            self._last_call.get(key), daten, now, _CALL_THROTTLE
+        ):
             return False
-        self._last_call[key] = now
-        await self.hass.services.async_call(
-            domain, service, {"entity_id": entity, **data}, blocking=False
+        self._last_call[key] = (daten, now)
+        # Nicht blockierend — ein hängendes Gerät soll den Zyklus nicht
+        # aufhalten —, aber auch nicht blind: Mit `blocking=False` verschluckte
+        # Home Assistant jeden Ausführungsfehler, und `_guard` sah nie einen.
+        # Der Hintergrund-Task wartet deshalb selbst auf das Ergebnis.
+        self.hass.async_create_task(
+            self._ausfuehren(key, daten, {"entity_id": entity, **data}),
+            f"hems_{domain}_{service}_{entity}",
         )
         return True
+
+    async def _ausfuehren(self, key: tuple, daten: tuple, service_data: dict) -> None:
+        """Service-Aufruf im Hintergrund ausführen und Fehler sichtbar machen.
+
+        Ein Fehlschlag gibt die Drossel für dieses Ziel frei: Was nie ankam,
+        ist keine Wiederholung, und der nächste Zyklus soll es erneut
+        versuchen dürfen.
+        """
+        domain, service, entity = key
+        try:
+            async with asyncio.timeout(_CALL_TIMEOUT_S):
+                await self.hass.services.async_call(
+                    domain, service, service_data, blocking=True
+                )
+        except Exception as err:  # noqa: BLE001 – ein Gerät reißt nie die andern
+            if self._last_call.get(key, (None,))[0] == daten:
+                self._last_call.pop(key, None)
+            if key not in self._call_gestoert:
+                self._call_gestoert.add(key)
+                _LOGGER.warning(
+                    "HEMS-Actuator: %s.%s auf %s fehlgeschlagen: %s",
+                    domain,
+                    service,
+                    entity,
+                    err,
+                )
+            return
+        if key in self._call_gestoert:
+            self._call_gestoert.discard(key)
+            _LOGGER.info(
+                "HEMS-Actuator: %s.%s auf %s wieder erfolgreich",
+                domain,
+                service,
+                entity,
+            )
 
     async def _turn(
         self,
@@ -696,7 +772,15 @@ class Actuator:
 
     # --- Heizung ------------------------------------------------------------
 
-    async def _turn_heizung(self, h, on: bool, art: str, plan: PlanResult) -> None:
+    async def _turn_heizung(
+        self,
+        h,
+        on: bool,
+        art: str,
+        plan: PlanResult,
+        *,
+        frostschutz: bool = False,
+    ) -> None:
         """Wärmeerzeuger schalten — mit Übernahme-Kontrolle.
 
         Wie `_turn`, plus die Buchführung darüber, ob der Befehl gewirkt hat.
@@ -707,6 +791,10 @@ class Actuator:
         Zeigt die Anlage die geschriebene Lage nach `HEIZUNG_QUITTUNG_FRIST`
         immer noch nicht, wird das gemeldet und **nicht** nachgeschrieben. Wer
         einen Befehl entgegennimmt und ignoriert, tut es beim zweiten Mal auch.
+
+        Einzige Ausnahme ist das EIN des Frostschutzes (`frostschutz`): Es geht
+        im Abstand `HEIZUNG_ZWANG_WIEDERHOLUNG` erneut raus, weil ein verlorener
+        Befehl hier ein Haus einfrieren lässt — Begründung bei der Konstante.
         """
         ent = h.switch_entity
         ist = self._state(ent)
@@ -728,18 +816,24 @@ class Actuator:
         if letzt is not None and letzt[0] == on:
             if now - letzt[1] < HEIZUNG_QUITTUNG_FRIST:
                 return
+            wiederholen = frostschutz and on
             if ent not in self._heizung_gemeldet:
                 self._heizung_gemeldet.add(ent)
                 _LOGGER.warning(
                     "HEMS-Actuator: %s hat '%s' nicht übernommen (zeigt weiter "
-                    "'%s') — HEMS schreibt nicht erneut",
+                    "'%s') — HEMS schreibt %s",
                     ent,
                     "an" if on else "aus",
                     ist,
+                    f"alle {HEIZUNG_ZWANG_WIEDERHOLUNG.total_seconds() // 60:.0f} "
+                    "min erneut (Frostschutz)"
+                    if wiederholen
+                    else "nicht erneut",
                 )
             if h.name not in plan.heizung_nicht_uebernommen:
                 plan.heizung_nicht_uebernommen.append(h.name)
-            return
+            if not wiederholen or now - letzt[1] < HEIZUNG_ZWANG_WIEDERHOLUNG:
+                return
 
         domain, service, data = entity_domain.schalt_service(
             ent, on, h.mode_heat_option, h.mode_cool_option, art
@@ -781,7 +875,9 @@ class Actuator:
                 if not h.switch_entity:
                     continue
                 if sp.zwang_an:
-                    await self._turn_heizung(h, True, sp.betriebsart, plan)
+                    await self._turn_heizung(
+                        h, True, sp.betriebsart, plan, frostschutz=True
+                    )
                 elif sp.nicht_abschalten:
                     continue
                 elif (lage := empfehlung.get(h.id)) is not None:

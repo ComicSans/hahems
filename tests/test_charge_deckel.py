@@ -327,7 +327,7 @@ def test_notstromreserve_hat_vorrang_vor_der_wallbox():
 
 
 def test_notstromreserve_laedt_mit_voller_schrittweite():
-    kw = dict(now=lokal(13), socs=[60, 60, 60], saldo_w=-1500.0)
+    kw = {"now": lokal(13), "socs": [60, 60, 60], "saldo_w": -1500.0}
     normal = P.compute_plan(plan_input(**kw))
     notstrom = P.compute_plan(plan_input(emergency_reserve=True, **kw))
     assert sum(zuteilung(notstrom).values()) > sum(zuteilung(normal).values())

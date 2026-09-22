@@ -119,7 +119,7 @@ def test_eingefrorene_leistung_geht_nicht_in_den_regler():
     # addiert. Der stehengebliebene Wert eines abgemeldeten Speichers ist kein
     # Messwert mehr; ginge er ein, rechnete der Regler mit einer Leistung, die
     # niemand liefert.
-    gemeinsam = dict(saldo_w=1100)
+    gemeinsam = {"saldo_w": 1100}
     mit_geist = P.compute_plan(
         plan_input(
             storage_states=[
@@ -138,13 +138,13 @@ def test_eingefrorene_leistung_geht_nicht_in_den_regler():
     assert mit_geist.regelung.soll_w == ohne_geist.regelung.soll_w
 
 
-def test_alle_speicher_abgemeldet_heisst_passiv_statt_stumm():
+def test_alle_speicher_abgemeldet_ohne_bezug_heisst_passiv_statt_stumm():
     # Bei drei Geräten an einem MQTT-Pfad fallen alle gemeinsam aus. „Keine
     # Empfehlung" wäre hier das Schlechteste: Der Actuator schriebe dann gar
     # nichts, und der zuletzt kommandierte Sollwert liefe blind weiter.
     r = P.compute_plan(
         plan_input(
-            saldo_w=1100,
+            saldo_w=-1100,
             storage_states=[
                 storage("L1", 100.0, stale=True),
                 storage("L2", 88.0, stale=True),
@@ -154,7 +154,32 @@ def test_alle_speicher_abgemeldet_heisst_passiv_statt_stumm():
     assert r.regelung is not None
     assert r.regelung.modus == "pausiert"
     assert set(zuteilung(r).values()) == {0}
+    assert r.regelung.probe_namen == []
     # Und der Grund bleibt sichtbar — Sensor und Log lesen beide aus `regelung`.
+    assert r.regelung.abgemeldet_namen == ["L1", "L2"]
+
+
+def test_alle_speicher_abgemeldet_mit_bezug_bekommen_die_probe():
+    # Die Lücke bis 22.09.2026: Die Freischwimm-Probe lebte nur im
+    # Entlade-Zweig, den ohne einen einzigen meldenden Speicher nichts
+    # erreicht. Ein ruhender Speicher an einer push-basierten Integration
+    # meldet ohne Befehl aber nie wieder — die Sperre hielt sich bis zum
+    # Neustart, während das Haus aus dem Netz zog. Jetzt bekommt einer von
+    # ihnen den Bezug zur Probe, die übrigen bleiben bei 0 W.
+    r = P.compute_plan(
+        plan_input(
+            saldo_w=1100,
+            storage_states=[
+                storage("L1", 100.0, stale=True),
+                storage("L2", 88.0, stale=True),
+            ],
+        )
+    )
+    z = zuteilung(r)
+    assert r.regelung.modus == "entladen"
+    assert r.regelung.probe_namen == ["L1"]
+    assert z["L1"] > 0
+    assert z["L2"] == 0
     assert r.regelung.abgemeldet_namen == ["L1", "L2"]
 
 

@@ -20,6 +20,7 @@ Meldung an den Nutzer. Wer das ein paarmal sieht, liest den Sensor nicht mehr.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from homeassistant.core import CoreState, HomeAssistant
@@ -27,6 +28,8 @@ from homeassistant.core import CoreState, HomeAssistant
 from .actuation import fremdregler_aktiv
 from .const import DEFAULT_SWITCHABLE_EXPECTED_W, MODES_ACTUATING
 from .models import DeviceRegistry
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -373,7 +376,8 @@ def _scan_overlaps(
             if not getattr(auto, "is_on", False):
                 continue
             refs = set(getattr(auto, "referenced_entities", set()) or set())
-        except Exception:  # noqa: BLE001
+        except Exception as err:  # noqa: BLE001 – eine kaputte Automation reißt den Check nicht
+            _LOGGER.debug("Automation %s nicht lesbar: %s", auto, err)
             continue
         hit = refs & control_entities
         if not hit:

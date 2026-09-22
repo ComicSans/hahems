@@ -11,8 +11,20 @@ from datetime import datetime, timedelta
 from .types import PlanInput
 
 
+def _lokal(inp: PlanInput, t: datetime) -> datetime:
+    """t als lokale Wanduhrzeit — das Profil ist nach Ortszeit gelernt.
+
+    Bis 22.09.2026 galten Stunde und Tagtyp in UTC. Der Haushalt lebt aber
+    nach der Wanduhr: In UTC begann das Wochenende in Deutschland ein bis zwei
+    Stunden zu früh, und nach jeder Zeitumstellung rutschte das ganze Profil
+    um eine Stunde gegen die Gewohnheiten, die es beschreibt. Der Offset kommt
+    wie bei den Ladefenstern vom Coordinator (`utc_offset_h`).
+    """
+    return t + timedelta(hours=inp.utc_offset_h)
+
+
 def _daytype(t: datetime) -> int:
-    """0 = Werktag (Mo–Fr), 1 = Wochenende (Sa/So). UTC, wie das Profil."""
+    """0 = Werktag (Mo–Fr), 1 = Wochenende (Sa/So) — von einer lokalen Zeit."""
     return 1 if t.weekday() >= 5 else 0
 
 
@@ -21,10 +33,11 @@ def _expected_load_w(inp: PlanInput, t: datetime) -> float:
     sonst gleiche Stunde im anderen Tagtyp, sonst Nachtlast."""
     prof = inp.load_profile_w
     if prof:
-        key = (_daytype(t), t.hour)
+        lokal = _lokal(inp, t)
+        key = (_daytype(lokal), lokal.hour)
         if key in prof:
             return prof[key]
-        same_hour = [w for (_d, h), w in prof.items() if h == t.hour]
+        same_hour = [w for (_d, h), w in prof.items() if h == lokal.hour]
         if same_hour:
             return sum(same_hour) / len(same_hour)
     return inp.night_load_w
@@ -35,10 +48,8 @@ def _profile_covers(inp: PlanInput, start: datetime, end: datetime) -> bool:
     prof = inp.load_profile_w
     if not prof:
         return False
-    return all(
-        (0, t.hour) in prof or (1, t.hour) in prof
-        for t, _nxt in _hour_slots(start, end)
-    )
+    stunden = (_lokal(inp, t).hour for t, _nxt in _hour_slots(start, end))
+    return all((0, h) in prof or (1, h) in prof for h in stunden)
 
 
 def _hour_slots(start: datetime, end: datetime) -> list[tuple[datetime, datetime]]:

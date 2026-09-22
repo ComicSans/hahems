@@ -242,3 +242,23 @@ def test_probe_sichtbar_im_sensor():
     # selbst (Entscheidung Frage 2, „Sichtbarkeit").
     quelle = (BASIS / "sensor.py").read_text(encoding="utf-8")
     assert '"probe"' in quelle
+
+
+def test_probe_bei_allen_abgemeldeten_beachtet_die_wallbox_klausel():
+    # Sind alle Speicher abgemeldet, ist max_ent 0 und damit `soll` 0 — die
+    # Klausel „kein Akkustrom ins Auto" hing bis 22.09.2026 an `soll > 0` und
+    # griffe dort nie. Hier deckt der Bezug (1409 W) genau die Wallbox
+    # (1500 W): Ohne Wallbox bliebe kein Bedarf, also auch keine Probe.
+    r = P.compute_plan(
+        plan_input(
+            saldo_w=1409,
+            wallbox_w=1500.0,
+            battery_to_ev=False,
+            storage_states=[
+                storage("L1", 99.0, stale=True),
+                storage("L2", 88.0, stale=True),
+            ],
+        )
+    )
+    assert r.regelung.probe_namen == []
+    assert set(_zuteilung(r).values()) == {0}

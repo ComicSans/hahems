@@ -138,3 +138,27 @@ def test_delta_neue_last_reserviert_bereits_laufende_nicht():
         [switchable("Alt", erwartet_w=1500, ist_an=True, an_seit_s=99999, power_w=1500)],
         socs=[60, 60, 60], saldo_w=-4000)
     assert abs(laufend.schaltbare.delta_w) < 100
+
+
+def test_max_block_null_heisst_keine_obergrenze():
+    # 0 war bis 22.09.2026 „sofort": `aus_seit_s >= 0` ist in jedem Zyklus
+    # wahr, die Last lief dauerhaft an Überschuss und Mindestpause vorbei.
+    sw = switchable("Pumpe", erwartet_w=1500, ist_an=False, aus_seit_s=8000, max_block_min=0)
+    r = _plan([sw], socs=[60, 60, 60], saldo_w=2000)
+    assert _an(r, "Pumpe") is False
+
+
+def test_max_block_wartet_die_mindestpause_ab():
+    # Ein max_block unter der Mindestpause darf deren Schutz nicht aufheben.
+    sw = switchable(
+        "Pumpe", erwartet_w=1500, ist_an=False, aus_seit_s=600,
+        max_block_min=5, min_off_min=20,
+    )
+    r = _plan([sw], socs=[60, 60, 60], saldo_w=2000)
+    assert _an(r, "Pumpe") is False
+    sw = switchable(
+        "Pumpe", erwartet_w=1500, ist_an=False, aus_seit_s=1200,
+        max_block_min=5, min_off_min=20,
+    )
+    r = _plan([sw], socs=[60, 60, 60], saldo_w=2000)
+    assert _an(r, "Pumpe") is True

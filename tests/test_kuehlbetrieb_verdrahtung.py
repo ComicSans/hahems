@@ -142,23 +142,50 @@ def test_heizung_wird_mit_ihrer_betriebsart_geschaltet():
 def test_nicht_uebernommene_lage_wird_gemeldet_und_nicht_nachgeschrieben():
     """Am 04.08.2026 nahm die Anlage `set_hvac_mode: off` entgegen und kühlte
     weiter. Nachtreten hilft dort nicht und ist für den Verdichter das Gegenteil
-    von Anti-Takt."""
+    von Anti-Takt.
+
+    Einzige Ausnahme seit 22.09.2026: das EIN des Frostschutzes, im Abstand
+    `HEIZUNG_ZWANG_WIEDERHOLUNG` — ein verlorener Befehl ließe dort das Haus
+    einfrieren."""
     fn = _funktion("actuator.py", "_turn_heizung")
     namen = _namen(fn)
     assert "HEIZUNG_QUITTUNG_FRIST" in namen
     assert "heizung_nicht_uebernommen" in namen
     assert _ruft(fn, "warning")
 
-    # Nach der Meldung darf kein Schreibvorgang mehr folgen: der Zweig, der
-    # `plan.heizung_nicht_uebernommen` befüllt, endet mit `return`.
+    # Nach der Meldung folgt nur dann ein Schreibvorgang, wenn der Frostschutz
+    # wiederholen darf: Der Zweig, der `plan.heizung_nicht_uebernommen`
+    # befüllt, endet mit einem `return`, dessen Bedingung genau das prüft.
     for zweig in ast.walk(fn):
         if not isinstance(zweig, ast.If):
             continue
         if "heizung_nicht_uebernommen" not in _namen(zweig):
             continue
-        assert any(isinstance(k, ast.Return) for k in zweig.body)
+        letzte = zweig.body[-1]
+        assert isinstance(letzte, ast.If)
+        assert isinstance(letzte.body[-1], ast.Return)
+        bedingung = _namen(letzte.test)
+        assert "wiederholen" in bedingung
+        assert "HEIZUNG_ZWANG_WIEDERHOLUNG" in bedingung
         return
     raise AssertionError("kein Zweig gefunden, der die Nicht-Übernahme bucht")
+
+
+def test_nur_der_frostschutz_wiederholt():
+    """Die Wiederholung hängt am Frostschutz-EIN, nicht an jeder Lage."""
+    fn = _funktion("actuator.py", "_turn_heizung")
+    assert "frostschutz and on" in ast.unparse(fn)
+    aufrufe = [
+        k
+        for k in ast.walk(_funktion("actuator.py", "_apply_heating"))
+        if isinstance(k, ast.Call)
+        and isinstance(k.func, ast.Attribute)
+        and k.func.attr == "_turn_heizung"
+    ]
+    mit_frost = [
+        a for a in aufrufe if any(kw.arg == "frostschutz" for kw in a.keywords)
+    ]
+    assert len(mit_frost) == 1
 
 
 def test_buchung_haengt_am_rueckgabewert_von_call():

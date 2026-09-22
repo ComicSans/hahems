@@ -7,7 +7,7 @@
  *
  * Dependency-frei (kein Lit, kein Build). Datenquelle ist der Sensor
  * sensor.hems_entladeplan mit den Attributen:
- *   slots           [{von, bis, watt, soc_erwartet}]  geplante Entladung (Nacht)
+ *   slots           [{von, bis, watt}]                geplante Entladung (Nacht)
  *   pv_kurve        [{von, bis, watt}]                geschätzte PV-Leistung
  *   warmwasser_sperren      [{von, bis}]                      WW-Sperrzeiten
  *   warmwasser_legionellen  [{von, bis}]                      Legionellenschutz-Fenster
@@ -34,6 +34,13 @@ const H = 300;
 // bottom trägt Stundenachse und Warmwasser-Band
 const PAD = { left: 40, right: 34, top: 16, bottom: 52 };
 const WARMWASSER_BAND = { y: H - 26, h: 11 };
+
+// Minimaler HTML-Escaper für Strings aus der Kartenkonfiguration.
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
+}
 
 const COLOR_PV = "#ff9800";
 const COLOR_PLAN = "#4caf50";
@@ -243,9 +250,9 @@ class HemsPlanCard extends HTMLElement {
 
     if (!state) {
       this.shadowRoot.innerHTML = `
-        <ha-card header="${this._config.title ?? "Entladeplan"}">
+        <ha-card header="${esc(this._config.title ?? "Entladeplan")}">
           <div style="padding:16px;color:var(--secondary-text-color)">
-            Entität <code>${this._config.entity}</code> nicht gefunden.
+            Entität <code>${esc(this._config.entity)}</code> nicht gefunden.
           </div>
         </ha-card>`;
       return;
@@ -256,7 +263,6 @@ class HemsPlanCard extends HTMLElement {
       von: new Date(s.von),
       bis: new Date(s.bis),
       watt: s.watt,
-      soc: s.soc_erwartet,
     }));
     const pv = (a.pv_kurve || []).map((s) => ({
       von: new Date(s.von),
@@ -267,7 +273,7 @@ class HemsPlanCard extends HTMLElement {
     const all = [...plan, ...pv];
     if (!all.length) {
       this.shadowRoot.innerHTML = `
-        <ha-card header="${this._config.title ?? "Entladeplan"}">
+        <ha-card header="${esc(this._config.title ?? "Entladeplan")}">
           <div style="padding:16px;color:var(--secondary-text-color)">
             Noch keine Plandaten (Speicher-SoC oder Prognose fehlt).
           </div>
@@ -564,7 +570,7 @@ class HemsPlanCard extends HTMLElement {
         .soc-swatch.solid { border-top-style: solid; }
         .swatch.faded { opacity: 0.55; }
       </style>
-      <ha-card ${this._config.title ? `header="${this._config.title}"` : `header="Entladeplan"`}>
+      <ha-card header="${esc(this._config.title || "Entladeplan")}">
         <div class="legend">
           ${
             hasHistory

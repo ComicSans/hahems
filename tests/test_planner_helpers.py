@@ -1,16 +1,9 @@
 """Tests für die Ein-/Ausgabe-Aufbereitung in planner.py (aus coordinator.py
-verschoben, um sie ohne laufendes Home Assistant testbar zu machen — siehe
-docs/architektur-review.md).
+verschoben, um sie ohne laufendes Home Assistant testbar zu machen).
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 from hems import planner as P
-
-UTC = timezone.utc
-# UTC+2 (z. B. deutsche Sommerzeit), fixer Offset genügt für den Stundenversatz.
-TZ_PLUS2 = timezone(timedelta(hours=2))
 
 
 def test_parse_weekday_gueltig():
@@ -28,19 +21,19 @@ def test_parse_weekday_ungueltig():
 
 
 def test_profile_rows_leer_ohne_profil():
-    assert P.profile_rows(None, datetime(2026, 7, 22, 12, tzinfo=UTC), UTC) == []
-    assert P.profile_rows({}, datetime(2026, 7, 22, 12, tzinfo=UTC), UTC) == []
+    assert P.profile_rows(None) == []
+    assert P.profile_rows({}) == []
 
 
-def test_profile_rows_rechnet_utc_stunde_in_lokale_stunde_um():
+def test_profile_rows_uebernimmt_die_lokale_stunde_unveraendert():
+    # Das Profil ist seit 22.09.2026 nach Ortszeit gelernt — keine Umrechnung
+    # mehr in der Anzeige.
     profile = {(0, 22): 300.0, (1, 22): 250.0}
-    rows = P.profile_rows(
-        profile, datetime(2026, 7, 22, 12, tzinfo=UTC), TZ_PLUS2
-    )
-    assert rows == [{"stunde": 0, "werktag_w": 300.0, "wochenende_w": 250.0}]
+    assert P.profile_rows(profile) == [
+        {"stunde": 22, "werktag_w": 300.0, "wochenende_w": 250.0}
+    ]
 
 
-def test_profile_rows_sortiert_nach_lokaler_stunde():
+def test_profile_rows_sortiert_nach_stunde():
     profile = {(0, 23): 100.0, (0, 0): 50.0}
-    rows = P.profile_rows(profile, datetime(2026, 7, 22, 12, tzinfo=UTC), UTC)
-    assert [r["stunde"] for r in rows] == [0, 23]
+    assert [r["stunde"] for r in P.profile_rows(profile)] == [0, 23]

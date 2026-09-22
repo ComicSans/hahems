@@ -16,6 +16,7 @@ from homeassistant.helpers.sun import get_astral_event_date, get_astral_event_ne
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
+from . import entity_domain
 from .actuator import Actuator
 from .changelog import ChangeLog, decision_snapshot, diff_snapshots
 from .config_check import ConfigCheck, check_config
@@ -55,7 +56,6 @@ from .const import (
     SWITCH_LEARN_FLOOR_W,
     WEATHER_CONDITION_FACTORS,
 )
-from . import entity_domain
 from .models import DeviceRegistry, HeatingSystem, parse_devices
 from .planner import (
     block_windows,
@@ -117,20 +117,21 @@ def _state_power_w(state) -> float | None:
 class LoadModelLearner:
     """Lernt Nacht-Grundlast und 24-h-Lastprofil aus der Statistik-Historie.
 
-    Aus `HemsCoordinator` herausgelöst (siehe docs/architektur-review.md) —
-    reine Kapselung derselben Logik, keine Verhaltensänderung. Bekommt seine
-    HA-Zugriffe (`hass`, Options-Lookup, Device-Registry, eigene Entity-IDs)
-    als schmale Abhängigkeiten statt des ganzen Coordinators.
+    Aus `HemsCoordinator` herausgelöst. Bekommt seine HA-Zugriffe (`hass`,
+    Options-Lookup, eigene Entity-IDs) als schmale Abhängigkeiten statt des
+    ganzen Coordinators.
+
+    Die Profil-Schlüssel sind (Tagtyp, LOKALE Stunde): Der Haushalt lebt nach
+    der Wanduhr, nicht nach UTC — siehe `strategies/demand._lokal`.
     """
 
-    def __init__(self, hass, opt, registry, own_entity_id) -> None:
+    def __init__(self, hass, opt, own_entity_id) -> None:
         self._hass = hass
         self._opt = opt
-        self._registry = registry
         self._own_entity_id = own_entity_id
         self.night_load_w: float | None = None
         self._night_load_fetched: datetime | None = None
-        # (Tagtyp, UTC-Stunde) → mittlere Last in W; Tagtyp 0 = Werktag, 1 = Wochenende
+        # (Tagtyp, lokale Stunde) → mittlere Last in W; Tagtyp 0 = Werktag, 1 = Wochenende
         self.load_profile: dict[tuple[int, int], float] | None = None
         self.profile_source: str = "konstante"
 
@@ -196,7 +197,7 @@ class LoadModelLearner:
                 None,
                 {"mean"},
             )
-        except Exception as err:  # Statistik ist optional, nie fatal
+        except Exception as err:  # noqa: BLE001 – Statistik ist optional, nie fatal
             _LOGGER.debug("Statistik für %s nicht verfügbar: %s", stat_id, err)
             return None
         return stats.get(stat_id, [])
@@ -223,10 +224,10 @@ class LoadModelLearner:
             ts, mean = row.get("start"), row.get("mean")
             if ts is None or mean is None:
                 continue
-            utc = dt_util.utc_from_timestamp(ts)
-            if dt_util.as_local(utc).hour in NIGHT_HOURS_LOCAL:
+            lokal = dt_util.as_local(dt_util.utc_from_timestamp(ts))
+            if lokal.hour in NIGHT_HOURS_LOCAL:
                 # Nur Bezug zählt; ein evtl. gedeckelter Zähler liefert eh >= 0
-                by_hour.setdefault(utc.hour, []).append(max(0.0, float(mean)))
+                by_hour.setdefault(lokal.hour, []).append(max(0.0, float(mean)))
         if not by_hour:
             return None, None
 
@@ -246,7 +247,7 @@ class LoadModelLearner:
 
         Quelle ist der integrationseigene `lastfluss`-Sensor (state_class
         measurement → Langzeitstatistik). Gebündelt nach Wochentagstyp
-        (Werktag/Wochenende) und UTC-Stunde über `PROFILE_DAYS`. Buckets mit
+        (Werktag/Wochenende) und lokaler Stunde über `PROFILE_DAYS`. Buckets mit
         zu wenigen Beobachtungen werden verworfen; ist das Profil insgesamt zu
         dünn, greift der Aufrufer auf das Nacht-Profil zurück.
         """
@@ -262,9 +263,11 @@ class LoadModelLearner:
             ts, mean = row.get("start"), row.get("mean")
             if ts is None or mean is None:
                 continue
-            utc = dt_util.utc_from_timestamp(ts)
-            daytype = 1 if utc.weekday() >= 5 else 0
-            buckets.setdefault((daytype, utc.hour), []).append(max(0.0, float(mean)))
+            lokal = dt_util.as_local(dt_util.utc_from_timestamp(ts))
+            daytype = 1 if lokal.weekday() >= 5 else 0
+            buckets.setdefault((daytype, lokal.hour), []).append(
+                max(0.0, float(mean))
+            )
 
         profile = {
             key: round(sum(vals) / len(vals), 1)
@@ -278,8 +281,7 @@ class WeatherClient:
     """Wetterlage/PV-Ertragsfaktor für morgen und stündliche Temperatur-
     vorhersage, mit eigenem Cache (`WEATHER_CACHE`).
 
-    Aus `HemsCoordinator` herausgelöst (siehe docs/architektur-review.md) —
-    reine Kapselung derselben Logik, keine Verhaltensänderung.
+    Aus `HemsCoordinator` herausgelöst.
     """
 
     def __init__(self, hass, opt) -> None:
@@ -348,7 +350,7 @@ class WeatherClient:
                 elif condition in WEATHER_CONDITION_FACTORS:
                     factor = WEATHER_CONDITION_FACTORS[condition]
                 break
-        except Exception as err:  # Wetter ist optional, nie fatal
+        except Exception as err:  # noqa: BLE001 – Wetter ist optional, nie fatal
             _LOGGER.debug("Wettervorhersage nicht verfügbar: %s", err)
 
         self._weather_cache = (condition, factor)
@@ -432,17 +434,18 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._decisions: dict | None = None
         # Schalt-Ebene (nur im Auto-Modus aktiv).
         self._actuator = Actuator(hass)
-        # Lastprofil-Lernen und Wetter-Fetch sind eigene Collaborators (siehe
-        # docs/architektur-review.md) statt Methoden direkt auf dem Coordinator.
-        self._load_model = LoadModelLearner(
-            hass, self._opt, lambda: self.registry, self._own_entity_id
-        )
+        # Lastprofil-Lernen und Wetter-Fetch sind eigene Collaborators statt
+        # Methoden direkt auf dem Coordinator.
+        self._load_model = LoadModelLearner(hass, self._opt, self._own_entity_id)
         self._weather = WeatherClient(hass, self._opt)
         # Zuletzt gesehene Betriebsart je Wärmeerzeuger (id → "heizen"/"kuehlen"/
         # "fremd"). Überbrückt das Abschalten, in dem die climate-Entität nur
         # noch `off` sagt — siehe _betriebsart.
         self._letzte_betriebsart: dict[str, str] = {}
         self._unit_warned: set[str] = set()
+        # (Modus, Empfehlung) des letzten Zyklus, damit sie nur bei Änderung
+        # auf INFO geloggt wird.
+        self._letzte_empfehlung: tuple[str, str] | None = None
         # Cooldown-Zeitpunkt für die Sprung-Erkennung (async_setup_saldo_jump_tracking).
         self._last_jump_refresh: datetime | None = None
         # Hysterese-Zustand des Planners, über die Update-Zyklen fortgeschrieben.
@@ -1391,24 +1394,29 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Update-Zyklus reißen (sonst gingen alle HEMS-Entitäten auf unavailable).
         try:
             self._deliver_alerts(data.config_check.errors)
-        except Exception:  # noqa: BLE001
+        except Exception:
             _LOGGER.exception("HEMS: Zustellung der Störungsmeldungen fehlgeschlagen")
 
         data.lastprofil_quelle = self._load_model.profile_source
-        data.lastprofil = profile_rows(
-            self._load_model.load_profile, now, dt_util.DEFAULT_TIME_ZONE
-        )
+        data.lastprofil = profile_rows(self._load_model.load_profile)
         data.verlauf_pv_entity = self._own_entity_id("pv_leistung_jetzt")
         data.verlauf_soc_entity = self._own_entity_id("speicher_soc")
 
+        # Die Empfehlung nur bei Änderung auf INFO — sonst stünde sie jede
+        # Minute im Log, rund 1440 gleichlautende Zeilen am Tag.
+        empfehlung_log = (self.mode, data.plan.empfehlung)
+        log_level = (
+            logging.INFO if empfehlung_log != self._letzte_empfehlung else logging.DEBUG
+        )
+        self._letzte_empfehlung = empfehlung_log
         if self.mode in MODES_ACTUATING:
-            _LOGGER.info("HEMS-%s: %s", self.mode, data.plan.empfehlung)
+            _LOGGER.log(log_level, "HEMS-%s: %s", self.mode, data.plan.empfehlung)
             await self._actuator.apply(
                 reg, data.plan, invers=self.mode == MODE_INVERS_AUTO
             )
         else:
             if self.mode == MODE_OBSERVE:
-                _LOGGER.info("HEMS-Empfehlung: %s", data.plan.empfehlung)
+                _LOGGER.log(log_level, "HEMS-Empfehlung: %s", data.plan.empfehlung)
             # Verlassen des Auto-Modus (→ beobachten oder aus): den Akku einmalig
             # freigeben, damit er nicht mit der letzten Rate blind weiterläuft.
             # WW/WP/EV bleiben unangetastet. Der Wechsel auto ⇄ invers-auto ist
@@ -1444,3 +1452,14 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         if prev is None:
             return
         self.changelog.add(diff_snapshots(prev, snap, dt_util.utcnow().timestamp()))
+
+    async def async_release_battery(self) -> None:
+        """Speicher freigeben, falls HEMS sie gerade regelt.
+
+        Für das Entladen der Integration: Ohne HEMS schreibt niemand mehr einen
+        Sollwert, und der zuletzt kommandierte liefe blind weiter — bei einer
+        Zwangsladung also Netzbezug bis zum vollen Akku. Im Beobachtungsmodus
+        gibt es nichts freizugeben; dort hat HEMS nichts gestellt.
+        """
+        if self.mode in MODES_ACTUATING:
+            await self._actuator.release_battery(self.registry)

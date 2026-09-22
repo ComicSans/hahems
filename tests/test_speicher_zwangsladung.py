@@ -170,8 +170,9 @@ def test_zwang_endet_nicht_solange_ein_speicher_platz_hat():
 
 def test_abgemeldete_speicher_beenden_den_zwang_nicht():
     # Alle Speicher stumm: Die Regelung fällt in ihre ausdrücklich passive
-    # Empfehlung (0 W an alle). Das ist ein Ausfall, kein erfülltes Ladeziel —
-    # ein Zwang, den ein Broker-Neustart beendet, wäre keiner.
+    # Empfehlung (0 W an alle) — unter Zwang auch ohne Freischwimm-Probe, denn
+    # die entlädt, und bestellt ist Laden. Das ist ein Ausfall, kein erfülltes
+    # Ladeziel — ein Zwang, den ein Broker-Neustart beendet, wäre keiner.
     r = P.compute_plan(
         plan_input(
             storage_states=[

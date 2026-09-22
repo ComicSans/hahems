@@ -373,6 +373,21 @@ async def async_setup_entry(
 
 class HemsSensor(CoordinatorEntity[HemsCoordinator], SensorEntity):
     _attr_has_entity_name = True
+    # Die großen Zeitreihen gehören nicht in den Recorder: Die Prognose
+    # beginnt „ab jetzt" und ändert sich damit jeden Zyklus — jede Minute
+    # entstünde eine neue Attribut-Zeile von mehreren Kilobyte, ohne dass
+    # jemand ihren Verlauf liest; die Plankarte liest nur den aktuellen Stand.
+    # Kleine Entscheidungsfelder (Lasten, Prioritäten) bleiben aufgezeichnet.
+    _unrecorded_attributes = frozenset(
+        {
+            "slots",
+            "pv_kurve",
+            "soc_prognose",
+            "warmwasser_sperren",
+            "warmwasser_legionellen",
+            "lastprofil",
+        }
+    )
 
     def __init__(
         self, coordinator: HemsCoordinator, description: HemsSensorDescription

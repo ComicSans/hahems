@@ -38,9 +38,9 @@ async def async_setup_entry(
 class HemsModeSelect(SelectEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_name = "Modus"
-    _attr_options = [MODE_OBSERVE, MODE_AUTO, MODE_INVERS_AUTO, MODE_OFF]
 
     def __init__(self, coordinator: HemsCoordinator) -> None:
+        self._attr_options = [MODE_OBSERVE, MODE_AUTO, MODE_INVERS_AUTO, MODE_OFF]
         self._coordinator = coordinator
         self._attr_current_option = MODE_OBSERVE
         self._attr_unique_id = f"{coordinator.entry.entry_id}_mode"
@@ -70,9 +70,9 @@ class HemsGoalSelect(SelectEntity, RestoreEntity):
 
     _attr_has_entity_name = True
     _attr_translation_key = "optimierungsziel"
-    _attr_options = list(GOALS)
 
     def __init__(self, coordinator: HemsCoordinator) -> None:
+        self._attr_options = list(GOALS)
         self._coordinator = coordinator
         self._attr_current_option = GOAL_SELF_CONSUMPTION
         self._attr_unique_id = f"{coordinator.entry.entry_id}_goal"
@@ -103,9 +103,9 @@ class HemsGainSelect(SelectEntity, RestoreEntity):
 
     _attr_has_entity_name = True
     _attr_translation_key = "regel_aggressivitaet"
-    _attr_options = list(GAIN_LEVELS)
 
     def __init__(self, coordinator: HemsCoordinator) -> None:
+        self._attr_options = list(GAIN_LEVELS)
         self._coordinator = coordinator
         self._attr_current_option = DEFAULT_GAIN_LEVEL
         self._attr_unique_id = f"{coordinator.entry.entry_id}_gain"

@@ -11,8 +11,10 @@ Dieses Modul importiert nur die Standardbibliothek und die eigenen Konstanten.
 """
 from __future__ import annotations
 
-from collections.abc import Iterable
+import math
+from collections.abc import Hashable, Iterable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from .const import SPEICHER_VOLL_SOC
 
@@ -36,6 +38,34 @@ SOC_SET_KOPFRAUM = 2.0
 # in beide Richtungen. Nicht `> 0`: Die Leistungssensoren der Speicher rauschen
 # um die Null, und ein stehendes Gerät meldet gelegentlich zweistellige Werte.
 SPEICHER_LADEN_MIN_W = 50.0
+
+
+def drossel_verwirft(
+    vorher: tuple[Hashable, datetime] | None,
+    daten: Hashable,
+    jetzt: datetime,
+    frist: timedelta,
+) -> bool:
+    """Ob die Drossel einen Service-Aufruf als Wiederholung verwirft.
+
+    ``vorher`` ist der letzte Aufruf auf DIESELBE Kombination aus Domain,
+    Service und Entität — als Paar aus seinen Daten und seinem Zeitpunkt.
+    Verworfen wird nur, wenn ``daten`` gleich diesem unmittelbar vorigen Aufruf
+    ist und er jünger als ``frist`` ist: Die Drossel soll ein Gerät, das einen
+    Befehl dauerhaft ablehnt, nicht jede Minute mit demselben Aufruf bedienen.
+
+    Bis 22.09.2026 merkte sie sich jeden jemals geschriebenen Wert einzeln. Ein
+    Wert, der innerhalb der Frist ZURÜCKKEHRTE, galt damit als Wiederholung,
+    obwohl dazwischen ein anderer stand — 1200 → 900 → 1200 blieb auf 900
+    stehen, laden → entladen → laden am Richtungs-Select in der falschen
+    Richtung, und `release_battery` nach einem solchen Wechsel wirkungslos. Ein
+    Wechsel ist ein neuer Befehl; wiederholt ist nur, was sich seit dem letzten
+    Aufruf nicht geändert hat.
+    """
+    if vorher is None:
+        return False
+    alte_daten, zeitpunkt = vorher
+    return alte_daten == daten and jetzt - zeitpunkt < frist
 
 
 @dataclass(frozen=True)
@@ -188,10 +218,22 @@ def plan_soc_set(
     liegt der Ziel-SoC deshalb mindestens ``SOC_SET_KOPFRAUM`` über dem Ist.
     Soll er nicht laden, bleibt der Deckel unangetastet — sonst höbe der
     Kopfraum genau die Grenze auf, für die er da ist.
+
+    **Nie unter den eigenen Stand.** Der Deckel ist ein Wert über den
+    virtuellen Gesamtspeicher und liegt nie unter dessen SoC — der einzelne
+    Speicher kann aber deutlich darüber stehen (90 % neben zwei bei 40 %,
+    Gesamt 57 %). Ohne Boden bekäme er einen Ziel-SoC unter seinem Ist, und
+    genau das soll der Deckel laut `_lade_deckel_soc` nie sein: keine Grenze
+    mehr, sondern eine Aufforderung, sich leer zu machen. Der Boden ist der
+    abgerundete Ist-SoC — abgerundet, weil ganzzahlig geschrieben wird und ein
+    aufgerundeter Wert dem Gerät wieder etwas Ladung freigäbe.
     """
     ziel = 100.0 if laden_statt_einspeisen else deckel_soc
-    if laedt and ist_soc is not None:
-        ziel = max(ziel, ist_soc + SOC_SET_KOPFRAUM)
+    if ist_soc is not None:
+        if laedt:
+            ziel = max(ziel, ist_soc + SOC_SET_KOPFRAUM)
+        else:
+            ziel = max(ziel, float(math.floor(ist_soc)))
     return min(100.0, max(0.0, ziel))
 
 

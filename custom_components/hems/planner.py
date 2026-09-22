@@ -36,7 +36,6 @@ from .strategies.switchable import switchable_control
 from .strategies.types import PlanInput, PlanResult, _latch
 from .strategies.water import water_plan
 
-
 # Hysterese-Schwellen. Jede Ja/Nein-Entscheidung des Planners hat ein Ein- und
 # ein Ausschaltniveau; dazwischen bleibt der vorige Zustand stehen. Ohne das
 # kippt die Empfehlung im Minutentakt, sobald ein Messwert um seine Schwelle
@@ -152,28 +151,23 @@ def parse_weekday(value: str | int | None) -> int | None:
     return day if 0 <= day <= 6 else None
 
 
-def profile_rows(
-    profile: dict[tuple[int, int], float] | None, now: datetime, tz: tzinfo
-) -> list[dict]:
-    """Gelerntes Profil für die Anzeige in lokale Stunden umrechnen.
+def profile_rows(profile: dict[tuple[int, int], float] | None) -> list[dict]:
+    """Gelerntes Profil als Tabelle für die Anzeige, eine Zeile je Stunde.
 
-    `tz` kommt vom Aufrufer (Coordinator: `dt_util.DEFAULT_TIME_ZONE`) statt
-    hier per HA-Util aufgelöst zu werden — das hält die Funktion HA-frei.
+    Das Profil ist nach Ortszeit gelernt (siehe `strategies/demand._lokal`),
+    die Stunden stehen also schon so da, wie die Karte sie zeigt.
     """
     if not profile:
         return []
-    midnight = now.replace(minute=0, second=0, microsecond=0)
     rows: list[dict] = []
-    for utc_hour in range(24):
-        werktag = profile.get((0, utc_hour))
-        wochenende = profile.get((1, utc_hour))
+    for stunde in range(24):
+        werktag = profile.get((0, stunde))
+        wochenende = profile.get((1, stunde))
         if werktag is None and wochenende is None:
             continue
-        local_hour = midnight.replace(hour=utc_hour).astimezone(tz).hour
         rows.append(
-            {"stunde": local_hour, "werktag_w": werktag, "wochenende_w": wochenende}
+            {"stunde": stunde, "werktag_w": werktag, "wochenende_w": wochenende}
         )
-    rows.sort(key=lambda r: r["stunde"])
     return rows
 
 
@@ -227,10 +221,17 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     )
     result.morgen_knapp = result.flags.wetter_knapp or result.flags.pv_morgen_knapp
 
-    # Virtueller Gesamtspeicher aus allen Storages
-    cap = sum(s.capacity_kwh for s in inp.storages)
-    result.speicher_kapazitaet_kwh = round(cap, 2)
+    # Virtueller Gesamtspeicher. Angezeigt wird die installierte Kapazität,
+    # geplant nur mit Speichern, deren SoC bekannt ist: Stand, Reserve und
+    # Kapazität müssen dieselbe Menge beschreiben. Zählte ein Speicher ohne SoC
+    # in der Kapazität mit, aber nicht im Stand, fiele der Gesamt-SoC bei jedem
+    # kurzen Sensor-Aussetzer um dessen Anteil (ein Drittel bei drei gleichen
+    # Speichern) — und mit ihm kippten Ziel, Bedarf und „heute knapp".
+    result.speicher_kapazitaet_kwh = round(
+        sum(s.capacity_kwh for s in inp.storages), 2
+    )
     known = [s for s in inp.storages if s.soc is not None]
+    cap = sum(s.capacity_kwh for s in known)
     speicher_frei_kwh = 0.0
     # Voll laden, wenn morgen wenig kommt, das Ziel es verlangt oder der
     # Speicher als Notstromreserve bereitstehen soll: Nulleinspeisung braucht
@@ -252,7 +253,7 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     rampe = None
     if known and cap > 0:
         available = sum(s.soc / 100 * s.capacity_kwh for s in known)
-        reserve = sum(s.reserve_soc / 100 * s.capacity_kwh for s in inp.storages)
+        reserve = sum(s.reserve_soc / 100 * s.capacity_kwh for s in known)
         result.speicher_verfuegbar_kwh = round(available, 2)
         result.speicher_soc = round(available / cap * 100, 1)
         ziel_kwh = (

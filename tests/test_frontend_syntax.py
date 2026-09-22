@@ -51,6 +51,6 @@ def test_gueltig_als_es_modul(datei: Path, tmp_path: Path):
     kopie = tmp_path / f"{datei.stem}.mjs"
     kopie.write_bytes(datei.read_bytes())
     ergebnis = subprocess.run(
-        [node, "--check", str(kopie)], capture_output=True, text=True
+        [node, "--check", str(kopie)], capture_output=True, text=True, check=False
     )
     assert ergebnis.returncode == 0, f"{datei.name}:\n{ergebnis.stderr}"

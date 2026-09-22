@@ -11,6 +11,7 @@ from ..const import (
     CONTROL_DEADBAND_W,
     CONTROL_GAIN_CHARGE,
     CONTROL_GAIN_DISCHARGE,
+    CONTROL_GAIN_EMERGENCY,
     CONTROL_GAIN_FACTORS,
     CONTROL_LEAD_HYST_SOC,
     CONTROL_LEAD_POWER_W,
@@ -20,7 +21,6 @@ from ..const import (
     CONTROL_PARALLEL_ON,
     CONTROL_TARGET_OFFSET_W,
     CONTROL_ZERO_FEEDIN_OFFSET_W,
-    CONTROL_GAIN_EMERGENCY,
     GOAL_ZERO_FEEDIN,
     RESERVE_SOC_OFF,
     RESERVE_SOC_ON,
@@ -193,26 +193,13 @@ def _storage_control(
     # gewinnt jede Rangfolge, ein fehlender nimmt gar nicht teil (siehe
     # STORAGE_STALE_MIN).
     known = [s for s in inp.storages if s.soc is not None and not s.stale]
-    if not known:
-        abgemeldet = [s.name for s in inp.storages if s.stale]
-        if not abgemeldet:
-            # Kein Speicher hat je einen SoC geliefert: unverändert keine
-            # Empfehlung — daran hängt nichts, was abgeschaltet gehörte.
-            return None
-        # Alle Speicher stumm — bei drei Geräten an einem MQTT-Pfad ein
-        # Broker-Neustart, nicht die Ausnahme. Hier NICHT auf `None` fallen:
-        # Ohne Empfehlung schreibt der Actuator gar nichts, und der zuletzt
-        # kommandierte Sollwert bliebe blind stehen (genau das, wogegen
-        # `release_battery` existiert). Stattdessen eine ausdrücklich passive
-        # Empfehlung — 0 W an alle, und der Grund steht in `abgemeldet_namen`,
-        # damit Sensor und Log den Zustand auch dann noch benennen können.
-        return ControlResult(
-            modus="pausiert",
-            fehler_w=0.0,
-            soll_w=0.0,
-            zuteilung=[StorageSetpoint(name=s.name, watt=0.0) for s in inp.storages],
-            abgemeldet_namen=abgemeldet,
-        )
+    if not known and not any(s.stale for s in inp.storages):
+        # Kein Speicher hat je einen SoC geliefert: unverändert keine
+        # Empfehlung — daran hängt nichts, was abgeschaltet gehörte.
+        return None
+    # Sind ALLE Speicher abgemeldet (bei drei Geräten an einem MQTT-Pfad ein
+    # Broker-Neustart, nicht die Ausnahme), läuft die Regelung trotzdem weiter
+    # bis zur Zuteilung — siehe den Zweig `if not known` dort.
 
     # Kaltreserve-Hysterese über den mittleren SoC der Nicht-Reserve-Speicher.
     primary_socs = [s.soc for s in known if not s.cold_reserve]
@@ -329,7 +316,12 @@ def _storage_control(
     # des Wallbox-Anteils — genau der Fall, den der Kommentar oben beschreibt
     # ("Akkustrom ins Auto"), nur jetzt als bewusste Entscheidung statt als
     # blinder Fleck.
-    if soll > 0 and inp.wallbox_w and not inp.battery_to_ev:
+    #
+    # `soll_wunsch > 0` gehört mit in die Bedingung: Sind alle Speicher
+    # abgemeldet, ist `max_ent` 0 und damit `soll` 0 — die Klausel griffe
+    # sonst nie, und die Freischwimm-Probe bekäme ungedeckelt genau die
+    # Wallbox-Last zugeteilt, die sie nicht decken darf.
+    if (soll > 0 or soll_wunsch > 0) and inp.wallbox_w and not inp.battery_to_ev:
         fehler_ohne_ev = inp.saldo_w - inp.wallbox_w + offset
         soll = min(
             soll, max(0.0, bat_ist + fehler_ohne_ev * _gain(fehler_ohne_ev))
@@ -373,7 +365,10 @@ def _storage_control(
         # (siehe `PlanResult.speicher_zwang_fertig`). Ab hier regelt wieder der
         # Saldo — ein voller Akku, der den Hausverbrauch deckt, ist genau das,
         # was der Zwang erreichen wollte.
-        elif not zwang_offen:
+        # `known` muss dabei etwas enthalten: Sind alle Speicher abgemeldet,
+        # ist `zwang_offen` leer, weil niemand meldet — nicht, weil alle voll
+        # sind. Das Ende hinge sonst an einem Broker-Neustart.
+        elif known and not zwang_offen:
             res.speicher_zwang_fertig = True
 
     ctrl = ControlResult(
@@ -527,6 +522,63 @@ def _storage_control(
             for s, _a in anteile
         ]
 
+    def _freischwimm_probe(rest: float) -> None:
+        """Den ungedeckten Rest probeweise den verriegelten Speichern zuteilen.
+
+        Dieselbe Anteil-Formel wie für `known` (Energie über der Reserve,
+        Kaltreserve-Regel), gerechnet auf den letzten bekannten SoC. Folgt ein
+        Speicher, tickt sein SoC, und die frische Meldung entriegelt ihn im
+        Coordinator — kein zweiter Eingang am Latch.
+        """
+        if rest < CONTROL_MIN_SETPOINT_W:
+            return
+        stale_anteile = [
+            (
+                s,
+                max(0.0, (s.soc - s.reserve_soc) / 100 * s.capacity_kwh)
+                if (not s.cold_reserve or reserve_aktiv)
+                else 0.0,
+            )
+            for s in inp.storages
+            if s.stale and s.soc is not None
+        ]
+        probe = _verteile_entladen(stale_anteile, rest)
+        for name, watt in probe.items():
+            if watt > 0:
+                ctrl.zuteilung.append(StorageSetpoint(name=name, watt=round(watt)))
+                ctrl.probe_namen.append(name)
+
+    if not known:
+        # Alle Speicher abgemeldet. NICHT auf `None` fallen: Ohne Empfehlung
+        # schriebe der Actuator gar nichts, und der zuletzt kommandierte
+        # Sollwert bliebe blind stehen (genau das, wogegen `release_battery`
+        # existiert). Grundsätzlich passiv — 0 W an alle, der Grund steht in
+        # `abgemeldet_namen`.
+        #
+        # Aber mit Freischwimm-Probe, sobald das Haus Bezug hat: Bis
+        # 22.09.2026 stand hier ein nacktes 0 W an alle, und die Probe gab es
+        # nur im Entlade-Zweig darunter, den ohne `known` nichts erreicht. Ein
+        # ruhender Speicher an einer push-basierten Integration meldet aber
+        # nichts, solange sich sein SoC nicht ändert — ohne Befehl kam also
+        # nie die frische Meldung, die ihn entriegelt. Die Sperre hielt sich
+        # selbst bis zum nächsten Neustart, während das Haus aus dem Netz zog:
+        # das Schadensbild vom 17.08.2026, nur für alle Speicher zugleich. Der
+        # ganze Wunsch ist hier Rest, weil kein bekannter Speicher etwas trägt.
+        #
+        # Nicht unter Speicher-Zwangsladung: Der Betreiber hat Laden bestellt,
+        # und ein Entladebefehl wäre das Gegenteil davon.
+        if soll_wunsch > CONTROL_DEADBAND_W and not inp.battery_force:
+            _freischwimm_probe(soll_wunsch)
+        if ctrl.probe_namen:
+            ctrl.modus = "entladen"
+        probiert = {z.name for z in ctrl.zuteilung}
+        ctrl.zuteilung.extend(
+            StorageSetpoint(name=s.name, watt=0.0)
+            for s in inp.storages
+            if s.name not in probiert
+        )
+        return ctrl
+
     if soll > CONTROL_DEADBAND_W:
         ctrl.modus = "entladen"
         # Verfügbare Energie oberhalb der Reserve, Kaltreserve nur bei Bedarf.
@@ -571,23 +623,7 @@ def _storage_control(
         # bekannter Speicher an der Reserve hat anteil ≤ 0, bekommt 0 W,
         # zählt aber weiter in max_ent — ein Deckel-Kriterium (Σ Zuteilung ≥
         # max_ent) verfehlt genau diesen Fall.
-        rest = soll_wunsch - sum(z.watt for z in ctrl.zuteilung)
-        if rest >= CONTROL_MIN_SETPOINT_W:
-            stale_anteile = [
-                (
-                    s,
-                    max(0.0, (s.soc - s.reserve_soc) / 100 * s.capacity_kwh)
-                    if (not s.cold_reserve or reserve_aktiv)
-                    else 0.0,
-                )
-                for s in inp.storages
-                if s.stale and s.soc is not None
-            ]
-            probe = _verteile_entladen(stale_anteile, rest)
-            for name, watt in probe.items():
-                if watt > 0:
-                    ctrl.zuteilung.append(StorageSetpoint(name=name, watt=round(watt)))
-                    ctrl.probe_namen.append(name)
+        _freischwimm_probe(soll_wunsch - sum(z.watt for z in ctrl.zuteilung))
     elif soll < -CONTROL_DEADBAND_W:
         ctrl.modus = "laden"
         # Freie Kapazität bis zum Ladedeckel (tagsüber < 100 %, zum Abend voll)

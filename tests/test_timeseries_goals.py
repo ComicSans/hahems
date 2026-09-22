@@ -21,7 +21,6 @@ Erwartete Semantik der Ziele:
 from __future__ import annotations
 
 import pytest
-
 from simulate import (
     RESERVE_SOC,
     export_kwh,

@@ -156,14 +156,14 @@
           "power_entity": "Power entity (W, optional)",
           "min_on_min": "Minimum runtime (min)",
           "min_off_min": "Minimum pause (min)",
-          "max_block_min": "Max. block duration per day (min)",
+          "max_block_min": "Max. block duration (min)",
           "priority": "Priority",
           "mode_heat_option": "Heating mode (climate entity only)"
         },
         "data_description": {
           "min_on_min": "Once switched on, the device stays on for at least this long.",
           "min_off_min": "After switching off, the device stays off for at least this long.",
-          "max_block_min": "The device is never blocked for longer than this per day.",
+          "max_block_min": "Once the appliance has been off this long without interruption, it is switched on even without surplus — but never before its minimum pause has passed. 0 = no limit.",
           "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
           "name": "A short label for this load (used only for display, e.g. in the recommendation and load-flow card).",
           "switch_entity": "Switch (or climate) entity HEMS turns on and off based on surplus.",
@@ -310,14 +310,14 @@
           "power_entity": "Power entity (W, optional)",
           "min_on_min": "Minimum runtime (min)",
           "min_off_min": "Minimum pause (min)",
-          "max_block_min": "Max. block duration per day (min)",
+          "max_block_min": "Max. block duration (min)",
           "priority": "Priority",
           "mode_heat_option": "Heating mode (climate entity only)"
         },
         "data_description": {
           "min_on_min": "Once switched on, the device stays on for at least this long.",
           "min_off_min": "After switching off, the device stays off for at least this long.",
-          "max_block_min": "The device is never blocked for longer than this per day.",
+          "max_block_min": "Once the appliance has been off this long without interruption, it is switched on even without surplus — but never before its minimum pause has passed. 0 = no limit.",
           "priority": "1 = highest priority. When surplus is scarce, loads with higher priority are served first.",
           "name": "A short label for this load (used only for display, e.g. in the recommendation and load-flow card).",
           "switch_entity": "Switch (or climate) entity HEMS turns on and off based on surplus.",
@@ -441,7 +441,7 @@
           "heat_lock_to_month": "Last month of the summer lock (inclusive).",
           "min_on_min": "Once on, the appliance stays on for at least this long.",
           "min_off_min": "After switching off, the appliance stays off for at least this long. Frost protection bypasses this.",
-          "max_block_min": "Once the appliance has been off this long, it is switched on even without surplus. Measured from the entity's last state change, whoever caused it.",
+          "max_block_min": "Once the appliance has been off this long, it is switched on even without surplus — but never before its minimum pause has passed. Measured from the entity's last state change, whoever caused it. 0 = no limit.",
           "priority": "1 = most important. When surplus is scarce, the least important load gives way first. Heating systems and switchable loads share one ranking."
         }
       },
@@ -491,7 +491,7 @@
           "heat_lock_to_month": "Last month of the summer lock (inclusive).",
           "min_on_min": "Once on, the appliance stays on for at least this long.",
           "min_off_min": "After switching off, the appliance stays off for at least this long. Frost protection bypasses this.",
-          "max_block_min": "Once the appliance has been off this long, it is switched on even without surplus. Measured from the entity's last state change, whoever caused it.",
+          "max_block_min": "Once the appliance has been off this long, it is switched on even without surplus — but never before its minimum pause has passed. Measured from the entity's last state change, whoever caused it. 0 = no limit.",
           "priority": "1 = most important. When surplus is scarce, the least important load gives way first. Heating systems and switchable loads share one ranking."
         }
       }

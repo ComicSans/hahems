@@ -12,15 +12,15 @@ from hems.actuation import WwAction, plan_ww_action
 
 
 def _plan(**kw):
-    base = dict(
-        status="basis",
-        soll_c=48.0,
-        domain="water_heater",
-        state="on",
-        schaltabstand_erreicht=True,
-        current_setpoint=48.0,
-        has_setpoint_entity=False,
-    )
+    base = {
+        "status": "basis",
+        "soll_c": 48.0,
+        "domain": "water_heater",
+        "state": "on",
+        "schaltabstand_erreicht": True,
+        "current_setpoint": 48.0,
+        "has_setpoint_entity": False,
+    }
     base.update(kw)
     return plan_ww_action(**base)
 

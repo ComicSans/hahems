@@ -151,6 +151,10 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        # Speicher nicht mit dem letzten Sollwert zurücklassen — nach dem
+        # Entladen schreibt HEMS keinen mehr. Beim Neuladen (Optionsänderung)
+        # kostet das höchstens den einen Zyklus bis zur nächsten Regelung.
+        await coordinator.async_release_battery()
         # Ausstehende Log-Einträge und gelernte Leistungen vor dem
         # Reload/Entladen sichern.
         if coordinator.changelog is not None:

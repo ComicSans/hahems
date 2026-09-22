@@ -20,7 +20,6 @@ from .types import (
     PlanResult,
 )
 
-
 # Rotations-Malus (kWh) für eine beobachtet-leere Last: groß genug, um jede
 # realistische Tagesenergie zu überbieten, damit eine leere Last in der
 # Rangfolge stets hinter jede nicht-leere fällt — aber endlich, damit sie ohne

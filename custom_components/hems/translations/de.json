@@ -156,14 +156,14 @@
           "power_entity": "Leistungs-Entität (W, optional)",
           "min_on_min": "Mindestlaufzeit (min)",
           "min_off_min": "Mindestpause (min)",
-          "max_block_min": "Max. Sperrdauer pro Tag (min)",
+          "max_block_min": "Max. Sperrdauer (min)",
           "priority": "Priorität",
           "mode_heat_option": "Heiz-Modus (nur bei Climate-Entität)"
         },
         "data_description": {
           "min_on_min": "Ist das Gerät einmal an, bleibt es mindestens so lange eingeschaltet.",
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
-          "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
+          "max_block_min": "War das Gerät so lange am Stück aus, wird es eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. 0 = keine Obergrenze.",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
           "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. in Empfehlung und Lastfluss-Karte).",
           "switch_entity": "Schalter- (oder Climate-)Entität, die HEMS abhängig vom Überschuss ein- und ausschaltet.",
@@ -310,14 +310,14 @@
           "power_entity": "Leistungs-Entität (W, optional)",
           "min_on_min": "Mindestlaufzeit (min)",
           "min_off_min": "Mindestpause (min)",
-          "max_block_min": "Max. Sperrdauer pro Tag (min)",
+          "max_block_min": "Max. Sperrdauer (min)",
           "priority": "Priorität",
           "mode_heat_option": "Heiz-Modus (nur bei Climate-Entität)"
         },
         "data_description": {
           "min_on_min": "Ist das Gerät einmal an, bleibt es mindestens so lange eingeschaltet.",
           "min_off_min": "Nach dem Ausschalten bleibt das Gerät mindestens so lange aus.",
-          "max_block_min": "Länger als diese Dauer pro Tag wird das Gerät nie blockiert.",
+          "max_block_min": "War das Gerät so lange am Stück aus, wird es eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. 0 = keine Obergrenze.",
           "priority": "1 = höchste Priorität. Bei knappem Überschuss werden Lasten mit höherer Priorität zuerst versorgt.",
           "name": "Eine kurze Bezeichnung für diese Last (nur zur Anzeige, z. B. in Empfehlung und Lastfluss-Karte).",
           "switch_entity": "Schalter- (oder Climate-)Entität, die HEMS abhängig vom Überschuss ein- und ausschaltet.",
@@ -441,7 +441,7 @@
           "heat_lock_to_month": "Letzter Monat der Sommersperre (einschließlich).",
           "min_on_min": "Ist die Anlage einmal an, läuft sie mindestens so lange.",
           "min_off_min": "Nach dem Abschalten bleibt die Anlage mindestens so lange aus. Der Frostschutz geht daran vorbei.",
-          "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat.",
+          "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat. 0 = keine Obergrenze.",
           "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge."
         }
       },
@@ -491,7 +491,7 @@
           "heat_lock_to_month": "Letzter Monat der Sommersperre (einschließlich).",
           "min_on_min": "Ist die Anlage einmal an, läuft sie mindestens so lange.",
           "min_off_min": "Nach dem Abschalten bleibt die Anlage mindestens so lange aus. Der Frostschutz geht daran vorbei.",
-          "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat.",
+          "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat. 0 = keine Obergrenze.",
           "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge."
         }
       }
