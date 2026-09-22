@@ -4,6 +4,20 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 2.11.0 — `max_block_min = 0` heißt jetzt „keine Obergrenze"
+
+Bei Schaltlasten und Heizungen erzwingt die maximale Sperrdauer
+(`max_block_min`) ein Einschalten, wenn HEMS ein Gerät zu lange ausgehalten
+hat. Ein Wert von 0 bedeutete bisher „sofort": Die Aus-Zeit ist immer ≥ 0, die
+Last lief also dauerhaft — an Überschuss und Mindestpause vorbei.
+
+**Anpassungsbedarf:** Wer `max_block_min` auf 0 gestellt hat, um ein Gerät
+dauerhaft laufen zu lassen, muss das jetzt anders lösen (z. B. das Gerät nicht
+von HEMS schalten lassen). 0 heißt ab dieser Version: HEMS erzwingt nie ein
+Einschalten. Außerdem greift die Sperrdauer nie mehr vor Ablauf der
+Mindestpause (`min_off_min`). Gemessen wird die Aus-Zeit am Stück — die
+Oberfläche sprach bisher fälschlich von „pro Tag".
+
 ## 2.10.0 — Der Config-Check fragt jetzt „Zendure-Manager deaktiviert?"
 
 Die Überlappungsprüfung kannte bisher einen Zweiten: eine aktive Automation,
