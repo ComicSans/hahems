@@ -91,6 +91,67 @@ Auffällig, aber nicht eingeordnet: Die Korrektur des `ac_mode` von L2 um
 Sekunden davor, `power_off()` 9 Sekunden davor. Die Reihenfolge spricht für
 Kandidat 3, beweist ihn aber nicht.
 
+## Zweiter Befund: 16.09.2026, 20:40 bis 21:05
+
+Derselbe Stillstand, diesmal mit gezielten Einzeltests. Ausgangslage wie am
+09.09.: beide Hyper 2000 entladen mit rund 700 W, SoC 22 %, dann Zwangsladung
+an. Zeiten in Ortszeit.
+
+- 20:40:34 — beide Geräte hören von selbst auf zu entladen, sieben Sekunden
+  vor dem Schalter und ohne Schreibvorgang von HEMS. Nicht eingeordnet.
+- 20:40:50/52 — HEMS schreibt `ac_mode = input`, `input_limit = 1200`,
+  `output_limit = 0`. Danach 0 W. L2 meldet noch rund drei Minuten lang
+  `pack_state` 0 ⇄ 2 (Ruhe ⇄ Entladen).
+- 20:45:56 — Watchdog-Warnung für L2 und L3, wie vorgesehen.
+- 20:48:23 — Test 1, von Hand: L2 `input_limit = 300`. Das Gerät übernimmt
+  den Wert (die Number hat `doupdate=False`, der Zustand ist also das Echo
+  des Geräts). HEMS schreibt im nächsten Zyklus wieder 1200, auch das wird
+  übernommen. Leistung bleibt 0 W bis 20:51:23. **Eine Wertänderung am Limit
+  löst den Stillstand nicht.** Damit ist der Störwert aus der zweiten
+  Zu-tun-Zeile hinfällig.
+- 20:52:20/30 — Test 2, von Hand: L2 `ac_mode` auf `output`, zehn Sekunden
+  später zurück auf `input`. 0 W bis 20:55:23. **Ein erneuter
+  Richtungswechsel löst ihn auch nicht.**
+- 20:58:35 — der Betreiber stellt den Zendure-Manager auf `manual` (Leistung
+  0), 21:03:21 auf `smart_charging`. `auto_model` springt um 21:02 auf beiden
+  Geräten von 0 auf 8 — die Programm-Befehle kommen also an. Trotzdem 0 W.
+- 21:04:03 — L3 bekommt `input` erst jetzt, der Nachtritt holt eine
+  gedrosselte Umschaltung nach (input → output → input binnen fünf Minuten,
+  `_CALL_THROTTLE` merkt sich den Wert, nicht den Wechsel). Kein Einfluss auf
+  den Stillstand, aber der Nachtritt deckt die Drossel-Lücke ab.
+- 21:04:13/24 — `grid_reverse` von Hand kurz auf `disabled` und zurück.
+  Keine Wirkung.
+- **21:05:33 — Manager auf `off`. 21:05:35 meldet `auto_model` 0.
+  21:05:44 lädt L3 mit 456 W, 21:05:45 L2 mit 336 W, binnen drei Sekunden
+  beide über 800 W.**
+
+Die Akkupacks waren während des ganzen Stillstands unauffällig: 23 bis 30 °C,
+Zellen 3,27 bis 3,28 V, keine Heiz- oder Tieftemperatur-Sperre,
+`soc_status`/`soc_limit` 0. Laden am AC-Eingang lief am selben Vormittag
+normal (Überschuss, bis 100 % um 12:11).
+
+### Was daraus folgt
+
+Zweimal, am 09.09. und am 16.09., lief das Laden **neun bis elf Sekunden nach
+dem Wechsel des Managers auf `off`** an, und beide Male hatte vorher jeder
+andere Weg versagt. `update_operation` ruft dabei `power_off()` auf, also die
+`deviceAutomation`-Nachricht mit `autoModel: 0`. Kandidat 3 ist damit nicht
+mehr nur plausibel, sondern zweimal reproduziert — allerdings anders als oben
+beschrieben: Vor dem Test meldeten beide Geräte bereits `auto_model` 0, es lief
+also kein sichtbares Programm. Das Gerät braucht offenbar die **ausdrückliche**
+`autoModel: 0`-Nachricht, um nach einer Entladung wieder Netzladung
+anzunehmen; der gemeldete Zustand 0 genügt nicht. Deckt sich mit Zendure-HA
+#1532 (Hyper 2000, Firmware v2.1.30, lokales MQTT: "Writing `input_limit`
+alone does nothing - the hub needs a state change").
+
+Offen bleibt, ob ein Wechsel `manual` → `off` genauso wirkt wie
+`smart_charging` → `off` (am 09.09. war es `manual`, am 16.09.
+`smart_charging`) und ob die Nachricht auch ohne vorherigen Programm-Wechsel
+wirkt. Beides lässt sich über HEMS nicht testen: Der einzige Weg zu
+`power_off()` führt über den Manager, und der bleibt für HEMS tabu. Ein
+Firmware-Update und ein Neustart der Geräte sind als Lösung ausgeschlossen
+(Betreiber, 16.09.2026); ein Fork der Integration ebenfalls.
+
 ## Zu tun
 
 - [ ] Beim nächsten natürlichen Stillstand prüfen, ob der Nachtritt allein
