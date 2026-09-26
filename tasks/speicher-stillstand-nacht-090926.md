@@ -152,7 +152,109 @@ wirkt. Beides lässt sich über HEMS nicht testen: Der einzige Weg zu
 Firmware-Update und ein Neustart der Geräte sind als Lösung ausgeschlossen
 (Betreiber, 16.09.2026); ein Fork der Integration ebenfalls.
 
+## Dritter Befund: 24.09.2026, ab 20:47
+
+Derselbe Stillstand, diesmal mit der Freigabe-Automation
+`automation.hyper_2000_netzladen_nach_stillstand_freigeben` im Einsatz — und
+sie hat ihn nicht gelöst. Zeiten in Ortszeit.
+
+- 20:47:18 — beide Geräte hören von selbst auf zu entladen (L2 rund 680 W,
+  L3 rund 665 W, SoC 53 %), zwölf Sekunden vor dem Schalter. Wie am 16.09.
+- 20:47:30 — `sensor.hems_speicher_regelung` wechselt auf `laden`,
+  `zwangsladung: true`, 1200 W je Gerät, Deckel 100 %. HEMS schreibt
+  `ac_mode = input` und `input_limit = 1200`. Danach 0 W.
+- 20:49:29 — Reload der Zendure-Integration. Die Verbindung kommt binnen
+  Sekunden zurück (`connection_status` 11, `hyper_tmp` läuft weiter);
+  `auto_model` meldet auf beiden Geräten 0, `charging_mode` 2,
+  `charging_type` 2 (L2) bzw. 1 (L3).
+- 20:49:30–35, 20:50:19–24 und 20:50:58–20:52:19 — der Manager geht dreimal
+  `off` → `manual` → `off` (die Automation feuerte um 20:52:14).
+  `operation_state` folgt jedes Mal (3 → 0 → 3), die Befehle kommen also an.
+  **Trotzdem 0 W.**
+- ab 20:50:57 — L2 meldet `pack_state` im Sekundentakt 1 ⇄ 2, bei 0 W an
+  Netz und Pack. L3 bleibt auf 0. Nicht eingeordnet.
+- 20:52:27 — L2 zieht `input_limit` von selbst auf 518 zurück, HEMS schreibt
+  um 20:52:41 wieder 1200 (Kandidat 1).
+- 20:52:40 / 20:55:40 — Watchdog-Warnung für L3 bzw. L2.
+
+### Was daraus folgt
+
+`manual` → `off` genügt nicht immer. Am 09.09. wirkte er (dort mit
+`manual_power` 1400 vorher), am 24.09. dreimal nicht; am 16.09. wirkte erst
+`smart_charging` → `off`. Damit ist die offene Frage aus dem zweiten Befund
+zur Hälfte beantwortet: Der Wechsel auf `off` allein ist es nicht, der
+vorherige Modus zählt. Die Automation schaltet heute auf `manual` und sollte
+auf `smart_charging` umgestellt werden. Zusätzlich feuert ihr Template-Trigger
+nur beim Übergang falsch → wahr: Bleibt der Stillstand nach dem ersten Versuch
+bestehen, versucht sie es nicht noch einmal.
+
+Als Handweg gibt es seit dem 24.09. das HA-Skript
+`script.hyper_2000_netzladen_freigeben`. Die erste Fassung (`smart_charging`,
+20 s, `off`) lief um 21:04:40 und blieb wirkungslos: 0 W auch eine Minute nach
+`off`, `auto_model` die ganze Zeit 0.
+
+Der Unterschied zum 16.09. ist die Dauer. Dort stand der Manager rund sieben
+Minuten nicht auf `off`, und `auto_model` sprang um 21:02 auf 8, bevor der
+Wechsel auf `off` das Laden freigab. Am 24.09. dauerte keine Phase länger als
+80 Sekunden, und `auto_model` blieb jedes Mal auf 0. Arbeitshypothese: Das Gerät
+braucht den tatsächlichen Wechsel `auto_model` 8 → 0; eine `autoModel: 0`-Nachricht
+an ein Gerät, das schon 0 meldet, bewirkt nichts. Die zweite Fassung des Skripts
+wartet deshalb auf `auto_model` 8 an beiden Geräten (höchstens 8 min) und stellt
+erst dann auf `off`.
+
+**Widerlegt, 21:07–21:17.** Die zweite Fassung lief ab 21:07:33. In 6,5 Minuten
+`smart_charging` blieb `auto_model` auf 0; die 8 kam erst um 21:14:11, nachdem
+der Betreiber von Hand über `smart` und `store_solar` geschaltet hatte. Das
+Skript stellte um 21:14:22 auf `off`, `auto_model` fiel um 21:14:23 auf 0 —
+und die Geräte blieben bei 0 W. Der Wechsel 8 → 0 allein gibt die Netzladung
+also nicht frei. Danach meldeten beide Geräte von sich aus `ac_mode = output`
+(21:15:39/57), HEMS korrigierte um 21:16:52 auf `input`.
+
+Dritte Fassung (Vorschlag des Betreibers, mehrfaches Umschalten): bis zu vier
+Runden `manual` → `smart_charging` → `off` mit je 20 s Verweildauer, Abbruch,
+sobald ein Gerät mehr als 50 W aus dem Netz zieht.
+
+**Gelöst, 21:23.** Vorgeschichte: Der Betreiber hatte den Manager ab 21:16:30
+auf `manual` stehen lassen (mit kurzen Wechseln um 21:19); `auto_model` stand
+seit 21:16:54 auf beiden Geräten auf 8. Um 21:22:29 lief ein weiterer Reload
+der Zendure-Integration, danach meldeten beide Geräte wieder 8.
+
+- 21:22:44 — dritte Fassung gestartet, Runde 1: `manual` (stand schon).
+- 21:23:04 — `smart_charging`.
+- 21:23:24 — `off`; `auto_model` fällt um 21:23:25/26 auf 0.
+- **21:23:42 — L3 lädt mit 1159 W, 21:23:45 L2 mit 1188 W**, binnen Sekunden
+  beide bei 1200 W. Das Skript endet nach der ersten Runde (21:23:42).
+
+Abstand `off` → Leistung: 18 bzw. 21 Sekunden.
+
+### Was die drei Versuche am 24.09. unterscheidet
+
+| Zeit  | `auto_model` 8 vor `off` | Modi vor `off`                     | Ergebnis |
+|-------|--------------------------|------------------------------------|----------|
+| 20:49–20:52 | nie              | `manual` (5 s bis 80 s)            | 0 W      |
+| 21:14:22 | 11 s                  | `smart` → `store_solar` → `smart_charging` → `manual` | 0 W |
+| 21:23:24 | rund 6,5 min (Reload dazwischen) | `manual` → `smart_charging` | lädt |
+
+Am 16.09. stand `auto_model` 3,5 Minuten auf 8, bevor `off` wirkte. Das
+stützt eine neue Arbeitshypothese: Die Freigabe braucht ein Gerät, das eine
+Weile **im Programm gelaufen** ist (`auto_model` 8 über Minuten), nicht bloß
+den Wechsel 8 → 0. Nicht ausgeschlossen ist, dass der Reload um 21:22:29
+beigetragen hat; um 20:49 hat ein Reload allein nichts bewirkt.
+
 ## Zu tun
+
+- [ ] Beim nächsten Stillstand `script.hyper_2000_netzladen_freigeben`
+      (dritte Fassung) ohne Vorlauf von Hand starten: Wirkt es auch, wenn
+      `auto_model` vorher nicht schon Minuten auf 8 stand? Wenn nicht, im
+      Skript vor `off` auf `auto_model` 8 warten und die 8 einige Minuten
+      halten lassen (Hypothese aus dem dritten Befund).
+- [x] Freigabe-Automation auf das Skript umgestellt (24.09.2026, 21:30):
+      Sie ruft `script.hyper_2000_netzladen_freigeben` auf statt eines eigenen
+      `manual` → `off`. Neben dem Template-Trigger (2 min Stillstand) prüft ein
+      Trigger alle 10 Minuten erneut, weil der Template-Trigger je Stillstand
+      nur einmal feuert. Bedingungen: Stillstand-Template wahr, Manager `off`,
+      Skript läuft nicht, Regelung seit mindestens 2 min unverändert.
+      Betreiber-Automation, nicht HEMS.
 
 - [ ] Beim nächsten natürlichen Stillstand prüfen, ob der Nachtritt allein
       genügt: `custom_components.hems.actuator` auf INFO/DEBUG stellen und
