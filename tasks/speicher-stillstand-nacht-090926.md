@@ -241,13 +241,54 @@ Weile **im Programm gelaufen** ist (`auto_model` 8 über Minuten), nicht bloß
 den Wechsel 8 → 0. Nicht ausgeschlossen ist, dass der Reload um 21:22:29
 beigetragen hat; um 20:49 hat ein Reload allein nichts bewirkt.
 
+## Vierter Befund: 26.09.2026, ab 21:30
+
+Derselbe Stillstand. Zeiten in Ortszeit.
+
+- 21:30:58 — beide Geräte hören von selbst auf zu entladen (je rund 720 W,
+  SoC 38 %), 21 Sekunden vor dem Schalter. Wie am 16.09. und 24.09.
+- 21:31:19 — Zwangsladung an, HEMS schreibt `ac_mode = input`,
+  `input_limit = 1200`, `output_limit = 0`. Danach 0 W.
+- 21:31:52–21:37 — dritte Skriptfassung, alle vier Runden `manual` →
+  `smart_charging` → `off`. **0 W.** `auto_model` blieb die ganze Zeit auf 0.
+- 21:38:45–21:49:44 — Manager zehn Minuten auf `manual` (Leistung 0).
+  `auto_model` bleibt 0. **`manual` bringt die 8 nicht zuverlässig** (am
+  24.09. um 21:16 kam sie nach 22 s).
+- 21:49:44 — `smart`: `auto_model` 8 auf beiden Geräten nach 9 s.
+  21:49:55 `store_solar`, 21:50:27 `manual` (gehalten), 21:53:34
+  `smart_charging`, 21:53:55 `off`; `auto_model` fällt auf 0.
+- **21:54:08 — beide laden (690/769 W), 21:54:24 je 1200 W.** Abstand `off` →
+  Leistung: 13 Sekunden.
+
+### Was daraus folgt
+
+Ohne `auto_model` 8 vor `off` hat kein Versuch gewirkt. Alle drei Erfolge
+(16.09., 24.09. 21:23, 26.09. 21:53) hatten minutenlang 8 **und**
+`smart_charging` direkt vor `off`; der einzige Fehlschlag mit 8 (24.09.
+21:14) hatte nur 11 s lang 8 und `manual` direkt vor `off`. Welche der beiden
+Bedingungen zählt, ist offen — der Betreiber hält die lange Haltezeit für
+unnötig.
+
+Vierte Fassung des Skripts (26.09.2026, 21:58): bis zu drei Runden `smart`
+(bis `auto_model` 8 an beiden Geräten, höchstens 20 s) → `store_solar` →
+`manual` → `smart_charging` (je 20 s) → `off`, Abbruch bei Netzladung
+> 50 W oder wenn HEMS nicht mehr auf `laden` steht. Die Automation startet
+das Skript jetzt zusätzlich 15 s nach dem Wechsel von HEMS auf `laden` bzw.
+dem Einschalten der Zwangsladung (Trigger-ID `start`), sofern die Geräte bis
+dahin nicht aus dem Netz laden. Die Freigabe zum Schalten des Managers hat der
+Betreiber am 26.09. auch mir erteilt.
+
 ## Zu tun
 
-- [ ] Beim nächsten Stillstand `script.hyper_2000_netzladen_freigeben`
+- [ ] Nächster Stillstand: Wirkt die vierte Fassung mit nur rund 60 s
+      `auto_model` 8 vor `off`? Wenn ja, ist die Haltezeit widerlegt. Wenn
+      nein, `manual` vor `smart_charging` auf einige Minuten verlängern.
+
+- [x] Beim nächsten Stillstand `script.hyper_2000_netzladen_freigeben`
       (dritte Fassung) ohne Vorlauf von Hand starten: Wirkt es auch, wenn
-      `auto_model` vorher nicht schon Minuten auf 8 stand? Wenn nicht, im
-      Skript vor `off` auf `auto_model` 8 warten und die 8 einige Minuten
-      halten lassen (Hypothese aus dem dritten Befund).
+      `auto_model` vorher nicht schon Minuten auf 8 stand? — Nein, am
+      26.09.2026 vier Runden ohne Wirkung, `auto_model` blieb 0 (vierter
+      Befund).
 - [x] Freigabe-Automation auf das Skript umgestellt (24.09.2026, 21:30):
       Sie ruft `script.hyper_2000_netzladen_freigeben` auf statt eines eigenen
       `manual` → `off`. Neben dem Template-Trigger (2 min Stillstand) prüft ein
