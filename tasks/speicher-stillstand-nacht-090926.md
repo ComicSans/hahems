@@ -289,23 +289,27 @@ Zeiten in Ortszeit.
 - **20:52:15 — L2 lädt, 20:52:17 L3**, nach 10 s beide über 1 kW. Abstand
   `off` → Leistung: 10 Sekunden. Die Runde hatte rund 60 s `auto_model` 8 —
   die lange Haltezeit ist damit widerlegt.
-- 20:52:17 — Betreiber stellt den Manager dauerhaft auf `store_solar`
+- 20:52:17 — Betreiber stellt den Manager für die laufende Zwangsladung auf `store_solar`
   („Solar laden"). `auto_model` geht um 20:52:21 wieder auf 8, die Geräte
   laden trotzdem weiter mit je rund 1200 W aus dem Netz (HEMS-Zwangsladung).
 
 ### Was daraus folgt
 
-Der Betreiber legt fest: **Die Lösung ist, den Zendure-Manager auf
-`store_solar` stehen zu lassen** statt auf `off`. Damit steht der Manager
-nicht mehr auf `off`, und die Freigabe-Automation (Bedingung „Manager
-`off`") feuert nicht mehr. Offen ist, ob `store_solar` den Stillstand
+Der Betreiber legt fest: **Die Lösung ist, den Zendure-Manager während der
+Zwangsladung auf `store_solar` zu stellen** statt auf `off`. Offen ist, ob `store_solar` den Stillstand
 tatsächlich verhindert — das Laden setzte heute schon vor dem Umstellen ein,
 nach dem Skript. Belegt ist bisher nur, dass `store_solar` die HEMS-Befehle
 (`ac_mode`, `input_limit`) für das Netzladen nicht blockiert.
 
+Grundstellung des Managers (Betreiber, 28.09.2026): `store_solar`, solange
+`switch.heizungskeller_hems_speicher_zwangsladung` an ist, sonst `manual`.
+Die neue Automation `hyper2000_manager_grundstellung` schaltet danach, wenn
+der Schalter wechselt, beim HA-Start und 10 s nach Skriptende; sie wartet,
+solange das Skript läuft. Die Freigabe-Automation feuert jetzt bei Manager
+`off`, `store_solar` oder `manual`.
+
 Fünfte Fassung des Skripts (28.09.2026): Nach den Runden schaltet es den
-Manager auf `off` und 5 s später auf `store_solar`, damit die Grundstellung
-erhalten bleibt. Die Runden selbst enden weiter mit `off`, weil das Laden
+Manager auf `off` und 5 s später auf die Grundstellung. Die Runden selbst enden weiter mit `off`, weil das Laden
 bisher immer erst nach `off` einsetzte.
 
 ## Zu tun
@@ -313,10 +317,12 @@ bisher immer erst nach `off` einsetzte.
 - [x] Nächster Stillstand: Wirkt die vierte Fassung mit nur rund 60 s
       `auto_model` 8 vor `off`? — Ja, am 28.09.2026 eine Runde, Laden 10 s
       nach `off` (fünfter Befund). Die Haltezeit ist widerlegt.
-- [ ] Mit Manager dauerhaft auf `store_solar`: Tritt beim nächsten Wechsel
+- [ ] Mit Manager auf `store_solar` während der Zwangsladung: Tritt beim nächsten Wechsel
       `entladen` → `laden` noch ein Stillstand auf? Und regelt der Manager in
       `store_solar` beim Entladen oder bei Solarüberschuss gegen HEMS
-      (zweiter Regler auf demselben Gerät)?
+      (zweiter Regler auf demselben Gerät)? Ebenso für `manual` außerhalb
+      der Zwangsladung: Hält der Manager mit `manual_power` 0 die Geräte fest
+      und verhindert HEMS-Entladen oder PV-Laden?
 
 - [x] Beim nächsten Stillstand `script.hyper_2000_netzladen_freigeben`
       (dritte Fassung) ohne Vorlauf von Hand starten: Wirkt es auch, wenn
