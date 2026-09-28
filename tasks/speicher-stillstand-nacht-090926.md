@@ -303,6 +303,11 @@ tatsächlich verhindert — das Laden setzte heute schon vor dem Umstellen ein,
 nach dem Skript. Belegt ist bisher nur, dass `store_solar` die HEMS-Befehle
 (`ac_mode`, `input_limit`) für das Netzladen nicht blockiert.
 
+Fünfte Fassung des Skripts (28.09.2026): Nach den Runden schaltet es den
+Manager auf `off` und 5 s später auf `store_solar`, damit die Grundstellung
+erhalten bleibt. Die Runden selbst enden weiter mit `off`, weil das Laden
+bisher immer erst nach `off` einsetzte.
+
 ## Zu tun
 
 - [x] Nächster Stillstand: Wirkt die vierte Fassung mit nur rund 60 s
