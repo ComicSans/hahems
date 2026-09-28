@@ -278,11 +278,40 @@ dem Einschalten der Zwangsladung (Trigger-ID `start`), sofern die Geräte bis
 dahin nicht aus dem Netz laden. Die Freigabe zum Schalten des Managers hat der
 Betreiber am 26.09. auch mir erteilt.
 
+## Fünfter Befund: 28.09.2026, ab 20:50 — Lösung `store_solar`
+
+Zeiten in Ortszeit.
+
+- 20:50:37 — HEMS wechselt von `entladen` auf `laden`. Danach 0 W.
+- 20:50:52–20:52:05 — vierte Skriptfassung, eine Runde: `smart` (20:50:52,
+  `auto_model` 8 um 20:51:05), `store_solar`, `manual`, `smart_charging`,
+  `off` (20:52:05); `auto_model` fällt um 20:52:07 auf 0.
+- **20:52:15 — L2 lädt, 20:52:17 L3**, nach 10 s beide über 1 kW. Abstand
+  `off` → Leistung: 10 Sekunden. Die Runde hatte rund 60 s `auto_model` 8 —
+  die lange Haltezeit ist damit widerlegt.
+- 20:52:17 — Betreiber stellt den Manager dauerhaft auf `store_solar`
+  („Solar laden"). `auto_model` geht um 20:52:21 wieder auf 8, die Geräte
+  laden trotzdem weiter mit je rund 1200 W aus dem Netz (HEMS-Zwangsladung).
+
+### Was daraus folgt
+
+Der Betreiber legt fest: **Die Lösung ist, den Zendure-Manager auf
+`store_solar` stehen zu lassen** statt auf `off`. Damit steht der Manager
+nicht mehr auf `off`, und die Freigabe-Automation (Bedingung „Manager
+`off`") feuert nicht mehr. Offen ist, ob `store_solar` den Stillstand
+tatsächlich verhindert — das Laden setzte heute schon vor dem Umstellen ein,
+nach dem Skript. Belegt ist bisher nur, dass `store_solar` die HEMS-Befehle
+(`ac_mode`, `input_limit`) für das Netzladen nicht blockiert.
+
 ## Zu tun
 
-- [ ] Nächster Stillstand: Wirkt die vierte Fassung mit nur rund 60 s
-      `auto_model` 8 vor `off`? Wenn ja, ist die Haltezeit widerlegt. Wenn
-      nein, `manual` vor `smart_charging` auf einige Minuten verlängern.
+- [x] Nächster Stillstand: Wirkt die vierte Fassung mit nur rund 60 s
+      `auto_model` 8 vor `off`? — Ja, am 28.09.2026 eine Runde, Laden 10 s
+      nach `off` (fünfter Befund). Die Haltezeit ist widerlegt.
+- [ ] Mit Manager dauerhaft auf `store_solar`: Tritt beim nächsten Wechsel
+      `entladen` → `laden` noch ein Stillstand auf? Und regelt der Manager in
+      `store_solar` beim Entladen oder bei Solarüberschuss gegen HEMS
+      (zweiter Regler auf demselben Gerät)?
 
 - [x] Beim nächsten Stillstand `script.hyper_2000_netzladen_freigeben`
       (dritte Fassung) ohne Vorlauf von Hand starten: Wirkt es auch, wenn
