@@ -1,0 +1,13 @@
+{
+  "blockedBy": [],
+  "completedDate": "2026-09-30",
+  "createdDate": "2026-09-30",
+  "description": "tasks/speicher-stillstand-nacht-090926.md beschreibt noch Skript und Freigabe-Automation. Stand 30.09.2026: manual blockiert das HEMS-Entladen (Betreiber beobachtet); einzige Automation hyper2000_manager_grundstellung setzt im HEMS-Auto-Modus store_solar bei Speicher-Zwangsladung, sonst off; Freigabe-Automation und script.hyper_2000_netzladen_freigeben gelöscht. Abnahme: sechster Befund ergänzt, offener Punkt zu manual beantwortet, Zu-tun-Liste auf den neuen Stand, TASKS.md-Index passt.",
+  "displayId": "T-001",
+  "id": "T-001",
+  "order": 10,
+  "phase": null,
+  "status": "complete",
+  "title": "Aufgabendatei Speicher-Stillstand: Manager-Regel vom 30.09.2026 nachziehen",
+  "type": "chore"
+}

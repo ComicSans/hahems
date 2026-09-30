@@ -312,17 +312,52 @@ Fünfte Fassung des Skripts (28.09.2026): Nach den Runden schaltet es den
 Manager auf `off` und 5 s später auf die Grundstellung. Die Runden selbst enden weiter mit `off`, weil das Laden
 bisher immer erst nach `off` einsetzte.
 
+## Sechster Befund: 30.09.2026 — `manual` blockiert das Entladen
+
+Mit der Grundstellung vom 28.09. stand der Manager außerhalb der
+Zwangsladung auf `manual`. Der Betreiber beobachtet am 30.09.2026: Die Akkus
+entladen nicht mehr, obwohl HEMS im Auto-Modus entladen will. Der Manager hält
+die Geräte in `manual` auf `manual_power` (0 W) und überschreibt die Wege, über
+die HEMS stellt (`ac_mode`, `output_limit`). Damit ist die offene Frage zu
+`manual` beantwortet: ja, `manual` ist ein zweiter Regler und blockiert HEMS.
+
+### Was daraus folgt
+
+Neue Regel des Betreibers (30.09.2026), umgesetzt in der einzigen verbliebenen
+HA-Automation `hyper2000_manager_grundstellung` („Hyper 2000 –
+Manager-Grundstellung"):
+
+- Nur solange `select.hems_modus` auf `auto` oder `invers-auto` steht.
+- `store_solar`, während `switch.heizungskeller_hems_speicher_zwangsladung`
+  an ist — die Lösung für den Netzlade-Stillstand aus dem fünften Befund.
+- Sonst `off`: Nur so hat HEMS die Hyper 2000 allein. Dieser Weg hat vor der
+  Speicher-Zwangsladung immer funktioniert; das Problem war nur das Laden aus
+  dem Netz.
+- Auslöser: Wechsel der Zwangsladung, Wechsel von HEMS auf `auto`/`invers-auto`,
+  HA-Start, und jede Änderung am Manager (nach 30 s wird eine Handänderung
+  zurückgesetzt). In `beobachten`/`aus` fasst die Automation den Manager nicht an.
+
+Gelöscht am 30.09.2026: die Freigabe-Automation
+`automation.hyper_2000_netzladen_nach_stillstand_freigeben` und
+`script.hyper_2000_netzladen_freigeben`. Der Betreiber will genau eine
+Automation. Damit gibt es keinen automatischen Rettungsweg mehr, falls
+`store_solar` den Stillstand doch nicht verhindert.
+
 ## Zu tun
 
 - [x] Nächster Stillstand: Wirkt die vierte Fassung mit nur rund 60 s
       `auto_model` 8 vor `off`? — Ja, am 28.09.2026 eine Runde, Laden 10 s
       nach `off` (fünfter Befund). Die Haltezeit ist widerlegt.
-- [ ] Mit Manager auf `store_solar` während der Zwangsladung: Tritt beim nächsten Wechsel
-      `entladen` → `laden` noch ein Stillstand auf? Und regelt der Manager in
-      `store_solar` beim Entladen oder bei Solarüberschuss gegen HEMS
-      (zweiter Regler auf demselben Gerät)? Ebenso für `manual` außerhalb
-      der Zwangsladung: Hält der Manager mit `manual_power` 0 die Geräte fest
-      und verhindert HEMS-Entladen oder PV-Laden?
+- [ ] Mit Manager auf `store_solar` während der Zwangsladung: Tritt beim
+      nächsten Wechsel `entladen` → `laden` noch ein Stillstand auf? Ein
+      Skript als Rettungsweg gibt es seit 30.09.2026 nicht mehr — tritt der
+      Stillstand wieder auf, ist die Regel der Automation
+      `hyper2000_manager_grundstellung` zu überdenken. Und regelt der Manager
+      in `store_solar` gegen HEMS, falls HEMS während der Zwangsladung
+      entladen will?
+- [x] `manual` außerhalb der Zwangsladung: Hält der Manager mit
+      `manual_power` 0 die Geräte fest und verhindert HEMS-Entladen? — Ja,
+      30.09.2026 (sechster Befund). Seitdem `off` außerhalb der Zwangsladung.
 
 - [x] Beim nächsten Stillstand `script.hyper_2000_netzladen_freigeben`
       (dritte Fassung) ohne Vorlauf von Hand starten: Wirkt es auch, wenn
@@ -335,6 +370,7 @@ bisher immer erst nach `off` einsetzte.
       Trigger alle 10 Minuten erneut, weil der Template-Trigger je Stillstand
       nur einmal feuert. Bedingungen: Stillstand-Template wahr, Manager `off`,
       Skript läuft nicht, Regelung seit mindestens 2 min unverändert.
+      Automation und Skript am 30.09.2026 gelöscht (sechster Befund).
       Betreiber-Automation, nicht HEMS.
 
 - [ ] Beim nächsten natürlichen Stillstand prüfen, ob der Nachtritt allein
