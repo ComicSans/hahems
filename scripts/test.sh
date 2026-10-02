@@ -9,5 +9,5 @@ set -euo pipefail
 # venv anlegen, wenn es fehlt; Abhängigkeiten bei jedem Lauf abgleichen (uv ist dabei schnell),
 # damit geänderte Abhängigkeiten und eine halbe .venv ohne pytest nicht rot machen.
 [ -d .venv ] || uv venv -q
-uv pip install -q -r requirements_test.txt
+uv pip install -q --python .venv/bin/python -r requirements_test.txt
 .venv/bin/pytest -q "$@"
