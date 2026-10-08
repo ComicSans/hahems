@@ -261,3 +261,5 @@ funktioniert unabhängig davon.
 Jedes Konfigurationsfeld ist im Formular selbst erklärt — Label und Hilfetext
 stehen in den Übersetzungsdateien und werden von `test_config_ws_labels.py`
 auf Vollständigkeit geprüft.
+
+Ich übernehme keinerlei Haftung für den Einsatz oder auftretende Schäden am Gerät oder Haus. 
