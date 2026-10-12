@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Aus den Linsen-Reviews 12.10.: T-002 cc-2 (_storage_control: Kaltreserve-Leistungslatch und Lade-Zuteilung auf Modulebene ziehen); T-003 tq-2 (Akku-Freigabe beim Verlassen von auto als reine Funktion testen); T-004 cc-2 (HemsData.speicher_zwang/zwang_aktiv an battery_force angleichen, unique_id/changelog-Schlüssel bewusst alt), tq-1 (Test der Registry-Migration des alten Notstromreserve-Schalters), tq-4 (Ladevorrang unter Netzbezug mit Wallbox kombiniert testen).",
+  "id": "T-005",
+  "order": 40,
+  "phase": "p0",
+  "status": "open",
+  "title": "Offene Review-Befunde T-002 bis T-004 nacharbeiten",
+  "type": "chore"
+}
