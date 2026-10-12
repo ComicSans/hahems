@@ -1,13 +1,13 @@
 {
   "blockedBy": [],
-  "completedDate": null,
+  "completedDate": "2026-10-12",
   "createdDate": "2026-10-12",
   "description": "Astrid 12.10. Fix 1 + Entscheidung Tobias: StorageSetpoint trägt ziel_soc; Actuator schreibt soc_set je Speicher statt globalem Deckel; Kaltreserve-Ziel konfigurierbar (Vorgabe 100). Behebt Ratschen-Takt der Reserve am 2-%-Schritt.",
   "displayId": "T-007",
   "id": "T-007",
   "order": 60,
   "phase": "p0",
-  "status": "inprogress",
+  "status": "complete",
   "title": "Ziel-SoC je Speicher an das Gerät (Kaltreserve eigenes Ziel, einstellbar, Vorgabe 100 %)",
   "type": "feature"
 }

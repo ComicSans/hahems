@@ -1,13 +1,13 @@
 {
   "blockedBy": [],
-  "completedDate": null,
+  "completedDate": "2026-10-12",
   "createdDate": "2026-10-12",
   "description": "Astrid Fix 3: arbeitet = p / Σ p_gemessen > LEAD_SHARE statt p > 0.5·gesamt_neu; sonst nach Parallel→Greedy beide 'führend'.",
   "displayId": "T-009",
   "id": "T-009",
   "order": 80,
   "phase": "p0",
-  "status": "inprogress",
+  "status": "complete",
   "title": "Führungs-Hysterese: Anteil aus gemessener Summenleistung",
   "type": "task"
 }
