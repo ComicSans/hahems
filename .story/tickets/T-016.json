@@ -1,0 +1,26 @@
+{
+  "blockedBy": [],
+  "completedDate": "2026-10-12",
+  "createdDate": "2026-10-12",
+  "description": "Tobias 12.10.: Release nach RELEASING.md. 3.0.0 wegen entfallener Modi/Schalter (Anpassungsbedarf).",
+  "displayId": "T-016",
+  "id": "T-016",
+  "officeReview": {
+    "agent": "Ronja",
+    "lens": [
+      "security",
+      "error-handling",
+      "clean-code",
+      "concurrency"
+    ],
+    "reviewId": "lens-mv5f1j6t",
+    "role": "reviewer",
+    "since": 1791819459,
+    "stage": "CODE_REVIEW"
+  },
+  "order": 150,
+  "phase": "p0",
+  "status": "complete",
+  "title": "Release 3.0.0 (HACS)",
+  "type": "chore"
+}
