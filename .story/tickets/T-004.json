@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Tobias 12.10.: Speicher als Notstromreserve und Zwangsladen sind praktisch gleich. Nur noch ein Eintrag, der die Akkus auflädt, unabhängig vom Verbrauch.",
+  "id": "T-004",
+  "order": 30,
+  "phase": "p0",
+  "status": "open",
+  "title": "Notstromreserve und Speicher-Zwangsladung zu einem Schalter „Akkus aufladen“ zusammenführen",
+  "type": "feature"
+}

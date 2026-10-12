@@ -1,0 +1,13 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Tobias 12.10.: Steuerlogik aus https://github.com/Zendure/Zendure-HA/wiki/Power-distribution-strategy (und manager.py power_charge/power_discharge) für die HEMS-Speicherzuteilung (strategies/battery.py) übernehmen. Anlage: zwei Akkus je 8 kWh, ein 2-kWh-Akku als Notfall zum Dazuspringen. Konzept erst mit Tobias abstimmen, dann bauen.",
+  "displayId": "T-002",
+  "id": "T-002",
+  "order": 10,
+  "phase": "p0",
+  "status": "inprogress",
+  "title": "Speicher-Zuteilung nach Zendure-Verteilstrategie (2× 8 kWh + 2-kWh-Notfallakku) – Konzept",
+  "type": "feature"
+}

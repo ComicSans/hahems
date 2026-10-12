@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Tobias 12.10.: Beim Betriebsmodus nur noch beobachten und auto; invers-auto und aus entfallen (Migration bestehender Einträge).",
+  "id": "T-003",
+  "order": 20,
+  "phase": "p0",
+  "status": "open",
+  "title": "Betriebsmodus auf „beobachten“ und „auto“ reduzieren (invers-auto und aus entfernen)",
+  "type": "feature"
+}

@@ -3,7 +3,7 @@
   "date": "2026-09-30",
   "phases": [
     {
-      "description": "Initial project setup.",
+      "description": "HEMS-Speicherregelung für die Anlage mit 2 × 8 kWh und 2-kWh-Notfallakku nach der Zendure-Verteilstrategie umbauen.",
       "id": "p0",
       "label": "PHASE 0",
       "name": "Setup"
