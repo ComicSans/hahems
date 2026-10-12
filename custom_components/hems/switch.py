@@ -28,6 +28,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
+from .aufladen import alte_reserve_unique_id, aufladen_hinweis
 from .const import DOMAIN
 from .coordinator import HemsCoordinator
 
@@ -51,7 +52,7 @@ async def async_setup_entry(
     # stünde er dauerhaft als „nicht verfügbar" in der Geräteseite.
     ent_reg = er.async_get(hass)
     if alt := ent_reg.async_get_entity_id(
-        "switch", DOMAIN, f"{entry.entry_id}_notstromreserve"
+        "switch", DOMAIN, alte_reserve_unique_id(entry.entry_id)
     ):
         _LOGGER.info(
             "HEMS: Schalter „Speicher als Notstromreserve“ entfällt (%s); "
@@ -146,14 +147,9 @@ class HemsBatteryForceSwitch(SwitchEntity, RestoreEntity):
             persistent_notification.async_dismiss(self.hass, self._hinweis_id)
             return
         seit = dt_util.parse_datetime(self._seit) if self._seit else None
-        zeit = dt_util.as_local(seit).strftime("%d.%m. %H:%M") if seit else "unbekannt"
+        titel, text = aufladen_hinweis(dt_util.as_local(seit) if seit else None)
         persistent_notification.async_create(
-            self.hass,
-            f"„Akkus aufladen“ ist seit {zeit} eingeschaltet. HEMS lädt die "
-            "Akkus mit voller Leistung, notfalls aus dem Netz, und hält sie "
-            "voll, bis der Schalter ausgeschaltet wird.",
-            title="HEMS: Akkus aufladen aktiv",
-            notification_id=self._hinweis_id,
+            self.hass, text, title=titel, notification_id=self._hinweis_id
         )
 
     async def async_added_to_hass(self) -> None:

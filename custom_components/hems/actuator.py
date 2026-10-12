@@ -592,6 +592,15 @@ class Actuator:
         """Quittungs-Uhr, Nachtritt-Backoff und Meldeflagge eines Speichers
         zurücksetzen — „kein offener Befehl" oder „Auftrag fertig"."""
         self._leistung_seit.pop(name, None)
+        self._meldung_zuruecksetzen(name)
+
+    def _uhr_neu_starten(self, name: str, laden: bool, jetzt: datetime) -> None:
+        """Quittungs-Uhr ab jetzt neu laufen lassen — neuer Befehl
+        (Richtungswechsel) oder der Speicher folgt wieder."""
+        self._leistung_seit[name] = (laden, jetzt)
+        self._meldung_zuruecksetzen(name)
+
+    def _meldung_zuruecksetzen(self, name: str) -> None:
         self._nachtritt_zuletzt.pop(name, None)
         self._speicher_gemeldet.discard(name)
 
@@ -686,15 +695,11 @@ class Actuator:
             # Ohne das Zurücksetzen bliebe die Meldung der alten Richtung stehen
             # und unterdrückte die Warnung für die neue.
             vorher = (laden_soll, now)
-            self._leistung_seit[s.name] = vorher
-            self._nachtritt_zuletzt.pop(s.name, None)
-            self._speicher_gemeldet.discard(s.name)
+            self._uhr_neu_starten(s.name, laden_soll, now)
         gemessen = self._num_state(s.power_entity)
         if speicher_folgt(gemessen, laden=laden_soll):
             # Es fließt — die Uhr läuft erst wieder ab der nächsten Lücke.
-            self._leistung_seit[s.name] = (laden_soll, now)
-            self._nachtritt_zuletzt.pop(s.name, None)
-            self._speicher_gemeldet.discard(s.name)
+            self._uhr_neu_starten(s.name, laden_soll, now)
             return False
         stumm_seit = now - vorher[1]
         nachtreten = nachtritt_faellig(

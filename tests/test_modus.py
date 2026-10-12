@@ -175,3 +175,29 @@ def test_kaltreserve_bekommt_eigenen_ziel_soc():
         geraete_ziel_soc_grundlage(kaltreserve=False, reserve_ziel_soc=100.0, deckel_soc=None)
         is None
     )
+
+
+def test_aufladen_hinweis_nennt_den_einschaltzeitpunkt():
+    from datetime import datetime
+
+    from hems.aufladen import aufladen_hinweis
+
+    titel, text = aufladen_hinweis(datetime(2026, 10, 12, 21, 5))
+    assert "Akkus aufladen" in titel
+    assert "seit 12.10. 21:05" in text
+    assert "notfalls aus dem Netz" in text
+    _, einstellig = aufladen_hinweis(datetime(2026, 1, 2, 3, 4))
+    assert "seit 02.01. 03:04" in einstellig
+    _, ohne = aufladen_hinweis(None)
+    assert "seit unbekannt" in ohne
+
+
+def test_alte_reserve_unique_id_passt_zum_frueheren_schalter():
+    # Der frühere Notstromreserve-Schalter trug genau diese unique_id
+    # (switch.py vor Commit 640e7f6: f"{entry_id}_notstromreserve"); nur
+    # dann findet die Migration seinen Registry-Eintrag.
+    from hems.aufladen import alte_reserve_unique_id
+
+    assert alte_reserve_unique_id("abc123") == "abc123_notstromreserve"
+    quelle = (BASIS / "switch.py").read_text(encoding="utf-8")
+    assert "alte_reserve_unique_id(" in quelle

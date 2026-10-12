@@ -1,6 +1,7 @@
 """Koordinator: liest Ist-Werte und Prognosen, ruft den Planner auf."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta
 
@@ -79,6 +80,9 @@ from .strategies.types import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Höchste Wartezeit des Entladens auf einen laufenden Aktuierungszyklus (T-015).
+_FREIGABE_WARTEN_S = 30
 
 STATS_CACHE = timedelta(hours=6)
 WEATHER_CACHE = timedelta(minutes=30)
@@ -414,6 +418,14 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # Vorheriger Modus, um den Übergang auto→(beobachten|aus) zu erkennen
         # und den Akku genau einmal freizugeben.
         self._prev_mode: str = MODE_OBSERVE
+        # Aktuierung und Freigabe nie verschränkt (T-015): Überlappen ein
+        # Intervall- und ein Sofort-Refresh oder das Entladen der Integration
+        # mit einem laufenden apply(), könnte sonst ein veralteter Zyklus nach
+        # der Freigabe noch Sollwerte schreiben.
+        self._aktuierung = asyncio.Lock()
+        # Nach der Freigabe beim Entladen der Integration wird nichts mehr
+        # gestellt, auch nicht von einem Zyklus, der schon lief.
+        self._endgueltig_freigegeben = False
         # Signatur des letzten Config-Checks, damit nur bei Änderung geloggt wird.
         self._check_signature: tuple | None = None
         # Signatur der zuletzt zugestellten Meldungen (verhindert Zyklus-Lärm).
@@ -1392,31 +1404,34 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             logging.INFO if empfehlung_log != self._letzte_empfehlung else logging.DEBUG
         )
         self._letzte_empfehlung = empfehlung_log
-        # Modus einmal lesen: Ein Wechsel während der Aktuierung (await) soll
-        # nicht dazu führen, dass `_prev_mode` den neuen Wert übernimmt, ohne
-        # dass der Wechsel behandelt wurde — dann fiele die Freigabe aus.
-        modus = self.mode
-        aktion = modus_aktion(self._prev_mode, modus, MODES_ACTUATING)
-        if aktion == "stellen":
-            _LOGGER.log(log_level, "HEMS-%s: %s", modus, data.plan.empfehlung)
-            await self._actuator.apply(reg, data.plan)
-            # Während der Aktuierung auf beobachten gewechselt? Dann sofort
-            # freigeben, statt die eben geschriebenen Sollwerte bis zum
-            # nächsten Zyklus stehen zu lassen.
-            if self.mode not in MODES_ACTUATING:
-                _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
-                await self._actuator.release_battery(reg)
-                modus = self.mode
-        else:
-            if modus == MODE_OBSERVE:
-                _LOGGER.log(log_level, "HEMS-Empfehlung: %s", data.plan.empfehlung)
-            # Verlassen des Auto-Modus (→ beobachten): den Akku einmalig
-            # freigeben, damit er nicht mit der letzten Rate blind weiterläuft.
-            # WW/WP/EV bleiben unangetastet.
-            if aktion == "freigeben":
-                _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
-                await self._actuator.release_battery(reg)
-        self._prev_mode = modus
+        async with self._aktuierung:
+            # Modus einmal lesen: Ein Wechsel während der Aktuierung (await) soll
+            # nicht dazu führen, dass `_prev_mode` den neuen Wert übernimmt, ohne
+            # dass der Wechsel behandelt wurde — dann fiele die Freigabe aus.
+            modus = self.mode
+            aktion = modus_aktion(self._prev_mode, modus, MODES_ACTUATING)
+            if self._endgueltig_freigegeben:
+                aktion = None
+            if aktion == "stellen":
+                _LOGGER.log(log_level, "HEMS-%s: %s", modus, data.plan.empfehlung)
+                await self._actuator.apply(reg, data.plan)
+                # Während der Aktuierung auf beobachten gewechselt? Dann sofort
+                # freigeben, statt die eben geschriebenen Sollwerte bis zum
+                # nächsten Zyklus stehen zu lassen.
+                if self.mode not in MODES_ACTUATING:
+                    _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
+                    await self._actuator.release_battery(reg)
+                    modus = self.mode
+            else:
+                if modus == MODE_OBSERVE:
+                    _LOGGER.log(log_level, "HEMS-Empfehlung: %s", data.plan.empfehlung)
+                # Verlassen des Auto-Modus (→ beobachten): den Akku einmalig
+                # freigeben, damit er nicht mit der letzten Rate blind weiterläuft.
+                # WW/WP/EV bleiben unangetastet.
+                if aktion == "freigeben":
+                    _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
+                    await self._actuator.release_battery(reg)
+            self._prev_mode = modus
 
         # Entscheidungsänderungen für den Logs-Reiter fortschreiben.
         self._record_decisions(data)
@@ -1451,5 +1466,26 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         Zwangsladung also Netzbezug bis zum vollen Akku. Im Beobachtungsmodus
         gibt es nichts freizugeben; dort hat HEMS nichts gestellt.
         """
-        if self.mode in MODES_ACTUATING:
-            await self._actuator.release_battery(self.registry)
+        # Auf einen laufenden Zyklus höchstens begrenzt warten: Hängen Geräte,
+        # soll das Entladen nicht minutenlang hinter apply() stehen. Dann wird
+        # ohne Sperre freigegeben — die Freigabe ist idempotent (0/0).
+        # Freigegeben wird auch, wenn der Modus schon auf beobachten steht,
+        # der Wechsel aber noch nicht behandelt war (`_prev_mode` noch auto).
+        self._endgueltig_freigegeben = True
+        try:
+            async with asyncio.timeout(_FREIGABE_WARTEN_S):
+                await self._aktuierung.acquire()
+        except TimeoutError:
+            _LOGGER.warning(
+                "HEMS: Aktuierung hängt seit %d s – Akku wird ohne Warten freigegeben",
+                _FREIGABE_WARTEN_S,
+            )
+            gesperrt = False
+        else:
+            gesperrt = True
+        try:
+            if self.mode in MODES_ACTUATING or self._prev_mode in MODES_ACTUATING:
+                await self._actuator.release_battery(self.registry)
+        finally:
+            if gesperrt:
+                self._aktuierung.release()

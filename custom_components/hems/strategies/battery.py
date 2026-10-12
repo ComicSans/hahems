@@ -41,6 +41,7 @@ from ..const import (
 from .types import (
     ChargeRamp,
     ControlResult,
+    PlanFlags,
     PlanInput,
     PlanResult,
     StorageSetpoint,
@@ -209,6 +210,223 @@ def _richtung_gehalten(
     res.flags.speicher_richtung = richtung
     res.flags.speicher_richtung_seit = inp.now
     return False
+
+
+def _verteile_entladen(
+    anteile: list[tuple[StorageState, float]], gesamt: float
+) -> dict[str, float]:
+    """Entladeleistung greedy zuteilen: die Einheit mit der meisten
+    verfügbaren Energie zuerst voll ausschöpfen, dann die nächste. Bewusst
+    NICHT proportional zerstäuben — bei N Einheiten läge sonst jeder Anteil
+    unter dem Mindest-Setpoint und würde auf 0 gerundet (Totzone ~N×min).
+    Das Bündeln reduziert zugleich das Schütz-/Umschalt-Flattern: es
+    entlädt möglichst nur ein Akku zur Zeit (Verschleiß der Akku-Elektronik).
+
+    Auswahl-Hysterese: Gereiht wird nach der verfügbaren Energie in Stufen
+    von LEAD_STEP_KWH; innerhalb derselben Stufe behält der aktuell
+    FÜHRENDE Speicher den Vorrang, damit die Führung nicht bei jedem
+    minimalen SoC-Crossover rotiert. Die Stufe verschiebt NUR die
+    Reihenfolge; die Teilnahme-Schranke unten prüft weiter den
+    rohen `anteil` (Reserve-Grenze, Kaltreserve-Ausschluss bleiben
+    unberührt). Reicht ein Speicher nicht (soll > seine Grenze), füllt die
+    Schleife den nächsten weiter auf.
+
+    Führung heißt: die Einheit trägt den Hauptteil der Leistung — absolut
+    über LEAD_POWER_W UND über dem Anteil LEAD_SHARE am Gesamtsoll. Die
+    absolute Schwelle allein genügt nicht, sobald gesplittet werden muss:
+    Dann liegt auch der Mitläufer über ihr, beide gelten als Führung, der
+    Vorrang hebt sich auf, und die Rangfolge kippt bei jedem 1-%-Crossover.
+    Über LEAD_SHARE = 0.5 kommt nur eine Einheit, der Vorrang bleibt eindeutig
+    (Begründung samt Messung bei CONTROL_LEAD_SHARE)."""
+
+    # Führung am GEMESSENEN Anteil (T-009): Nach einem 600/600-Split fällt
+    # das neue Soll etwa auf 800 W; gegen `gesamt` gerechnet lägen beide
+    # über der Hälfte, beide „führten", und die Rangfolge kippte beim
+    # nächsten 1-%-Crossover. Gegen die Summe der Messwerte kann nur eine
+    # Einheit über LEAD_SHARE liegen.
+    gemessen = sum(max(0.0, s.power_w or 0.0) for s, _ in anteile)
+
+    def _rang(paar: tuple[StorageState, float]) -> tuple[bool, float, bool, float]:
+        s, anteil = paar
+        p = s.power_w or 0.0
+        arbeitet = p > CONTROL_LEAD_POWER_W and p > CONTROL_LEAD_SHARE * gemessen
+        # Kleine Toleranz gegen Gleitkomma-Reste genau an der Stufengrenze
+        # (0.55 * 8 kWh ergibt sonst 4.3999… und fiele eine Stufe tiefer).
+        stufe = math.floor(anteil / CONTROL_LEAD_STEP_KWH + 1e-9)
+        # Kaltreserve nie vorn (T-011): sie trägt nur den Rest.
+        return (not s.cold_reserve, stufe, arbeitet and anteil > 0, anteil)
+
+    rest = gesamt
+    watts: dict[str, float] = {s.name: 0.0 for s, _ in anteile}
+    for s, anteil in sorted(anteile, key=_rang, reverse=True):
+        watt = min(rest, s.max_discharge_w)
+        if anteil <= 0 or watt < CONTROL_MIN_SETPOINT_W:
+            continue
+        watts[s.name] = watt
+        rest -= watt
+    return watts
+
+
+def _verteile_proportional(
+    anteile: list[tuple[StorageState, float]], gesamt: float, *, laden: bool
+) -> dict[str, float]:
+    """Leistung PARALLEL auf mehrere Akkus verteilen — gewichtet nach
+    `anteil` × Höchstleistung der Einheit (Zendure-Gewichtung; `anteil` ist
+    beim Laden die freie Kapazität, beim Entladen die verfügbare Energie
+    über der Reserve). Das gleicht die SoCs an und gibt der stärkeren
+    Einheit den größeren Teil. Verteilt wird nur auf so viele Einheiten,
+    dass jede mindestens CONTROL_SPLIT_MIN_W trägt — darunter arbeitet der
+    Wandler im ineffizienten Teillastbereich, und bei N Einheiten fiele
+    jeder Anteil sonst unter den Mindest-Setpoint und würde auf 0 gerundet
+    (die Leistung liefe trotz freiem Akku ins bzw. aus dem Netz). Reicht
+    sie nur für weniger Einheiten, fällt die Verteilung schrittweise auf
+    die Akkus mit dem größten Anteil zurück — aber nur, solange die
+    verbleibenden das Ganze aufnehmen können; sonst ginge der Rest ins
+    Netz, und dann ist ein Teillast-Mitläufer das kleinere Übel.
+
+    Beim LADEN ist das immer die richtige Form: mehrere Akkus gleichzeitig
+    zu laden ist schonender und schneller, und Ladeflattern ist unkritisch
+    (kein Richtungswechsel). Beim ENTLADEN erst ab 85 % des Einzelmaximums
+    (CONTROL_PARALLEL_ON) — bis dahin bündelt `_verteile_entladen` bewusst
+    auf eine Einheit."""
+
+    def _grenze(s: StorageState) -> float:
+        return s.max_charge_w if laden else s.max_discharge_w
+
+    def _fuellen(einheiten: list[tuple[StorageState, float]]) -> dict[str, float]:
+        # Proportional zum Anteil, iterativ auf die Leistungsgrenze der
+        # Einheit gedeckelt: was eine gedeckelte Einheit nicht aufnimmt,
+        # fließt an die übrigen.
+        verteilt = {s.name: 0.0 for s, _ in einheiten}
+        # Gewicht > 0 statt nur Anteil > 0: eine Einheit mit Höchstleistung
+        # 0 hätte sonst Gewicht 0, und frei_summe könnte 0 werden.
+        aktiv = [
+            (s, f * _grenze(s)) for s, f in einheiten if f > 0 and _grenze(s) > 0
+        ]
+        rest = gesamt
+        while rest > 1e-6 and aktiv:
+            frei_summe = sum(f for _, f in aktiv)
+            basis = rest
+            naechste: list[tuple[StorageState, float]] = []
+            gedeckelt = False
+            for s, f in aktiv:
+                zusatz = basis * f / frei_summe
+                platz = _grenze(s) - verteilt[s.name]
+                if zusatz >= platz:
+                    verteilt[s.name] += platz
+                    rest -= platz
+                    gedeckelt = True
+                else:
+                    verteilt[s.name] += zusatz
+                    rest -= zusatz
+                    naechste.append((s, f))
+            aktiv = naechste
+            if not gedeckelt:
+                break
+        return verteilt
+
+    # Kandidaten mit Anteil > 0, größter Anteil zuerst (beim Laden also der
+    # leerste Akku, beim Entladen der vollste).
+    kandidaten = sorted(
+        [(s, a) for s, a in anteile if a > 0], key=lambda p: p[1], reverse=True
+    )
+    watts: dict[str, float] = {s.name: 0.0 for s, _ in anteile}
+    while kandidaten:
+        verteilt = _fuellen(kandidaten)
+        positive = [w for w in verteilt.values() if w > 0]
+        # Kleinster gestellter Anteil zu klein? Schwächste Einheit
+        # (kleinster Anteil = letzte im sortierten Feld) fallen lassen und
+        # erneut auf die übrigen verteilen — sofern die übrigen das Ganze
+        # tragen können. Unter dem Mindest-Setpoint wird immer gestrichen
+        # (der Anteil würde ohnehin auf 0 gerundet).
+        zu_klein = bool(positive) and len(kandidaten) > 1 and (
+            min(positive) < CONTROL_MIN_SETPOINT_W
+            or (
+                min(positive) < CONTROL_SPLIT_MIN_W
+                and sum(_grenze(s) for s, _ in kandidaten[:-1]) >= gesamt
+            )
+        )
+        if zu_klein:
+            # Die Einheit mit der kleinsten GESTELLTEN Leistung streichen
+            # (T-011) — nicht die mit dem kleinsten Anteil: gewichtet wird
+            # nach Anteil × Höchstleistung, beides fällt nicht zusammen.
+            # Bei Gleichstand fällt die hintere (kleinerer Anteil).
+            kleinste = min(
+                (k[0].name for k in reversed(kandidaten) if verteilt[k[0].name] > 0),
+                key=lambda n: verteilt[n],
+            )
+            kandidaten = [k for k in kandidaten if k[0].name != kleinste]
+            continue
+        for name, w in verteilt.items():
+            watts[name] = w if w >= CONTROL_MIN_SETPOINT_W else 0.0
+        break
+    return watts
+
+
+def _verteile(
+    anteile: list[tuple[StorageState, float]],
+    gesamt: float,
+    laden: bool,
+    *,
+    parallel: bool = False,
+) -> list[StorageSetpoint]:
+    """Gesamtleistung je Speicher zuteilen. Laden verteilt immer parallel
+    (proportional zur freien Kapazität), Entladen greedy mit Auswahl-
+    Hysterese (ein Akku zur Zeit, gegen Verschleiß) — außer `parallel`,
+    dann anteilig wie beim Laden. Ein Rest unter dem Mindest-Setpoint
+    bleibt ungestellt — konservativ: nie mehr kommandieren als der gain-/
+    offset-gedämpfte Zielwert hergibt (kein Netzbezug)."""
+    watts = (
+        _verteile_proportional(anteile, gesamt, laden=laden)
+        if laden or parallel
+        else _verteile_entladen(anteile, gesamt)
+    )
+    return [
+        StorageSetpoint(name=s.name, watt=round(watts[s.name]))
+        for s, _a in anteile
+    ]
+
+
+def _entlade_zuteilung(
+    primaer: list[tuple[StorageState, float]],
+    reserve_teil: list[tuple[StorageState, float]],
+    primaer_max: float,
+    soll: float,
+    flags: PlanFlags,
+) -> list[StorageSetpoint]:
+    """Entladen mit Kaltreserve als Rest (T-011, Tobias 12.10.2026).
+
+    Die übrigen Speicher tragen zuerst — bei Leistungsspitze nur bis zu
+    ihrer Auslastungsgrenze (RESERVE_POWER_ON × Σ Höchstleistung), damit
+    die 85-%-Regel gegen Wärme auch hier gilt. Die Reserve bekommt den
+    Rest; was auch sie nicht trägt, füllen die übrigen bis an ihre Grenze
+    auf. Ein Rest unter dem Mindest-Setpoint bleibt bei den übrigen statt
+    die Reserve für ein paar Watt anlaufen zu lassen.
+    """
+    parallel = flags.parallel_entladen
+    if not any(a > 0 for _, a in reserve_teil):
+        return _verteile(primaer + reserve_teil, soll, laden=False, parallel=parallel)
+    deckel = soll
+    if flags.kaltreserve_leistung and primaer_max > 0:
+        deckel = min(soll, RESERVE_POWER_ON * primaer_max)
+    z_pri = _verteile(primaer, deckel, laden=False, parallel=parallel) if primaer else []
+    rest = soll - sum(z.watt for z in z_pri)
+    z_res: list[StorageSetpoint] = []
+    if rest >= CONTROL_MIN_SETPOINT_W:
+        z_res = _verteile(reserve_teil, rest, laden=False)
+        offen = soll - sum(z.watt for z in z_pri) - sum(z.watt for z in z_res)
+        if offen >= CONTROL_MIN_SETPOINT_W and primaer:
+            z_pri = _verteile(
+                primaer, soll - sum(z.watt for z in z_res),
+                laden=False, parallel=parallel,
+            )
+    elif primaer:
+        z_pri = _verteile(primaer, soll, laden=False, parallel=parallel)
+    nach_name = {z.name: z for z in z_pri + z_res}
+    return [
+        nach_name.get(s.name, StorageSetpoint(name=s.name, watt=0))
+        for s, _ in primaer + reserve_teil
+    ]
 
 
 def _storage_control(
@@ -444,178 +662,6 @@ def _storage_control(
         zwang_aktiv=inp.battery_force and bool(zwang_offen),
     )
 
-    def _verteile_entladen(
-        anteile: list[tuple[StorageState, float]], gesamt: float
-    ) -> dict[str, float]:
-        """Entladeleistung greedy zuteilen: die Einheit mit der meisten
-        verfügbaren Energie zuerst voll ausschöpfen, dann die nächste. Bewusst
-        NICHT proportional zerstäuben — bei N Einheiten läge sonst jeder Anteil
-        unter dem Mindest-Setpoint und würde auf 0 gerundet (Totzone ~N×min).
-        Das Bündeln reduziert zugleich das Schütz-/Umschalt-Flattern: es
-        entlädt möglichst nur ein Akku zur Zeit (Verschleiß der Akku-Elektronik).
-
-        Auswahl-Hysterese: Gereiht wird nach der verfügbaren Energie in Stufen
-        von LEAD_STEP_KWH; innerhalb derselben Stufe behält der aktuell
-        FÜHRENDE Speicher den Vorrang, damit die Führung nicht bei jedem
-        minimalen SoC-Crossover rotiert. Die Stufe verschiebt NUR die
-        Reihenfolge; die Teilnahme-Schranke unten prüft weiter den
-        rohen `anteil` (Reserve-Grenze, Kaltreserve-Ausschluss bleiben
-        unberührt). Reicht ein Speicher nicht (soll > seine Grenze), füllt die
-        Schleife den nächsten weiter auf.
-
-        Führung heißt: die Einheit trägt den Hauptteil der Leistung — absolut
-        über LEAD_POWER_W UND über dem Anteil LEAD_SHARE am Gesamtsoll. Die
-        absolute Schwelle allein genügt nicht, sobald gesplittet werden muss:
-        Dann liegt auch der Mitläufer über ihr, beide gelten als Führung, der
-        Vorrang hebt sich auf, und die Rangfolge kippt bei jedem 1-%-Crossover.
-        Über LEAD_SHARE = 0.5 kommt nur eine Einheit, der Vorrang bleibt eindeutig
-        (Begründung samt Messung bei CONTROL_LEAD_SHARE)."""
-
-        # Führung am GEMESSENEN Anteil (T-009): Nach einem 600/600-Split fällt
-        # das neue Soll etwa auf 800 W; gegen `gesamt` gerechnet lägen beide
-        # über der Hälfte, beide „führten", und die Rangfolge kippte beim
-        # nächsten 1-%-Crossover. Gegen die Summe der Messwerte kann nur eine
-        # Einheit über LEAD_SHARE liegen.
-        gemessen = sum(max(0.0, s.power_w or 0.0) for s, _ in anteile)
-
-        def _rang(paar: tuple[StorageState, float]) -> tuple[bool, float, bool, float]:
-            s, anteil = paar
-            p = s.power_w or 0.0
-            arbeitet = p > CONTROL_LEAD_POWER_W and p > CONTROL_LEAD_SHARE * gemessen
-            # Kleine Toleranz gegen Gleitkomma-Reste genau an der Stufengrenze
-            # (0.55 * 8 kWh ergibt sonst 4.3999… und fiele eine Stufe tiefer).
-            stufe = math.floor(anteil / CONTROL_LEAD_STEP_KWH + 1e-9)
-            # Kaltreserve nie vorn (T-011): sie trägt nur den Rest.
-            return (not s.cold_reserve, stufe, arbeitet and anteil > 0, anteil)
-
-        rest = gesamt
-        watts: dict[str, float] = {s.name: 0.0 for s, _ in anteile}
-        for s, anteil in sorted(anteile, key=_rang, reverse=True):
-            watt = min(rest, s.max_discharge_w)
-            if anteil <= 0 or watt < CONTROL_MIN_SETPOINT_W:
-                continue
-            watts[s.name] = watt
-            rest -= watt
-        return watts
-
-    def _verteile_proportional(
-        anteile: list[tuple[StorageState, float]], gesamt: float, *, laden: bool
-    ) -> dict[str, float]:
-        """Leistung PARALLEL auf mehrere Akkus verteilen — gewichtet nach
-        `anteil` × Höchstleistung der Einheit (Zendure-Gewichtung; `anteil` ist
-        beim Laden die freie Kapazität, beim Entladen die verfügbare Energie
-        über der Reserve). Das gleicht die SoCs an und gibt der stärkeren
-        Einheit den größeren Teil. Verteilt wird nur auf so viele Einheiten,
-        dass jede mindestens CONTROL_SPLIT_MIN_W trägt — darunter arbeitet der
-        Wandler im ineffizienten Teillastbereich, und bei N Einheiten fiele
-        jeder Anteil sonst unter den Mindest-Setpoint und würde auf 0 gerundet
-        (die Leistung liefe trotz freiem Akku ins bzw. aus dem Netz). Reicht
-        sie nur für weniger Einheiten, fällt die Verteilung schrittweise auf
-        die Akkus mit dem größten Anteil zurück — aber nur, solange die
-        verbleibenden das Ganze aufnehmen können; sonst ginge der Rest ins
-        Netz, und dann ist ein Teillast-Mitläufer das kleinere Übel.
-
-        Beim LADEN ist das immer die richtige Form: mehrere Akkus gleichzeitig
-        zu laden ist schonender und schneller, und Ladeflattern ist unkritisch
-        (kein Richtungswechsel). Beim ENTLADEN erst ab 85 % des Einzelmaximums
-        (CONTROL_PARALLEL_ON) — bis dahin bündelt `_verteile_entladen` bewusst
-        auf eine Einheit."""
-
-        def _grenze(s: StorageState) -> float:
-            return s.max_charge_w if laden else s.max_discharge_w
-
-        def _fuellen(einheiten: list[tuple[StorageState, float]]) -> dict[str, float]:
-            # Proportional zum Anteil, iterativ auf die Leistungsgrenze der
-            # Einheit gedeckelt: was eine gedeckelte Einheit nicht aufnimmt,
-            # fließt an die übrigen.
-            soll = {s.name: 0.0 for s, _ in einheiten}
-            # Gewicht > 0 statt nur Anteil > 0: eine Einheit mit Höchstleistung
-            # 0 hätte sonst Gewicht 0, und frei_summe könnte 0 werden.
-            aktiv = [
-                (s, f * _grenze(s)) for s, f in einheiten if f > 0 and _grenze(s) > 0
-            ]
-            rest = gesamt
-            while rest > 1e-6 and aktiv:
-                frei_summe = sum(f for _, f in aktiv)
-                basis = rest
-                naechste: list[tuple[StorageState, float]] = []
-                gedeckelt = False
-                for s, f in aktiv:
-                    zusatz = basis * f / frei_summe
-                    platz = _grenze(s) - soll[s.name]
-                    if zusatz >= platz:
-                        soll[s.name] += platz
-                        rest -= platz
-                        gedeckelt = True
-                    else:
-                        soll[s.name] += zusatz
-                        rest -= zusatz
-                        naechste.append((s, f))
-                aktiv = naechste
-                if not gedeckelt:
-                    break
-            return soll
-
-        # Kandidaten mit Anteil > 0, größter Anteil zuerst (beim Laden also der
-        # leerste Akku, beim Entladen der vollste).
-        kandidaten = sorted(
-            [(s, a) for s, a in anteile if a > 0], key=lambda p: p[1], reverse=True
-        )
-        watts: dict[str, float] = {s.name: 0.0 for s, _ in anteile}
-        while kandidaten:
-            soll = _fuellen(kandidaten)
-            positive = [w for w in soll.values() if w > 0]
-            # Kleinster gestellter Anteil zu klein? Schwächste Einheit
-            # (kleinster Anteil = letzte im sortierten Feld) fallen lassen und
-            # erneut auf die übrigen verteilen — sofern die übrigen das Ganze
-            # tragen können. Unter dem Mindest-Setpoint wird immer gestrichen
-            # (der Anteil würde ohnehin auf 0 gerundet).
-            zu_klein = bool(positive) and len(kandidaten) > 1 and (
-                min(positive) < CONTROL_MIN_SETPOINT_W
-                or (
-                    min(positive) < CONTROL_SPLIT_MIN_W
-                    and sum(_grenze(s) for s, _ in kandidaten[:-1]) >= gesamt
-                )
-            )
-            if zu_klein:
-                # Die Einheit mit der kleinsten GESTELLTEN Leistung streichen
-                # (T-011) — nicht die mit dem kleinsten Anteil: gewichtet wird
-                # nach Anteil × Höchstleistung, beides fällt nicht zusammen.
-                # Bei Gleichstand fällt die hintere (kleinerer Anteil).
-                kleinste = min(
-                    (k[0].name for k in reversed(kandidaten) if soll[k[0].name] > 0),
-                    key=lambda n: soll[n],
-                )
-                kandidaten = [k for k in kandidaten if k[0].name != kleinste]
-                continue
-            for name, w in soll.items():
-                watts[name] = w if w >= CONTROL_MIN_SETPOINT_W else 0.0
-            break
-        return watts
-
-    def _verteile(
-        anteile: list[tuple[StorageState, float]],
-        gesamt: float,
-        laden: bool,
-        *,
-        parallel: bool = False,
-    ) -> list[StorageSetpoint]:
-        """Gesamtleistung je Speicher zuteilen. Laden verteilt immer parallel
-        (proportional zur freien Kapazität), Entladen greedy mit Auswahl-
-        Hysterese (ein Akku zur Zeit, gegen Verschleiß) — außer `parallel`,
-        dann anteilig wie beim Laden. Ein Rest unter dem Mindest-Setpoint
-        bleibt ungestellt — konservativ: nie mehr kommandieren als der gain-/
-        offset-gedämpfte Zielwert hergibt (kein Netzbezug)."""
-        watts = (
-            _verteile_proportional(anteile, gesamt, laden=laden)
-            if laden or parallel
-            else _verteile_entladen(anteile, gesamt)
-        )
-        return [
-            StorageSetpoint(name=s.name, watt=round(watts[s.name]))
-            for s, _a in anteile
-        ]
-
     def _freischwimm_probe(rest: float) -> None:
         """Den ungedeckten Rest probeweise den verriegelten Speichern zuteilen.
 
@@ -673,45 +719,6 @@ def _storage_control(
         )
         return ctrl
 
-    def _entlade_zuteilung(
-        primaer: list[tuple[StorageState, float]],
-        reserve_teil: list[tuple[StorageState, float]],
-        primaer_max: float,
-    ) -> list[StorageSetpoint]:
-        """Entladen mit Kaltreserve als Rest (T-011, Tobias 12.10.2026).
-
-        Die übrigen Speicher tragen zuerst — bei Leistungsspitze nur bis zu
-        ihrer Auslastungsgrenze (RESERVE_POWER_ON × Σ Höchstleistung), damit
-        die 85-%-Regel gegen Wärme auch hier gilt. Die Reserve bekommt den
-        Rest; was auch sie nicht trägt, füllen die übrigen bis an ihre Grenze
-        auf. Ein Rest unter dem Mindest-Setpoint bleibt bei den übrigen statt
-        die Reserve für ein paar Watt anlaufen zu lassen.
-        """
-        parallel = res.flags.parallel_entladen
-        if not any(a > 0 for _, a in reserve_teil):
-            return _verteile(primaer + reserve_teil, soll, laden=False, parallel=parallel)
-        deckel = soll
-        if res.flags.kaltreserve_leistung and primaer_max > 0:
-            deckel = min(soll, RESERVE_POWER_ON * primaer_max)
-        z_pri = _verteile(primaer, deckel, laden=False, parallel=parallel) if primaer else []
-        rest = soll - sum(z.watt for z in z_pri)
-        z_res: list[StorageSetpoint] = []
-        if rest >= CONTROL_MIN_SETPOINT_W:
-            z_res = _verteile(reserve_teil, rest, laden=False)
-            offen = soll - sum(z.watt for z in z_pri) - sum(z.watt for z in z_res)
-            if offen >= CONTROL_MIN_SETPOINT_W and primaer:
-                z_pri = _verteile(
-                    primaer, soll - sum(z.watt for z in z_res),
-                    laden=False, parallel=parallel,
-                )
-        elif primaer:
-            z_pri = _verteile(primaer, soll, laden=False, parallel=parallel)
-        nach_name = {z.name: z for z in z_pri + z_res}
-        return [
-            nach_name.get(s.name, StorageSetpoint(name=s.name, watt=0))
-            for s, _ in primaer + reserve_teil
-        ]
-
     if soll > CONTROL_DEADBAND_W:
         ctrl.modus = "entladen"
         # Kaltreserve als Leistungsreserve (T-002): Kämen die übrigen Speicher
@@ -764,7 +771,9 @@ def _storage_control(
             off=CONTROL_PARALLEL_OFF,
         )
         ctrl.parallel_aktiv = res.flags.parallel_entladen
-        ctrl.zuteilung = _entlade_zuteilung(primaer, reserve_teil, primaer_max)
+        ctrl.zuteilung = _entlade_zuteilung(
+            primaer, reserve_teil, primaer_max, soll, res.flags
+        )
         # Freischwimm-Probe (Frage 2, Aufgabe „Speicher-Selbstsperre", Git 129880c):
         # `known` ist oben zuerst und unverändert zugeteilt worden — Invariante,
         # nicht verhandelbar. Bleibt danach ungedeckter Rest, bekommen die

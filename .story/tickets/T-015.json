@@ -3,10 +3,26 @@
   "completedDate": null,
   "createdDate": "2026-10-12",
   "description": "Zurückgestellte Befunde 12.10.: cc-1 Closures aus _storage_control auf Modulebene; cc-3 dict 'soll' in _verteile_proportional umbenennen; tq-3 Tests für Akkus-aufladen-Hinweis und Registry-Migration (Fake-hass); cc-2b Teil-Resets im Actuator; Info: Entladen der Integration (async_release_battery) kann mit laufendem apply() überlappen.",
+  "displayId": "T-015",
   "id": "T-015",
+  "officeReview": {
+    "agent": "Ronja",
+    "lens": [
+      "security",
+      "error-handling",
+      "clean-code",
+      "performance",
+      "concurrency",
+      "test-quality"
+    ],
+    "reviewId": "lens-mv5euk02",
+    "role": "reviewer",
+    "since": 1791819134,
+    "stage": "CODE_REVIEW"
+  },
   "order": 140,
   "phase": "p0",
-  "status": "open",
+  "status": "inprogress",
   "title": "Rest aus Review: _storage_control kürzen, Namen soll/soll_je, Switch-/Coordinator-Tests mit HA-Attrappe",
   "type": "chore"
 }
