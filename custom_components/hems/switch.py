@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 
+from homeassistant.components import persistent_notification
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -25,6 +26,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import HemsCoordinator
@@ -124,11 +126,50 @@ class HemsBatteryForceSwitch(SwitchEntity, RestoreEntity):
             name="HEMS",
         )
 
+    # Seit wann der Schalter steht (T-013): als Attribut persistiert, damit der
+    # Dauer-Hinweis nach einem Neustart den echten Einschaltzeitpunkt nennt.
+    _seit: str | None = None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"eingeschaltet_seit": self._seit} if self._attr_is_on else {}
+
+    @property
+    def _hinweis_id(self) -> str:
+        return f"hems_akkus_aufladen_{self._coordinator.entry.entry_id}"
+
+    def _hinweis(self) -> None:
+        """Dauer-Hinweis, solange aufgeladen wird (Tobias 12.10.2026, T-013):
+        Der Schalter kauft notfalls Netzstrom und endet nicht von selbst — auch
+        nicht nach einem Neustart. Das soll niemand übersehen."""
+        if not self._attr_is_on:
+            persistent_notification.async_dismiss(self.hass, self._hinweis_id)
+            return
+        seit = dt_util.parse_datetime(self._seit) if self._seit else None
+        zeit = dt_util.as_local(seit).strftime("%d.%m. %H:%M") if seit else "unbekannt"
+        persistent_notification.async_create(
+            self.hass,
+            f"„Akkus aufladen“ ist seit {zeit} eingeschaltet. HEMS lädt die "
+            "Akkus mit voller Leistung, notfalls aus dem Netz, und hält sie "
+            "voll, bis der Schalter ausgeschaltet wird.",
+            title="HEMS: Akkus aufladen aktiv",
+            notification_id=self._hinweis_id,
+        )
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         if (last := await self.async_get_last_state()) is not None:
             self._attr_is_on = last.state == "on"
+            self._seit = last.attributes.get("eingeschaltet_seit")
             self._coordinator.battery_force = self._attr_is_on
+        self._hinweis()
+
+    async def async_will_remove_from_hass(self) -> None:
+        # Integration entladen oder neu geladen: Der Hinweis gehört zur
+        # laufenden Instanz; beim Wiederanlegen setzt `async_added_to_hass`
+        # ihn neu.
+        persistent_notification.async_dismiss(self.hass, self._hinweis_id)
+        await super().async_will_remove_from_hass()
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._set(True)
@@ -137,7 +178,10 @@ class HemsBatteryForceSwitch(SwitchEntity, RestoreEntity):
         await self._set(False)
 
     async def _set(self, on: bool) -> None:
+        if on and not self._attr_is_on:
+            self._seit = dt_util.utcnow().isoformat()
         self._attr_is_on = on
         self._coordinator.battery_force = on
         self.async_write_ha_state()
+        self._hinweis()
         await self._coordinator.async_request_refresh()

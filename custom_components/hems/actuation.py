@@ -404,3 +404,70 @@ def wiederhergestellter_modus(
     Vorgabe („beobachten") — bewusst nicht auf „auto", siehe const.py.
     """
     return gespeichert if gespeichert in optionen else vorgabe
+
+
+def modus_aktion(vorher: str, jetzt: str, schaltend: tuple[str, ...]) -> str | None:
+    """Was der Coordinator in diesem Zyklus mit den Geräten tut.
+
+    ``"stellen"``: der Modus schaltet (auto) — Empfehlung anwenden.
+    ``"freigeben"``: der Modus hat das Schalten gerade verlassen (auto →
+    beobachten) — den Akku einmal auf 0/0 freigeben, damit er nicht mit der
+    zuletzt kommandierten Rate blind weiterläuft.
+    ``None``: nichts schreiben (beobachten, und schon vorher beobachtet).
+    """
+    if jetzt in schaltend:
+        return "stellen"
+    if vorher in schaltend:
+        return "freigeben"
+    return None
+
+
+def nachtritt_faellig(
+    stumm_seit: timedelta,
+    jetzt: datetime,
+    zuletzt: datetime | None,
+    *,
+    frist: timedelta = timedelta(seconds=90),
+    wiederholung: timedelta = timedelta(minutes=5),
+) -> bool:
+    """Ob ein stummer Speicher in diesem Zyklus nachgetreten wird (T-010).
+
+    Erst nach `frist` ohne Messung, danach höchstens alle `wiederholung` —
+    nicht mehr jede Minute die ganze Nacht.
+    """
+    if stumm_seit < frist:
+        return False
+    return zuletzt is None or jetzt - zuletzt >= wiederholung
+
+
+def geraete_ziel_soc_grundlage(
+    *, kaltreserve: bool, reserve_ziel_soc: float, deckel_soc: float | None
+) -> float | None:
+    """Grundlage des geräteseitigen Ziel-SoC je Speicher (T-007).
+
+    Die Kaltreserve hat ihr eigenes Ziel (Vorgabe 100 %), für sie gilt der
+    Tagesdeckel nicht — sonst stoppt das Gerät alle 2 % am eigenen Ziel-SoC,
+    HEMS hebt nach, und der Notfallakku lädt im Start-Stopp-Takt.
+    """
+    return reserve_ziel_soc if kaltreserve else deckel_soc
+
+
+def richtungs_option(
+    modus: str,
+    watt: float,
+    *,
+    lade_option: str | None,
+    entlade_option: str | None,
+) -> str | None:
+    """Option des Richtungs-Selects für EINEN Speicher (T-008), oder None.
+
+    Nur wer in dieser Richtung auch Leistung bekommt, wird umgestellt: Ein
+    Speicher mit 0 W (Reserve in Ruhe, über dem Deckel, Split-Aussteiger, Band
+    zwischen Totband und Mindest-Setpoint) behält seinen Select, statt bei
+    jedem Richtungswechsel der Anlage mitzukippen.
+    """
+    if watt <= 0:
+        return None
+    return speicher_modus_option(
+        modus, lade_option=lade_option, entlade_option=entlade_option
+    )

@@ -11,7 +11,11 @@ import ast
 from pathlib import Path
 
 from hems import const
-from hems.actuation import speicher_modus_option, wiederhergestellter_modus
+from hems.actuation import (
+    modus_aktion,
+    speicher_modus_option,
+    wiederhergestellter_modus,
+)
 from hems.const import MODE_AUTO, MODE_OBSERVE, MODES_ACTUATING
 
 BASIS = Path(__file__).resolve().parents[1] / "custom_components" / "hems"
@@ -73,30 +77,6 @@ def test_ohne_vollstaendiges_optionspaar_wird_nicht_gestellt():
     )
 
 
-def test_beide_modus_pruefungen_laufen_ueber_die_liste():
-    """Schalten und Verlassen hängen an derselben Liste.
-
-    Die zweite Prüfung (`_prev_mode`) gibt den Akku beim Wechsel nach
-    „beobachten“ frei, damit er nicht mit der zuletzt kommandierten Rate blind
-    weiterläuft — der Fall, für den `release_battery` existiert.
-    """
-    fn = _funktion("coordinator.py", "_async_update_data")
-    vergleiche = [
-        k
-        for k in ast.walk(fn)
-        if isinstance(k, ast.Compare)
-        and isinstance(k.left, ast.Attribute)
-        and k.left.attr in ("mode", "_prev_mode")
-    ]
-    gegen_liste = [
-        k
-        for k in vergleiche
-        if isinstance(k.ops[0], ast.In)
-        and getattr(k.comparators[0], "id", None) == "MODES_ACTUATING"
-    ]
-    assert len(gegen_liste) == 2, "self.mode und self._prev_mode gehören an die Liste"
-
-
 def test_actuator_kennt_keinen_invers_modus_mehr():
     for datei, name in (
         ("actuator.py", "apply"),
@@ -130,3 +110,68 @@ def test_leistungs_setpoints_haengen_nur_am_regelmodus():
     for zuw in zuweisungen:
         namen = {k.id for k in ast.walk(zuw) if isinstance(k, ast.Name)}
         assert namen <= {"charge_w", "discharge_w", "watt"}, namen
+
+
+def test_modus_aktion_je_wechsel():
+    assert modus_aktion(MODE_OBSERVE, MODE_AUTO, MODES_ACTUATING) == "stellen"
+    assert modus_aktion(MODE_AUTO, MODE_AUTO, MODES_ACTUATING) == "stellen"
+    # Verlassen von auto: genau einmal freigeben …
+    assert modus_aktion(MODE_AUTO, MODE_OBSERVE, MODES_ACTUATING) == "freigeben"
+    # … und danach nichts mehr schreiben.
+    assert modus_aktion(MODE_OBSERVE, MODE_OBSERVE, MODES_ACTUATING) is None
+
+
+def test_coordinator_liest_den_modus_einmal_und_nutzt_modus_aktion():
+    # Ein Moduswechsel während der Aktuierung (await) darf `_prev_mode` nicht
+    # auf den neuen Wert setzen, ohne dass der Wechsel behandelt wurde.
+    fn = _funktion("coordinator.py", "_async_update_data")
+    quelle = ast.unparse(fn)
+    assert "modus_aktion(self._prev_mode, modus, MODES_ACTUATING)" in quelle
+    assert "self._prev_mode = modus" in quelle
+
+
+def test_nachtritt_mit_backoff():
+    from datetime import datetime, timedelta
+
+    from hems.actuation import nachtritt_faellig
+
+    t = datetime(2026, 10, 12, 22, 0)
+    assert nachtritt_faellig(timedelta(seconds=60), t, None) is False
+    assert nachtritt_faellig(timedelta(seconds=90), t, None) is True
+    # Danach nicht im Minutentakt …
+    assert nachtritt_faellig(timedelta(minutes=3), t, t - timedelta(minutes=1)) is False
+    # … sondern erst nach fünf Minuten wieder.
+    assert nachtritt_faellig(timedelta(minutes=7), t, t - timedelta(minutes=5)) is True
+
+
+def test_select_nur_fuer_speicher_mit_leistung():
+    from hems.actuation import richtungs_option
+
+    kw = {"lade_option": EIN, "entlade_option": AUS}
+    assert richtungs_option("laden", 500, **kw) == EIN
+    assert richtungs_option("entladen", 500, **kw) == AUS
+    # 0 W: Select bleibt stehen, auch wenn die Anlage die Richtung wechselt.
+    assert richtungs_option("laden", 0, **kw) is None
+    assert richtungs_option("entladen", 0.0, **kw) is None
+    assert richtungs_option("pausiert", 500, **kw) is None
+
+
+def test_kaltreserve_bekommt_eigenen_ziel_soc():
+    from hems.actuation import geraete_ziel_soc_grundlage
+
+    assert (
+        geraete_ziel_soc_grundlage(kaltreserve=True, reserve_ziel_soc=100.0, deckel_soc=60.0)
+        == 100.0
+    )
+    assert (
+        geraete_ziel_soc_grundlage(kaltreserve=True, reserve_ziel_soc=90.0, deckel_soc=None)
+        == 90.0
+    )
+    assert (
+        geraete_ziel_soc_grundlage(kaltreserve=False, reserve_ziel_soc=100.0, deckel_soc=60.0)
+        == 60.0
+    )
+    assert (
+        geraete_ziel_soc_grundlage(kaltreserve=False, reserve_ziel_soc=100.0, deckel_soc=None)
+        is None
+    )

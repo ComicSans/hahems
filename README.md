@@ -147,6 +147,50 @@ ein Zendure Hyper 100 % faktisch nie meldet; sinkt ein Akku darunter, lädt
 HEMS nach. Der Schalter ersetzt die früheren Schalter „Speicher als
 Notstromreserve" und „Speicher-Zwangsladung".
 
+### Speicher-Zuteilung bei mehreren Akkus
+
+Nach der Verteilstrategie der Zendure-Integration:
+
+- **Entladen:** Ein Akku trägt allein, bis er 85 % seiner Höchstleistung
+  erreicht (Wärme). Darüber laufen mehrere anteilig mit, gewichtet nach
+  verfügbarer Energie × Höchstleistung, zurück auf einen Akku unter 70 %.
+- **Führungswechsel** erst, wenn ein anderer Akku eine ganze 0,5-kWh-Stufe
+  mehr verfügbare Energie hat.
+- Aufgeteilt wird nur, wenn jeder Akku mindestens 150 W trägt.
+- **Laden:** parallel, gewichtet nach freier Kapazität × Ladeleistung.
+- **Richtungswechsel** Laden ⇄ Entladen frühestens nach 3 Minuten (ein Zendure
+  braucht rund eine Minute zum Umschalten); ein Lastsprung ab 800 W wechselt
+  sofort.
+- **Kaltreserve (Notfallakku):** trägt beim Entladen nur den Rest — wenn die
+  übrigen Akkus 85 % ihrer Summenleistung erreichen, kurz vor ihrer
+  Reserve-SoC stehen (5 Punkte darüber) oder sich alle abgemeldet haben. Sie
+  übernimmt nie die Führung. Geladen wird sie zuerst, bis zu ihrem Ziel-SoC
+  (Vorgabe 100 %, einstellbar).
+
+### Grenzen mit Zendure
+
+Was HEMS nicht sieht oder nicht regelt — bitte selbst im Blick behalten:
+
+- **Sicherung und Phase:** HEMS kennt keine Summengrenze je Stromkreis. Laufen
+  mehrere Akkus an einer Sicherung, darf die Summe ihrer Lade- und
+  Entladeleistungen die Absicherung nicht überschreiten — die Höchstleistungen
+  je Speicher entsprechend setzen. Auch „Akkus aufladen" zieht die volle
+  Summe aus dem Netz.
+- **Zweiter Regler:** Ist in der Zendure-App ein eigener Smart-/P1-Modus aktiv,
+  regeln zwei Systeme gegeneinander. HEMS erkennt nur den Betriebsmodus-Select
+  der Integration, nicht App-Einstellungen. Symptom: Speicher ignoriert die
+  Sollwerte oder pendelt.
+- **Totzeit:** Ein Zendure braucht nach einem neuen Sollwert rund eine Minute,
+  bis Leistung fließt. HEMS tritt nach 90 s ohne Messung nach, danach höchstens
+  alle 5 Minuten.
+- **Ausfall von Cloud oder lokaler Verbindung:** Meldet ein Speicher nicht mehr,
+  nimmt HEMS ihn aus der Zuteilung; das Gerät fährt dann ggf. seinen letzten
+  Sollwert weiter, bis die Verbindung zurück ist.
+- **Kälte und Ladeschluss:** Ein kaltes BMS oder der CV-Taper kurz vor voll
+  verweigert Laden; HEMS meldet das, verriegelt den Speicher aber nicht.
+- **Einspeisegrenze 800 W:** HEMS zielt auf leichten Netzbezug bzw. kleine
+  Einspeisung und speist nicht bewusst aus dem Akku ein.
+
 ## HEMS-Panel
 
 Die Integration registriert einen eigenen Eintrag **HEMS** in der Seitenleiste

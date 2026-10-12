@@ -30,8 +30,10 @@ from ..const import (
     RESERVE_POWER_ON,
     RESERVE_SOC_OFF,
     RESERVE_SOC_ON,
+    SALDO_JUMP_W,
     SPEICHER_VOLL_SOC,
     STORAGE_AFTERNOON_FROM_H,
+    STORAGE_DIRECTION_HOLD_S,
     STORAGE_FULL_BY_LEAD_H,
     STORAGE_MORNING_UNTIL_H,
     STORAGE_RAMP_SAFETY,
@@ -163,6 +165,52 @@ def _lade_deckel_soc(rampe: ChargeRamp, t: datetime) -> float:
     )
 
 
+def _primaer_max_entladung(known: list[StorageState]) -> float:
+    """Summe der Entladegrenzen der Nicht-Reserve-Speicher mit Energie.
+
+    Bezugsgröße der Leistungs-Kaltreserve (T-002): Ein Speicher an der
+    Reserve-Grenze trägt nichts und darf die Schwelle nicht nach oben schieben.
+    """
+    return sum(
+        s.max_discharge_w
+        for s in known
+        if not s.cold_reserve and s.soc > s.reserve_soc
+    )
+
+
+def _richtung_gehalten(
+    inp: PlanInput, res: PlanResult, soll: float, fehler: float
+) -> bool:
+    """Mindesthaltezeit der Speicher-Richtung (T-012, Tobias 12.10.2026).
+
+    Gibt True zurück, wenn der Regler innerhalb von STORAGE_DIRECTION_HOLD_S
+    nach einem Wechsel wieder in die Gegenrichtung will — dann pausiert der
+    Speicher (0 W, Select bleibt stehen). Ein großer Regelfehler (Lastsprung ab
+    SALDO_JUMP_W) und „Akkus aufladen" wechseln sofort. Schreibt die gefahrene
+    Richtung samt Zeitpunkt in `res.flags`.
+    """
+    richtung = (
+        "entladen" if soll > CONTROL_DEADBAND_W
+        else "laden" if soll < -CONTROL_DEADBAND_W
+        else None
+    )
+    vorher = inp.flags.speicher_richtung
+    seit = inp.flags.speicher_richtung_seit
+    if richtung is None or richtung == vorher:
+        return False
+    if (
+        vorher is not None
+        and seit is not None
+        and (inp.now - seit).total_seconds() < STORAGE_DIRECTION_HOLD_S
+        and abs(fehler) < SALDO_JUMP_W
+        and not inp.battery_force
+    ):
+        return True
+    res.flags.speicher_richtung = richtung
+    res.flags.speicher_richtung_seit = inp.now
+    return False
+
+
 def _storage_control(
     inp: PlanInput,
     res: PlanResult,
@@ -207,14 +255,21 @@ def _storage_control(
     # Broker-Neustart, nicht die Ausnahme), läuft die Regelung trotzdem weiter
     # bis zur Zuteilung — siehe den Zweig `if not known` dort.
 
-    # Kaltreserve-Hysterese über den mittleren SoC der Nicht-Reserve-Speicher.
-    primary_socs = [s.soc for s in known if not s.cold_reserve]
-    res.flags.kaltreserve = _latch(
-        inp.flags.kaltreserve,
-        sum(primary_socs) / len(primary_socs) if primary_socs else None,
-        on=RESERVE_SOC_ON,
-        off=RESERVE_SOC_OFF,
-    )
+    # Kaltreserve-Hysterese über den mittleren Abstand der Nicht-Reserve-
+    # Speicher zu ihrer eigenen Reserve-SoC („erst kurz vor leer", T-011).
+    # Meldet kein Primärspeicher (alle abgemeldet), ist die Reserve aktiv:
+    # Sonst hielte der Latch nach einem Neustart False, und das Haus zöge aus
+    # dem Netz, während der Notfallakku voll danebensteht.
+    primaer_abstand = [s.soc - s.reserve_soc for s in known if not s.cold_reserve]
+    if primaer_abstand:
+        res.flags.kaltreserve = _latch(
+            inp.flags.kaltreserve,
+            sum(primaer_abstand) / len(primaer_abstand),
+            on=RESERVE_SOC_ON,
+            off=RESERVE_SOC_OFF,
+        )
+    elif any(s.cold_reserve for s in known):
+        res.flags.kaltreserve = True
     reserve_aktiv = res.flags.kaltreserve
 
     # Ist-Leistung nur aus Speichern, die noch melden: Der eingefrorene Wert
@@ -359,6 +414,9 @@ def _storage_control(
     #
     # Ohne ladefähige Einheit (Summe 0) bleibt der normale Regelweg stehen: Ein
     # Zwang, der niemanden erreicht, soll auch nichts kommandieren.
+    if _richtung_gehalten(inp, res, soll, fehler):
+        soll = soll_wunsch = 0.0
+
     zwang_offen = [s for s in known if s.soc < SPEICHER_VOLL_SOC]
     if inp.battery_force:
         zwang_lad = sum(s.max_charge_w for s in zwang_offen)
@@ -413,14 +471,22 @@ def _storage_control(
         Über LEAD_SHARE = 0.5 kommt nur eine Einheit, der Vorrang bleibt eindeutig
         (Begründung samt Messung bei CONTROL_LEAD_SHARE)."""
 
-        def _rang(paar: tuple[StorageState, float]) -> tuple[float, bool, float]:
+        # Führung am GEMESSENEN Anteil (T-009): Nach einem 600/600-Split fällt
+        # das neue Soll etwa auf 800 W; gegen `gesamt` gerechnet lägen beide
+        # über der Hälfte, beide „führten", und die Rangfolge kippte beim
+        # nächsten 1-%-Crossover. Gegen die Summe der Messwerte kann nur eine
+        # Einheit über LEAD_SHARE liegen.
+        gemessen = sum(max(0.0, s.power_w or 0.0) for s, _ in anteile)
+
+        def _rang(paar: tuple[StorageState, float]) -> tuple[bool, float, bool, float]:
             s, anteil = paar
             p = s.power_w or 0.0
-            arbeitet = p > max(CONTROL_LEAD_POWER_W, CONTROL_LEAD_SHARE * gesamt)
+            arbeitet = p > CONTROL_LEAD_POWER_W and p > CONTROL_LEAD_SHARE * gemessen
             # Kleine Toleranz gegen Gleitkomma-Reste genau an der Stufengrenze
             # (0.55 * 8 kWh ergibt sonst 4.3999… und fiele eine Stufe tiefer).
             stufe = math.floor(anteil / CONTROL_LEAD_STEP_KWH + 1e-9)
-            return (stufe, arbeitet and anteil > 0, anteil)
+            # Kaltreserve nie vorn (T-011): sie trägt nur den Rest.
+            return (not s.cold_reserve, stufe, arbeitet and anteil > 0, anteil)
 
         rest = gesamt
         watts: dict[str, float] = {s.name: 0.0 for s, _ in anteile}
@@ -512,7 +578,15 @@ def _storage_control(
                 )
             )
             if zu_klein:
-                kandidaten.pop()
+                # Die Einheit mit der kleinsten GESTELLTEN Leistung streichen
+                # (T-011) — nicht die mit dem kleinsten Anteil: gewichtet wird
+                # nach Anteil × Höchstleistung, beides fällt nicht zusammen.
+                # Bei Gleichstand fällt die hintere (kleinerer Anteil).
+                kleinste = min(
+                    (k[0].name for k in reversed(kandidaten) if soll[k[0].name] > 0),
+                    key=lambda n: soll[n],
+                )
+                kandidaten = [k for k in kandidaten if k[0].name != kleinste]
                 continue
             for name, w in soll.items():
                 watts[name] = w if w >= CONTROL_MIN_SETPOINT_W else 0.0
@@ -599,6 +673,45 @@ def _storage_control(
         )
         return ctrl
 
+    def _entlade_zuteilung(
+        primaer: list[tuple[StorageState, float]],
+        reserve_teil: list[tuple[StorageState, float]],
+        primaer_max: float,
+    ) -> list[StorageSetpoint]:
+        """Entladen mit Kaltreserve als Rest (T-011, Tobias 12.10.2026).
+
+        Die übrigen Speicher tragen zuerst — bei Leistungsspitze nur bis zu
+        ihrer Auslastungsgrenze (RESERVE_POWER_ON × Σ Höchstleistung), damit
+        die 85-%-Regel gegen Wärme auch hier gilt. Die Reserve bekommt den
+        Rest; was auch sie nicht trägt, füllen die übrigen bis an ihre Grenze
+        auf. Ein Rest unter dem Mindest-Setpoint bleibt bei den übrigen statt
+        die Reserve für ein paar Watt anlaufen zu lassen.
+        """
+        parallel = res.flags.parallel_entladen
+        if not any(a > 0 for _, a in reserve_teil):
+            return _verteile(primaer + reserve_teil, soll, laden=False, parallel=parallel)
+        deckel = soll
+        if res.flags.kaltreserve_leistung and primaer_max > 0:
+            deckel = min(soll, RESERVE_POWER_ON * primaer_max)
+        z_pri = _verteile(primaer, deckel, laden=False, parallel=parallel) if primaer else []
+        rest = soll - sum(z.watt for z in z_pri)
+        z_res: list[StorageSetpoint] = []
+        if rest >= CONTROL_MIN_SETPOINT_W:
+            z_res = _verteile(reserve_teil, rest, laden=False)
+            offen = soll - sum(z.watt for z in z_pri) - sum(z.watt for z in z_res)
+            if offen >= CONTROL_MIN_SETPOINT_W and primaer:
+                z_pri = _verteile(
+                    primaer, soll - sum(z.watt for z in z_res),
+                    laden=False, parallel=parallel,
+                )
+        elif primaer:
+            z_pri = _verteile(primaer, soll, laden=False, parallel=parallel)
+        nach_name = {z.name: z for z in z_pri + z_res}
+        return [
+            nach_name.get(s.name, StorageSetpoint(name=s.name, watt=0))
+            for s, _ in primaer + reserve_teil
+        ]
+
     if soll > CONTROL_DEADBAND_W:
         ctrl.modus = "entladen"
         # Kaltreserve als Leistungsreserve (T-002): Kämen die übrigen Speicher
@@ -606,11 +719,7 @@ def _storage_control(
         # zusätzlich zur Energie-Seite oben (mittlerer SoC). Nur Speicher mit
         # verfügbarer Energie zählen zur Summe: einer an der Reserve-Grenze
         # trägt nichts und darf die Schwelle nicht nach oben schieben.
-        primaer_max = sum(
-            s.max_discharge_w
-            for s in known
-            if not s.cold_reserve and s.soc > s.reserve_soc
-        )
+        primaer_max = _primaer_max_entladung(known)
         res.flags.kaltreserve_leistung = _latch(
             inp.flags.kaltreserve_leistung,
             soll / primaer_max if primaer_max > 0 else None,
@@ -642,8 +751,11 @@ def _storage_control(
         # CONTROL_PARALLEL_ON/OFF. Nur teilnehmende Einheiten zählen: ein
         # Speicher an der Reserve (anteil 0) trägt nichts und darf die Grenze
         # nicht nach oben schieben.
+        primaer = [(s, a) for s, a in anteile if not s.cold_reserve]
+        reserve_teil = [(s, a) for s, a in anteile if s.cold_reserve]
         groesstes = max(
-            (s.max_discharge_w for s, a in anteile if a > 0), default=0.0
+            (s.max_discharge_w for s, a in (primaer or anteile) if a > 0),
+            default=0.0,
         )
         res.flags.parallel_entladen = _latch(
             inp.flags.parallel_entladen,
@@ -652,9 +764,7 @@ def _storage_control(
             off=CONTROL_PARALLEL_OFF,
         )
         ctrl.parallel_aktiv = res.flags.parallel_entladen
-        ctrl.zuteilung = _verteile(
-            anteile, soll, laden=False, parallel=res.flags.parallel_entladen
-        )
+        ctrl.zuteilung = _entlade_zuteilung(primaer, reserve_teil, primaer_max)
         # Freischwimm-Probe (Frage 2, Aufgabe „Speicher-Selbstsperre", Git 129880c):
         # `known` ist oben zuerst und unverändert zugeteilt worden — Invariante,
         # nicht verhandelbar. Bleibt danach ungedeckter Rest, bekommen die
@@ -673,7 +783,9 @@ def _storage_control(
         # 0 (kein Zwangsentladen).
         deckel = res.lade_deckel_soc if res.lade_deckel_soc is not None else 100.0
 
-        def _anteile(grenze: float) -> list[tuple[StorageState, float]]:
+        def _anteile(
+            grenze: float, *, reserve_eigenes_ziel: bool = False
+        ) -> list[tuple[StorageState, float]]:
             # Unter Zwang bleiben Speicher am physischen Ladeende außen vor:
             # Ihre rechnerisch freie Kapazität (99 → 100 %) ist im CV-Taper
             # nicht mehr abrufbar, ein Sollwert darauf erzeugt nur eine
@@ -686,17 +798,30 @@ def _storage_control(
                     s,
                     0.0
                     if nur_offene and s.soc >= SPEICHER_VOLL_SOC
-                    else max(0.0, (grenze - s.soc) / 100 * s.capacity_kwh),
+                    else max(
+                        0.0,
+                        (
+                            # Kaltreserve: ihr eigenes Ziel statt des Deckels;
+                            # beim Laden statt Einspeisen (grenze 100) bis 100.
+                            (max(s.reserve_target_soc, grenze)
+                             if reserve_eigenes_ziel and s.cold_reserve
+                             else grenze)
+                            - s.soc
+                        ) / 100 * s.capacity_kwh,
+                    ),
                 )
                 for s in known
             ]
 
         def _lade_zuteilung(grenze: float) -> list[StorageSetpoint]:
-            # Kaltreserve zuerst und bis 100 % (T-002): Der Notfallakku muss
+            # Kaltreserve zuerst und bis zu ihrem Ziel-SoC (T-002, T-007): Der Notfallakku muss
             # bereitstehen, also gilt für ihn weder der Ladedeckel noch der
             # Nachrang hinter den übrigen. Was er nicht aufnimmt, geht an die
             # übrigen Speicher, dort wie bisher bis zum Deckel.
-            reserve = [p for p in _anteile(100.0) if p[0].cold_reserve]
+            reserve = [
+                p for p in _anteile(grenze, reserve_eigenes_ziel=True)
+                if p[0].cold_reserve
+            ]
             primaer = [p for p in _anteile(grenze) if not p[0].cold_reserve]
             gesamt = -soll
             z_res = _verteile(reserve, gesamt, laden=True) if reserve else []

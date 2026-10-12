@@ -25,11 +25,13 @@ from homeassistant.util import dt as dt_util
 from . import entity_domain
 from .actuation import (
     drossel_verwirft,
+    geraete_ziel_soc_grundlage,
     ladeauftrag_am_ladeschluss,
+    nachtritt_faellig,
     plan_soc_set,
     plan_ww_action,
+    richtungs_option,
     speicher_folgt,
-    speicher_modus_option,
     speicher_stumm_schaden,
 )
 from .models import DeviceRegistry, Storage
@@ -161,6 +163,10 @@ SPEICHER_QUITTUNG_FRIST = timedelta(minutes=5)
 # nachgetreten. Die Melde-Frist bleibt bei fünf Minuten: Nachtreten ist
 # billig und still, eine Warnung ins Log ist es nicht.
 SPEICHER_NACHTRETEN_FRIST = timedelta(seconds=90)
+# Danach nicht mehr jede Minute (T-010): Ein Akku, der Laden physisch
+# verweigert (kaltes BMS, CV-Taper unter 99 %, „Akkus aufladen" nachts),
+# bekäme sonst die ganze Nacht im Minutentakt Select und zwei Setpoints.
+SPEICHER_NACHTRETEN_WIEDERHOLUNG = timedelta(minutes=5)
 
 
 class Actuator:
@@ -189,6 +195,8 @@ class Actuator:
         # dass sie gemessen wurde. Wird zurückgesetzt, sobald Leistung fließt,
         # die Richtung wechselt oder nichts mehr kommandiert ist.
         self._leistung_seit: dict[str, tuple[bool, datetime]] = {}
+        # Zeitpunkt des letzten Nachtritts je Speicher (Backoff, T-010).
+        self._nachtritt_zuletzt: dict[str, datetime] = {}
         self._speicher_gemeldet: set[str] = set()
 
     async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
@@ -510,11 +518,20 @@ class Actuator:
             # erhalten. Warum der Ziel-SoC beim Laden Kopfraum über dem Ist
             # braucht und warum hier ohne Drossel geschrieben wird, steht bei
             # `plan_soc_set` bzw. `_CALL_THROTTLE`.
-            if s.soc_set_entity and plan.lade_deckel_soc is not None:
+            # Kaltreserve mit eigenem Ziel (T-007): Für sie gilt der Tagesdeckel
+            # nicht — sonst stoppt das Gerät alle 2 % am eigenen Ziel-SoC, HEMS
+            # hebt ihn im nächsten Zyklus nach, und der Notfallakku lädt im
+            # Start-Stopp-Takt.
+            deckel = geraete_ziel_soc_grundlage(
+                kaltreserve=s.cold_reserve,
+                reserve_ziel_soc=s.reserve_target_soc,
+                deckel_soc=plan.lade_deckel_soc,
+            )
+            if s.soc_set_entity and deckel is not None:
                 await self._set_number(
                     s.soc_set_entity,
                     plan_soc_set(
-                        deckel_soc=plan.lade_deckel_soc,
+                        deckel_soc=deckel,
                         laden_statt_einspeisen=ctrl.laden_statt_einspeisen,
                         laedt=laedt_soll,
                         ist_soc=self._num_state(s.soc_entity),
@@ -536,8 +553,14 @@ class Actuator:
             # Richtungs-Select (optional, z. B. Zendure ac_mode). Welche Option
             # fällig ist — und wann gar keine — entscheidet die HA-freie
             # `speicher_modus_option`.
-            want = speicher_modus_option(
+            # Nur für Speicher, die in dieser Richtung auch Leistung bekommen
+            # (T-008): Ein Speicher mit 0 W (Reserve in Ruhe, über dem Deckel,
+            # Split-Aussteiger, Band zwischen Totband und Mindest-Setpoint)
+            # behält seinen Select, statt bei jedem Richtungswechsel der Anlage
+            # mitzukippen.
+            want = richtungs_option(
                 ctrl.modus,
+                watt,
                 lade_option=s.mode_charge_option,
                 entlade_option=s.mode_discharge_option,
             )
@@ -564,6 +587,13 @@ class Actuator:
             await self._set_number(
                 s.discharge_setpoint_entity, discharge_w, erzwingen=nachtreten
             )
+
+    def _uhr_zuruecksetzen(self, name: str) -> None:
+        """Quittungs-Uhr, Nachtritt-Backoff und Meldeflagge eines Speichers
+        zurücksetzen — „kein offener Befehl" oder „Auftrag fertig"."""
+        self._leistung_seit.pop(name, None)
+        self._nachtritt_zuletzt.pop(name, None)
+        self._speicher_gemeldet.discard(name)
 
     def _quittung_speicher(
         self,
@@ -638,8 +668,7 @@ class Actuator:
         ist genau der, der entladen können muss.
         """
         if not (laden_soll or entladen_soll) or not s.power_entity:
-            self._leistung_seit.pop(s.name, None)
-            self._speicher_gemeldet.discard(s.name)
+            self._uhr_zuruecksetzen(s.name)
             return False
         if laden_soll and ladeauftrag_am_ladeschluss(
             self._num_state(s.soc_entity)
@@ -648,8 +677,7 @@ class Actuator:
             # echter Ladeauftrag mit voller Frist neu anläuft. Und kein
             # Nachtritt: Ein Akku am Ladeschluss nimmt nichts mehr an, da ist
             # Schweigen die richtige Antwort, kein Nachschreiben im Minutentakt.
-            self._leistung_seit.pop(s.name, None)
-            self._speicher_gemeldet.discard(s.name)
+            self._uhr_zuruecksetzen(s.name)
             return False
         now = dt_util.utcnow()
         vorher = self._leistung_seit.get(s.name)
@@ -659,15 +687,25 @@ class Actuator:
             # und unterdrückte die Warnung für die neue.
             vorher = (laden_soll, now)
             self._leistung_seit[s.name] = vorher
+            self._nachtritt_zuletzt.pop(s.name, None)
             self._speicher_gemeldet.discard(s.name)
         gemessen = self._num_state(s.power_entity)
         if speicher_folgt(gemessen, laden=laden_soll):
             # Es fließt — die Uhr läuft erst wieder ab der nächsten Lücke.
             self._leistung_seit[s.name] = (laden_soll, now)
+            self._nachtritt_zuletzt.pop(s.name, None)
             self._speicher_gemeldet.discard(s.name)
             return False
         stumm_seit = now - vorher[1]
-        nachtreten = stumm_seit >= SPEICHER_NACHTRETEN_FRIST
+        nachtreten = nachtritt_faellig(
+            stumm_seit,
+            now,
+            self._nachtritt_zuletzt.get(s.name),
+            frist=SPEICHER_NACHTRETEN_FRIST,
+            wiederholung=SPEICHER_NACHTRETEN_WIEDERHOLUNG,
+        )
+        if nachtreten:
+            self._nachtritt_zuletzt[s.name] = now
         if stumm_seit < SPEICHER_QUITTUNG_FRIST:
             return nachtreten
         if s.name not in self._speicher_gemeldet:

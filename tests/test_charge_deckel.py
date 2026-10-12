@@ -356,3 +356,14 @@ def test_sonnenuntergang_bestimmt_das_rampenende():
 def test_naechster_sonnenaufgang_bleibt_unberuehrt():
     # Sanity: die Fixture liefert den Aufgang NACH dem Sonnenuntergang.
     assert NEXT_SUNRISE > SUNSET
+
+
+def test_akkus_aufladen_laedt_mittags_unter_netzbezug_trotz_ev_first():
+    # Die übernommenen Notstrom-Eigenschaften gelten auch beim Laden aus dem
+    # Netz: mittags (keine Ladepause), mit Wallbox und Vorrang „E-Auto zuerst".
+    inp = _aufladen(saldo_w=1000, modulateds=[load()], priority_mode=PRIORITY_EV_FIRST)
+    r = P.compute_plan(inp)
+    assert coordination.akku_hat_vorrang(inp)
+    assert not r.lade_pause
+    assert r.regelung.modus == "laden"
+    assert sum(zuteilung(r).values()) > 0

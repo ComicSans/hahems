@@ -166,16 +166,47 @@ def test_entladen_parallel_faellt_unter_der_schwelle_zurueck():
 
 # --- Kaltreserve --------------------------------------------------------------
 def test_kaltreserve_aktiv_wenn_primaer_leer():
+    # Primärspeicher an ihrer Reserve-SoC (10 %): nichts mehr verfügbar, die
+    # Kaltreserve trägt alles (T-011: „erst kurz vor leer").
     ss = [
-        storage("L1", 30),
-        storage("L2", 30),
+        storage("L1", 10),
+        storage("L2", 10),
         storage("R", 90, cold_reserve=True),
     ]
     r = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500))
     assert r.regelung.reserve_aktiv is True
     assert r.regelung.reserve_namen == ["R"]
-    # Primärspeicher an der Reserve-Grenze (30 - 10 = 20% verfügbar) tragen
-    # wenig bei; die Reserve deckt den Löwenanteil.
+    assert zuteilung(r) == {"L1": 0, "L2": 0, "R": 991}
+
+
+def test_kaltreserve_bei_30_prozent_noch_nicht_aktiv():
+    # Früher sprang die Reserve ab 40 % Mittelwert ein und führte dann. Jetzt
+    # erst ab 5 Punkten über der Reserve-SoC der übrigen.
+    ss = [storage("L1", 30), storage("L2", 30), storage("R", 90, cold_reserve=True)]
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500))
+    assert r.regelung.reserve_aktiv is False
+    assert zuteilung(r)["R"] == 0
+
+
+def test_kaltreserve_fuehrt_nie_sondern_traegt_den_rest():
+    # Energie-Seite aktiv (Primäre 4 Punkte über Reserve), die Reserve hat
+    # mehr verfügbare Energie — trotzdem tragen die Primären zuerst.
+    ss = [storage("L1", 14), storage("L2", 14), storage("R", 95, cold_reserve=True)]
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500))
+    assert r.regelung.reserve_aktiv is True
+    z = zuteilung(r)
+    assert z["L1"] == 991
+    assert z["R"] == 0
+
+
+def test_kaltreserve_aktiv_wenn_alle_primaeren_abgemeldet():
+    ss = [
+        storage("L1", 60, stale=True),
+        storage("L2", 60, stale=True),
+        storage("R", 90, cold_reserve=True),
+    ]
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500))
+    assert r.flags.kaltreserve is True
     assert zuteilung(r)["R"] > 0
 
 
@@ -313,14 +344,15 @@ def test_anlage_fuehrung_wechselt_ab_einer_ganzen_stufe():
 def test_notfallakku_springt_bei_leistungsspitze_ein():
     # Beide 8-kWh-Akkus voll genug (keine Energie-Reserve), aber 2096 W liegen
     # über 0.85 × 2400 W: der Notfallakku trägt seinen gewichteten Anteil mit.
+    # Die großen Akkus tragen bis 85 % ihrer Summenleistung (2040 W), der
+    # Notfallakku den Rest (T-011).
     ss = [_gross("A", 70), _gross("B", 70), _notfall(90)]
-    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=3200))
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=3600))
     assert r.regelung.reserve_aktiv is True
     assert r.flags.kaltreserve is False
     assert r.flags.kaltreserve_leistung is True
     z = zuteilung(r)
-    assert z["R"] > 0
-    assert z["A"] == z["B"] > z["R"]
+    assert z == {"A": 1020, "B": 1020, "R": 316}
     # Unterhalb der Spitze bleibt er außen vor.
     r = P.compute_plan(plan_input(storage_states=ss, saldo_w=2800))
     assert r.regelung.reserve_aktiv is False
@@ -328,8 +360,9 @@ def test_notfallakku_springt_bei_leistungsspitze_ein():
 
 
 def test_notfallakku_leistungsreserve_haelt_in_der_hysterese():
-    # 1836 W = 0.77 × 2400 W: unter ON, aber über OFF — ein bereits
-    # zugeschalteter Notfallakku bleibt dabei.
+    # 1836 W = 0.77 × 2400 W: unter ON, aber über OFF — der Latch bleibt
+    # an. Die großen Akkus tragen bis 85 % (2040 W), also bleibt für den
+    # Notfallakku hier kein Rest.
     ss = [_gross("A", 70), _gross("B", 70), _notfall(90)]
     r = P.compute_plan(
         plan_input(
@@ -338,7 +371,8 @@ def test_notfallakku_leistungsreserve_haelt_in_der_hysterese():
         )
     )
     assert r.regelung.reserve_aktiv is True
-    assert zuteilung(r)["R"] > 0
+    assert r.flags.kaltreserve_leistung is True
+    assert zuteilung(r) == {"A": 918, "B": 918, "R": 0}
 
 
 def test_notfallakku_wird_zuerst_geladen():
@@ -379,9 +413,9 @@ def test_notfallakku_laedt_bis_100_ohne_ladedeckel():
 
 
 def test_notfallakku_energiereserve_in_der_anlage():
-    # Mittlerer SoC der großen Akkus 35 % (< RESERVE_SOC_ON): Energie-Seite
-    # aktiv, Leistungs-Seite nicht (991 W ≪ 0.85 × 2400 W).
-    ss = [_gross("A", 35), _gross("B", 35), _notfall(90)]
+    # Große Akkus 4 Punkte über ihrer Reserve (< RESERVE_SOC_ON): Energie-
+    # Seite aktiv, Leistungs-Seite nicht (991 W ≪ 0.85 × 2400 W).
+    ss = [_gross("A", 14), _gross("B", 14), _notfall(90)]
     r = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500))
     assert r.flags.kaltreserve is True
     assert r.flags.kaltreserve_leistung is False
@@ -409,3 +443,120 @@ def test_entladen_mitlaeufer_bleibt_wenn_der_rest_sonst_ins_netz_ginge():
     ]
     z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=4000)))
     assert z == {"A": 2400, "B": 216}
+
+
+def test_fuehrung_nach_parallel_am_gemessenen_anteil():
+    # T-009: Nach parallelem Entladen (650/550 W gemessen) fällt das Soll auf
+    # 812 W. Gegen das neue Soll gerechnet lägen beide über der Hälfte und
+    # „führten" — B gewönne dann über den rohen Anteil. Gegen die Messsumme
+    # (1200 W) führt nur A und behält den Vorrang in derselben Stufe.
+    ss = [
+        storage("A", 60, capacity_kwh=8.0, power_w=650.0),
+        storage("B", 61, capacity_kwh=8.0, power_w=550.0),
+    ]
+    z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=-800)))
+    assert z == {"A": 812, "B": 0}
+
+
+# --- Mindesthaltezeit der Richtung (T-012) -----------------------------------
+def _richtung(richtung, vor_s, saldo_w):
+    from datetime import timedelta
+
+    from factories import NOON
+
+    return P.compute_plan(
+        plan_input(
+            socs=[60, 60],
+            saldo_w=saldo_w,
+            flags=PlanFlags(
+                speicher_richtung=richtung,
+                speicher_richtung_seit=NOON - timedelta(seconds=vor_s),
+            ),
+        )
+    )
+
+
+def test_gegenrichtung_innerhalb_der_haltezeit_pausiert():
+    r = _richtung("laden", 60, 300)
+    assert r.regelung.modus == "pausiert"
+    assert sum(zuteilung(r).values()) == 0
+    assert r.flags.speicher_richtung == "laden"
+
+
+def test_gegenrichtung_nach_der_haltezeit_wechselt():
+    r = _richtung("laden", 200, 300)
+    assert r.regelung.modus == "entladen"
+    assert r.flags.speicher_richtung == "entladen"
+
+
+def test_grosser_lastsprung_wechselt_sofort():
+    r = _richtung("laden", 30, 1200)
+    assert r.regelung.modus == "entladen"
+
+
+def test_gleiche_richtung_haelt_den_zeitstempel():
+    r = _richtung("entladen", 60, 300)
+    assert r.regelung.modus == "entladen"
+    from datetime import timedelta
+
+    from factories import NOON
+
+    assert r.flags.speicher_richtung_seit == NOON - timedelta(seconds=60)
+
+
+def test_notfallakku_laedt_nur_bis_zu_seinem_ziel_soc():
+    # T-007: Ziel-SoC 90 % — darüber nimmt er nichts mehr, die großen laden.
+    ss = [
+        _gross("A", 50),
+        _gross("B", 50),
+        storage("R", 90, capacity_kwh=2.0, cold_reserve=True,
+                max_charge_w=800.0, max_discharge_w=800.0),
+    ]
+    ss[2].reserve_target_soc = 90.0
+    z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=-800)))
+    assert z["R"] == 0
+    assert z["A"] + z["B"] > 0
+
+
+def test_kaltreserve_latch_haelt_im_band():
+    # 7 Punkte über der Reserve liegt zwischen ON (5) und OFF (10): der
+    # Vorzustand bleibt — an bleibt an, aus bleibt aus.
+    ss = [storage("L1", 17), storage("L2", 17), storage("R", 90, cold_reserve=True)]
+    an = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500, flags=PlanFlags(kaltreserve=True)))
+    aus = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500, flags=PlanFlags(kaltreserve=False)))
+    assert an.flags.kaltreserve is True
+    assert aus.flags.kaltreserve is False
+    # Genau auf den Schwellen.
+    ss5 = [storage("L1", 15), storage("L2", 15), storage("R", 90, cold_reserve=True)]
+    ss10 = [storage("L1", 20), storage("L2", 20), storage("R", 90, cold_reserve=True)]
+    assert P.compute_plan(plan_input(storage_states=ss5, saldo_w=1500)).flags.kaltreserve is True
+    assert (
+        P.compute_plan(
+            plan_input(storage_states=ss10, saldo_w=1500, flags=PlanFlags(kaltreserve=True))
+        ).flags.kaltreserve
+        is False
+    )
+
+
+def test_haltezeit_endet_genau_nach_180_s():
+    assert _richtung("laden", 179, 300).regelung.modus == "pausiert"
+    assert _richtung("laden", 180, 300).regelung.modus == "entladen"
+
+
+def test_akkus_aufladen_ueberstimmt_die_haltezeit():
+    from datetime import timedelta
+
+    from factories import NOON
+
+    r = P.compute_plan(
+        plan_input(
+            socs=[60, 60],
+            saldo_w=300,
+            battery_force=True,
+            flags=PlanFlags(
+                speicher_richtung="entladen",
+                speicher_richtung_seit=NOON - timedelta(seconds=30),
+            ),
+        )
+    )
+    assert r.regelung.modus == "laden"

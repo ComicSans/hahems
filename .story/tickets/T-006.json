@@ -5,6 +5,21 @@
   "description": "Tobias 12.10.: aktuellen Stand aufnehmen, Optimierungen suchen, Unknown Unknowns bedenken, danach alle offenen Punkte umsetzen. Analyse über Architekt; Funde werden Tickets in p0.",
   "displayId": "T-006",
   "id": "T-006",
+  "officeReview": {
+    "agent": "Ronja",
+    "lens": [
+      "security",
+      "error-handling",
+      "clean-code",
+      "performance",
+      "concurrency",
+      "test-quality"
+    ],
+    "reviewId": "lens-mv5em6h3",
+    "role": "reviewer",
+    "since": 1791818743,
+    "stage": "CODE_REVIEW"
+  },
   "order": 50,
   "phase": "p0",
   "status": "inprogress",

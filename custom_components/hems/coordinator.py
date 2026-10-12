@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from . import entity_domain
+from .actuation import modus_aktion
 from .actuator import Actuator
 from .changelog import ChangeLog, decision_snapshot, diff_snapshots
 from .config_check import ConfigCheck, check_config
@@ -382,6 +383,9 @@ class HemsData:
         # Laufzeit-Steuerung (aus Select/Switch), fürs Dashboard mitgeführt.
         self.ziel: str = GOAL_SELF_CONSUMPTION
         self.ev_zwang: bool = False
+        # Stand des Schalters „Akkus aufladen" (T-004). Name, Sensor-Attribut
+        # und Logbuch-Schlüssel bleiben aus Kompatibilität „speicher_zwang"
+        # (Automationen, bestehende Logs, unique_id des Schalters).
         self.speicher_zwang: bool = False
         self.config_check: ConfigCheck | None = None
         self.plan: PlanResult = PlanResult()
@@ -1155,6 +1159,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 max_discharge_w=s.max_discharge_w,
                 power_w=self._power_w(s.power_entity),
                 cold_reserve=s.cold_reserve,
+                reserve_target_soc=s.reserve_target_soc,
                 stale=self._stumm(s, offen),
             )
             for s in reg.storages
@@ -1387,19 +1392,31 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             logging.INFO if empfehlung_log != self._letzte_empfehlung else logging.DEBUG
         )
         self._letzte_empfehlung = empfehlung_log
-        if self.mode in MODES_ACTUATING:
-            _LOGGER.log(log_level, "HEMS-%s: %s", self.mode, data.plan.empfehlung)
+        # Modus einmal lesen: Ein Wechsel während der Aktuierung (await) soll
+        # nicht dazu führen, dass `_prev_mode` den neuen Wert übernimmt, ohne
+        # dass der Wechsel behandelt wurde — dann fiele die Freigabe aus.
+        modus = self.mode
+        aktion = modus_aktion(self._prev_mode, modus, MODES_ACTUATING)
+        if aktion == "stellen":
+            _LOGGER.log(log_level, "HEMS-%s: %s", modus, data.plan.empfehlung)
             await self._actuator.apply(reg, data.plan)
+            # Während der Aktuierung auf beobachten gewechselt? Dann sofort
+            # freigeben, statt die eben geschriebenen Sollwerte bis zum
+            # nächsten Zyklus stehen zu lassen.
+            if self.mode not in MODES_ACTUATING:
+                _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
+                await self._actuator.release_battery(reg)
+                modus = self.mode
         else:
-            if self.mode == MODE_OBSERVE:
+            if modus == MODE_OBSERVE:
                 _LOGGER.log(log_level, "HEMS-Empfehlung: %s", data.plan.empfehlung)
             # Verlassen des Auto-Modus (→ beobachten): den Akku einmalig
             # freigeben, damit er nicht mit der letzten Rate blind weiterläuft.
             # WW/WP/EV bleiben unangetastet.
-            if self._prev_mode in MODES_ACTUATING:
+            if aktion == "freigeben":
                 _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
                 await self._actuator.release_battery(reg)
-        self._prev_mode = self.mode
+        self._prev_mode = modus
 
         # Entscheidungsänderungen für den Logs-Reiter fortschreiben.
         self._record_decisions(data)

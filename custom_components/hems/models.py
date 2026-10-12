@@ -71,10 +71,14 @@ class Storage:
     # nach ihrem EIGENEN Ziel-SoC laden und den Leistungs-Setpoint (charge)
     # dabei ignorieren — dann kappt erst der Ziel-SoC das Laden am Deckel.
     soc_set_entity: str | None = None
-    # Kaltreserve: nimmt am Entladen erst teil, wenn der mittlere SoC der
-    # übrigen Speicher die Reserve-Schwelle unterschreitet (mit Hysterese).
-    # Geladen wird sie immer mit, proportional zur freien Kapazität.
+    # Kaltreserve (Notfallakku): trägt beim Entladen nur den Rest — wenn die
+    # übrigen Speicher an ihre Auslastungsgrenze kommen oder kurz vor ihrer
+    # Reserve stehen. Geladen wird sie zuerst, bis `reserve_target_soc`.
     cold_reserve: bool = False
+    # Ziel-SoC der Kaltreserve (T-007, Tobias 12.10.2026): Vorgabe 100 %, für
+    # weniger kalendarische Alterung z. B. 90 %. Ohne Wirkung ohne
+    # cold_reserve.
+    reserve_target_soc: float = 100.0
 
 
 @dataclass

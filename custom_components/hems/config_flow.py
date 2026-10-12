@@ -145,6 +145,7 @@ STORAGE_SCHEMA = vol.Schema(
             100, 20000, "W"
         ),
         vol.Required("cold_reserve", default=False): selector.BooleanSelector(),
+        vol.Required("reserve_target_soc", default=100): _number(50, 100, "%"),
     }
 )
 

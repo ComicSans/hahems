@@ -3,10 +3,11 @@
   "completedDate": null,
   "createdDate": "2026-10-12",
   "description": "Astrid Unknown Unknowns: Fuse-Group/Phase, Fremdregler (App-Smart-Mode), Totzeit, Cloud-Ausfall, 800-W-Grenze im README; Config-Check-Hinweis bei ≥ 2 Speichern.",
+  "displayId": "T-014",
   "id": "T-014",
   "order": 130,
   "phase": "p0",
-  "status": "open",
+  "status": "inprogress",
   "title": "Doku „Grenzen mit Zendure“ und Config-Check-Hinweis Sicherung/Phase bei mehreren Speichern",
   "type": "chore"
 }

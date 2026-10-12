@@ -34,6 +34,8 @@ class StorageState:
     # Saldo-Regelung selbstkorrigierend, ohne Abschalt-Mess-Zyklus.
     power_w: float | None = None
     cold_reserve: bool = False
+    # Ziel-SoC der Kaltreserve (T-007); Vorgabe 100 %.
+    reserve_target_soc: float = 100.0
     # Der Speicher ist ausgefallen: Seine SoC-Entität schweigt seit
     # STORAGE_STALE_MIN Minuten UND er hat einen Entlade-Befehl ≠ 0 nicht
     # ausgeführt (nur die Entlade-Richtung verriegelt, siehe
@@ -366,6 +368,11 @@ class PlanFlags:
     # Kaltreserve als Leistungsreserve: die übrigen Speicher kämen allein an
     # ihre Auslastungsgrenze (RESERVE_POWER_ON/OFF). Start konservativ False.
     kaltreserve_leistung: bool = False
+    # Zuletzt gefahrene Speicher-Richtung („laden"/„entladen") und seit wann —
+    # für die Mindesthaltezeit (STORAGE_DIRECTION_HOLD_S). `None` heißt noch
+    # keine Richtung, der erste Wechsel ist frei.
+    speicher_richtung: str | None = None
+    speicher_richtung_seit: datetime | None = None
     # Entladen läuft parallel (anteilig auf alle) statt greedy (ein Akku
     # trägt), weil das Soll über 85 % des Einzelmaximums liegt. Gehalten, weil die
     # Betriebsart sonst an der Grenze zwischen beiden Verteilungen flattert —

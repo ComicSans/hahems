@@ -145,14 +145,25 @@ CONTROL_ZERO_FEEDIN_OFFSET_W = 100.0
 SALDO_JUMP_W = 800.0
 SALDO_JUMP_COOLDOWN_S = 20.0
 
+# Mindesthaltezeit der Speicher-Richtung (Tobias 12.10.2026, T-012): Nach einem
+# Wechsel laden ⇄ entladen bleibt die Richtung mindestens so lange stehen;
+# eine Gegenforderung in der Zeit pausiert den Speicher (0 W, Select bleibt).
+# Jeder Wechsel kostet am Zendure rund 70 s Anlauf mit vollem Netzbezug bzw.
+# Einspeisung, bei Wolkenkanten mehrfach je Viertelstunde. Ausnahme: ein
+# Regelfehler ab SALDO_JUMP_W (großer Lastsprung) wechselt sofort.
+STORAGE_DIRECTION_HOLD_S = 180.0
+
 # Kaltreserve: als Reserve markierte Speicher nehmen am Entladen erst teil,
-# wenn der mittlere SoC der übrigen unter ON fällt, und scheiden erst
-# oberhalb von OFF wieder aus (Hysterese) — die Energie-Seite der Reserve,
+# wenn die übrigen im Mittel nur noch ON Prozentpunkte über ihrer eigenen
+# Reserve-SoC stehen, und scheiden erst ab OFF Punkten wieder aus (Hysterese)
+# — „erst kurz vor leer" (Tobias 12.10.2026, T-011; vorher fest 40/45 %
+# mittlerer SoC, dann führte und leerte die Reserve zu früh). Sie trägt auch
+# dann nur den Rest, nie die Führung. Das ist die Energie-Seite der Reserve,
 # die Leistungs-Seite steht bei RESERVE_POWER_ON/OFF. Geladen werden sie
 # zuerst und bis 100 %, unabhängig vom Ladedeckel: ein Notfallakku muss
 # bereitstehen (Tobias 12.10.2026, T-002).
-RESERVE_SOC_ON = 40.0
-RESERVE_SOC_OFF = 45.0
+RESERVE_SOC_ON = 5.0
+RESERVE_SOC_OFF = 10.0
 
 # Speicher-Auswahl-Hysterese ("erst einen Akku nutzen, dann den nächsten").
 # Die Zuteilung bündelt greedy auf den Speicher mit der meisten verfügbaren
