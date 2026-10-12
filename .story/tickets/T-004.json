@@ -7,7 +7,7 @@
   "id": "T-004",
   "order": 30,
   "phase": "p0",
-  "status": "open",
+  "status": "inprogress",
   "title": "Notstromreserve und Speicher-Zwangsladung zu einem Schalter „Akkus aufladen“ zusammenführen",
   "type": "feature"
 }
