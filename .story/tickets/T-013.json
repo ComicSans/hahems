@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Entscheidung Tobias 12.10.: persistent_notification solange an, Einschaltzeit persistiert; kein Auto-Aus, keine Netzgrenze.",
+  "id": "T-013",
+  "order": 120,
+  "phase": "p0",
+  "status": "open",
+  "title": "Dauer-Hinweis, solange „Akkus aufladen“ an ist (mit Einschaltzeitpunkt)",
+  "type": "feature"
+}

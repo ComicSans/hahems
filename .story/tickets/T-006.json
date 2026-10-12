@@ -1,0 +1,13 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Tobias 12.10.: aktuellen Stand aufnehmen, Optimierungen suchen, Unknown Unknowns bedenken, danach alle offenen Punkte umsetzen. Analyse über Architekt; Funde werden Tickets in p0.",
+  "displayId": "T-006",
+  "id": "T-006",
+  "order": 50,
+  "phase": "p0",
+  "status": "inprogress",
+  "title": "Bestandsaufnahme: Optimierungen und Unknown Unknowns der Steuerung, danach umsetzen",
+  "type": "task"
+}

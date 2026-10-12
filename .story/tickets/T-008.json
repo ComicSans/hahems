@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Astrid Fix 2: Select kippt sonst bei 0-W-Speichern (Reserve, über Deckel, Split-Aussteiger) und im Band 30–60 W.",
+  "id": "T-008",
+  "order": 70,
+  "phase": "p0",
+  "status": "open",
+  "title": "Richtungs-Select nur für Speicher mit Sollwert > 0 stellen",
+  "type": "task"
+}

@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Entscheidung Tobias 12.10.",
+  "id": "T-012",
+  "order": 110,
+  "phase": "p0",
+  "status": "open",
+  "title": "Mindesthaltezeit 3 min für Wechsel Laden/Entladen (Ausnahme Saldo-Sprung ≥ 800 W)",
+  "type": "feature"
+}

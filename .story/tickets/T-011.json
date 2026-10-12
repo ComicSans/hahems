@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Astrid Fix 5/6 + Entscheidung Tobias 12.10.: Reserve übernimmt nie die Führung, energieseitig erst ab reserve_soc+5 der Primären; ohne bekannten Primärspeicher mit Energie gilt Reserve aktiv; zu_klein streicht die Einheit mit kleinster gestellter Leistung.",
+  "id": "T-011",
+  "order": 100,
+  "phase": "p0",
+  "status": "open",
+  "title": "Kaltreserve: nur Rest, nie Führung; Energie-Schwelle Reserve+5 %; Primäre abgemeldet → Reserve aktiv; Split streicht kleinste Leistung",
+  "type": "task"
+}

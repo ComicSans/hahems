@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-12",
+  "description": "Astrid Fix 4: _quittung_speicher tritt sonst jede Minute nach (kaltes BMS, CV-Taper, Akkus aufladen nachts).",
+  "id": "T-010",
+  "order": 90,
+  "phase": "p0",
+  "status": "open",
+  "title": "Nachtreten mit Backoff (90 s, dann 5 min)",
+  "type": "task"
+}
