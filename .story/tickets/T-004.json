@@ -1,13 +1,13 @@
 {
   "blockedBy": [],
-  "completedDate": null,
+  "completedDate": "2026-10-12",
   "createdDate": "2026-10-12",
   "description": "Tobias 12.10.: Notstromreserve und Zwangsladen zu EINEM Schalter „Akkus aufladen“ zusammenführen: lädt mit voller Leistung, auch aus dem Netz, egal was der Verbrauch sagt, und hält die Akkus voll (kein Entladen), bis Tobias den Schalter ausschaltet (Entscheidung 12.10.: voll halten statt Selbstabschaltung).",
   "displayId": "T-004",
   "id": "T-004",
   "order": 30,
   "phase": "p0",
-  "status": "inprogress",
+  "status": "complete",
   "title": "Notstromreserve und Speicher-Zwangsladung zu einem Schalter „Akkus aufladen“ zusammenführen",
   "type": "feature"
 }
