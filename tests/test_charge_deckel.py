@@ -301,44 +301,44 @@ def test_ladepause_laedt_weiter_wenn_sonst_eingespeist_wuerde():
     assert sum(zuteilung(r).values()) > 0
 
 
-# --- Notstromreserve ----------------------------------------------------------
+# --- Akkus aufladen (früher Notstromreserve, T-004) ---------------------------
 
 
-def _notstrom(**kw):
+def _aufladen(**kw):
     kw.setdefault("now", lokal(13))
     kw.setdefault("socs", [60, 60, 60])
-    return plan_input(emergency_reserve=True, **kw)
+    return plan_input(battery_force=True, **kw)
 
 
-def test_notstromreserve_zielt_sofort_auf_100():
-    r = P.compute_plan(_notstrom(saldo_w=0.0))
+def test_akkus_aufladen_zielt_sofort_auf_100():
+    r = P.compute_plan(_aufladen(saldo_w=0.0))
     assert r.lade_ziel_soc == 100.0
     assert r.lade_start is None
     assert r.lade_deckel_soc == 100.0
     assert not r.lade_pause  # auch mittags nicht
 
 
-def test_notstromreserve_hat_vorrang_vor_der_wallbox():
+def test_akkus_aufladen_hat_vorrang_vor_der_wallbox():
     # Selbst mit ev_first und mitten in der Mittagspause: die Reserve zuerst.
-    inp = _notstrom(saldo_w=-1500, modulateds=[load()], priority_mode=PRIORITY_EV_FIRST)
+    inp = _aufladen(saldo_w=-1500, modulateds=[load()], priority_mode=PRIORITY_EV_FIRST)
     res = P.compute_plan(inp)
     assert coordination.akku_hat_vorrang(inp)
     assert coordination.akku_ladereservierung(inp, res) > 0
 
 
-def test_notstromreserve_laedt_mit_voller_schrittweite():
+def test_akkus_aufladen_laedt_mit_voller_schrittweite():
     kw = {"now": lokal(13), "socs": [60, 60, 60], "saldo_w": -1500.0}
     normal = P.compute_plan(plan_input(**kw))
-    notstrom = P.compute_plan(plan_input(emergency_reserve=True, **kw))
-    assert sum(zuteilung(notstrom).values()) > sum(zuteilung(normal).values())
+    aufladen = P.compute_plan(plan_input(battery_force=True, **kw))
+    assert sum(zuteilung(aufladen).values()) > sum(zuteilung(normal).values())
 
 
-def test_notstromreserve_steht_in_der_empfehlung():
-    r = P.compute_plan(_notstrom(socs=[40, 40, 40], saldo_w=-1500))
-    assert "Notstromreserve" in r.empfehlung
+def test_akkus_aufladen_steht_in_der_empfehlung():
+    r = P.compute_plan(_aufladen(socs=[40, 40, 40], saldo_w=-1500))
+    assert "Akkus aufladen" in r.empfehlung
 
 
-def test_ohne_notstromreserve_kuendigt_die_empfehlung_den_ladebeginn_an():
+def test_ohne_akkus_aufladen_kuendigt_die_empfehlung_den_ladebeginn_an():
     r = _plan(socs=[60, 60, 60], modulateds=[load()])
     start = r.lade_start
     assert start is not None

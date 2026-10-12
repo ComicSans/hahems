@@ -32,6 +32,7 @@ _MAX_ENTRIES = 5000  # harte Obergrenze als Notnagel gegen Ausreißer
 _MODE_LABEL = {
     "beobachten": "beobachten",
     "auto": "auto",
+    # Entfallene Modi (T-003), nur noch für ältere Logeinträge.
     "invers-auto": "auto (invers)",
     "aus": "aus",
 }
@@ -63,8 +64,7 @@ _DECISION_FIELDS: dict[str, tuple[str, str]] = {
     "modus": ("Betriebsmodus", "modus"),
     "ziel": ("Optimierungsziel", "ziel"),
     "ev_force": ("E-Auto Zwangsladung", "ev"),
-    "notstromreserve": ("Notstromreserve", "akku"),
-    "speicher_zwang": ("Speicher-Zwangsladung", "akku"),
+    "speicher_zwang": ("Akkus aufladen", "akku"),
     "akku_modus": ("Akku-Regelung", "akku"),
     "akku_reserve": ("Akku-Kaltreserve", "akku"),
     # Beide Speicher-Befunde gehören in dieselbe Tabelle wie ihre Geschwister
@@ -86,7 +86,6 @@ def decision_snapshot(
     goal: str,
     ev_force: bool,
     plan: Any,
-    emergency: bool = False,
     battery_force: bool = False,
 ) -> dict:
     """Momentaufnahme der Entscheidungsfelder als ``key -> (vergleich, anzeige)``.
@@ -99,12 +98,8 @@ def decision_snapshot(
         "modus": (mode, _MODE_LABEL.get(mode, mode)),
         "ziel": (goal, _GOAL_LABEL.get(goal, goal)),
         "ev_force": (bool(ev_force), "an" if ev_force else "aus"),
-        "notstromreserve": (bool(emergency), "an" if emergency else "aus"),
-        # Der einzige Schalter, der Netzstrom in den Speicher schiebt — und der
-        # einzige, den HEMS selbst zurücknimmt (Ziel erreicht). Beide Kanten
-        # gehören ins Log, die zweite besonders: Ein Zwang, der von allein
-        # endet, ist sonst nicht von einem zu unterscheiden, den jemand
-        # ausgeschaltet hat.
+        # „Akkus aufladen" — der einzige Schalter, der Netzstrom in den
+        # Speicher schiebt. Beide Kanten gehören ins Log.
         "speicher_zwang": (bool(battery_force), "an" if battery_force else "aus"),
     }
 

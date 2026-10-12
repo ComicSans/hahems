@@ -14,7 +14,7 @@ from ..const import (
     CONTROL_DEADBAND_W,
     CONTROL_GAIN_CHARGE,
     CONTROL_GAIN_DISCHARGE,
-    CONTROL_GAIN_EMERGENCY,
+    CONTROL_GAIN_FULL_CHARGE,
     CONTROL_GAIN_FACTORS,
     CONTROL_LEAD_POWER_W,
     CONTROL_LEAD_SHARE,
@@ -81,8 +81,8 @@ def _ist_ladepause(inp: PlanInput, sofort_voll: bool, t: datetime) -> bool:
     Pause weiter, aber nur noch aus dem, was die Lasten übrig lassen — statt es
     einzuspeisen (siehe `_storage_control`).
 
-    `sofort_voll` hebt die Pause auf: wer heute noch voll werden muss (oder als
-    Notstromreserve bereitstehen soll), hat keine drei Stunden zu verschenken.
+    `sofort_voll` hebt die Pause auf: wer heute noch voll werden muss (oder per
+    „Akkus aufladen" bereitstehen soll), hat keine drei Stunden zu verschenken.
     """
     if sofort_voll:
         return False
@@ -257,11 +257,11 @@ def _storage_control(
     faktor = CONTROL_GAIN_FACTORS.get(inp.gain_level, 1.0)
 
     def _gain(fehler_w: float) -> float:
-        # Notstromreserve: beim Laden die volle Schrittweite, unabhängig von der
+        # „Akkus aufladen": beim Laden die volle Schrittweite, unabhängig von der
         # eingestellten Aggressivität — der gemächliche Lade-Gain ist Schonung,
         # und die ist hier ausdrücklich nicht gefragt.
-        if inp.emergency_reserve and fehler_w <= 0:
-            return CONTROL_GAIN_EMERGENCY
+        if inp.battery_force and fehler_w <= 0:
+            return CONTROL_GAIN_FULL_CHARGE
         basis = CONTROL_GAIN_DISCHARGE if fehler_w > 0 else CONTROL_GAIN_CHARGE
         return min(1.0, basis * faktor)
 
@@ -358,24 +358,23 @@ def _storage_control(
     # „Speicher-Selbstsperre" (Git 129880c).
     #
     # Ohne ladefähige Einheit (Summe 0) bleibt der normale Regelweg stehen: Ein
-    # Zwang, der niemanden erreicht, soll auch nichts kommandieren — und wenn
-    # der Grund die Fülle ist, ist er ohnehin gleich zu Ende (unten).
+    # Zwang, der niemanden erreicht, soll auch nichts kommandieren.
     zwang_offen = [s for s in known if s.soc < SPEICHER_VOLL_SOC]
     if inp.battery_force:
         zwang_lad = sum(s.max_charge_w for s in zwang_offen)
         if zwang_lad > 0:
             soll = soll_wunsch = -zwang_lad
-        # Ende der Zwangsladung: kein meldender Speicher steht mehr unter dem
-        # physischen Ladeende. Der Coordinator legt den Schalter daraufhin
-        # selbst um; der Zwang ist eine Aktion mit Ende, kein Betriebsmodus
-        # (siehe `PlanResult.speicher_zwang_fertig`). Ab hier regelt wieder der
-        # Saldo — ein voller Akku, der den Hausverbrauch deckt, ist genau das,
-        # was der Zwang erreichen wollte.
-        # `known` muss dabei etwas enthalten: Sind alle Speicher abgemeldet,
-        # ist `zwang_offen` leer, weil niemand meldet — nicht, weil alle voll
-        # sind. Das Ende hinge sonst an einem Broker-Neustart.
-        elif known and not zwang_offen:
-            res.speicher_zwang_fertig = True
+        else:
+            # Voll halten (T-004, Tobias 12.10.2026): Kein meldender Speicher
+            # steht mehr unter dem physischen Ladeende. Der Schalter bleibt
+            # stehen; die Regelung folgt wieder dem Saldo, aber nur in
+            # Laderichtung — Überschuss nimmt der Akku weiter auf, entladen
+            # wird nicht. Sinkt ein Speicher unter das Ladeende, greift oben
+            # wieder die volle Ladeleistung. Gilt auch, wenn alle Speicher
+            # abgemeldet sind: kein Entladebefehl, solange aufgeladen werden
+            # soll.
+            soll = min(soll, 0.0)
+            soll_wunsch = min(soll_wunsch, 0.0)
 
     ctrl = ControlResult(
         modus="pausiert",

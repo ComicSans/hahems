@@ -63,17 +63,16 @@ ROLE_HEATING = "heating"
 
 MODE_OBSERVE = "beobachten"  # empfehlen + loggen, nicht schalten
 MODE_AUTO = "auto"  # empfehlen + schalten (Actuator aktiv)
-MODE_OFF = "aus"  # reiner Stopp: keine Schreibzugriffe (Kill-Switch)
-# Wie `auto`, nur der Richtungs-Select des Speichers wird verkehrt herum
-# gestellt: Laden → Ausgangsmodus, Entladen → Eingangsmodus. Für Geräte bzw.
-# Integrationen, deren Ein-/Ausgangsmodus-Optionen vertauscht beschriftet sind.
-# Die Leistungs-Sollwerte bleiben unberührt — sonst liefe die Regelung, die
-# über die gemessene Speicherleistung schließt, gegen sich selbst.
-MODE_INVERS_AUTO = "invers-auto"
-# Die Modi, in denen der Actuator schreibt. Wer hier prüft statt auf MODE_AUTO,
-# vergisst den Invers-Modus nicht — insbesondere nicht beim Verlassen, wo der
-# Akku freigegeben werden muss (siehe `Actuator.release_battery`).
-MODES_ACTUATING = (MODE_AUTO, MODE_INVERS_AUTO)
+# Nur noch diese beiden Modi (Tobias 12.10.2026, T-003): „invers-auto" und
+# „aus" sind entfallen. Ein gespeicherter alter Wert wird beim Start nicht
+# wiederhergestellt, der Modus fällt dann auf „beobachten" zurück (siehe
+# `HemsModeSelect.async_added_to_hass`) — bewusst nicht auf „auto": wer
+# invers-auto nutzte, hat vertauscht beschriftete Richtungsoptionen, und
+# „auto" stellte den Speicher dort verkehrt herum.
+# Die Modi, in denen der Actuator schreibt. Geprüft wird gegen diese Liste,
+# nicht direkt gegen MODE_AUTO, damit Schalten und Verlassen (Akku freigeben,
+# siehe `Actuator.release_battery`) an einer Stelle hängen.
+MODES_ACTUATING = (MODE_AUTO,)
 
 DEFAULT_BASELINE_W = 500
 DEFAULT_NIGHT_W = 400
@@ -267,8 +266,8 @@ SPEICHER_VOLL_SOC = 99.0
 # Aufgehoben (Deckel sofort auf dem Nacht-Ziel, ohne Rampe) wird das, sobald
 # Deckung vor Schonung geht: Ziel verlangt Vollladung (Nulleinspeisung/
 # Vollladen), morgen wird es knapp, es ist Nacht, der Restertrag heute reicht
-# nicht mehr — oder der Speicher ist als Notstromreserve markiert (dann ist das
-# Nacht-Ziel ohnehin 100 %).
+# nicht mehr — oder „Akkus aufladen" steht (dann ist das Nacht-Ziel ohnehin
+# 100 %).
 STORAGE_NIGHT_MARGIN_SOC = 10.0
 STORAGE_FULL_BY_LEAD_H = 1.0
 STORAGE_RAMP_SAFETY = 1.5
@@ -285,13 +284,10 @@ STORAGE_AFTERNOON_FROM_H = 14.0
 # hinaus weiter (siehe `_storage_control`) — der Deckel ordnet also den Vorrang,
 # er verschenkt keine Energie ans Netz.
 
-# Notstromreserve: Der Speicher soll für einen Ausfall bereitstehen. Dann gilt
-# Ziel-SoC 100 %, sofort statt just-in-time, Ladevorrang vor allen Lasten
-# (unabhängig vom eingestellten Vorrang und ohne Mittagspause) und die volle
-# Regel-Schrittweite beim Laden — "sehr schnell sehr voll". Die ENTLADEgrenze
-# bleibt die Reserve-SoC der Speicher-Rolle; wer eine echte Notstromreserve
-# will, hebt sie dort an.
-CONTROL_GAIN_EMERGENCY = 1.0
+# „Akkus aufladen" (T-004): volle Regel-Schrittweite beim Laden aus Überschuss,
+# sobald die Akkus voll sind und nur noch voll gehalten werden — Schonung ist
+# dann ausdrücklich nicht gefragt.
+CONTROL_GAIN_FULL_CHARGE = 1.0
 
 # E-Auto: Die "E-Auto laden"-Empfehlung setzt voraus, dass der Überschuss die
 # physikalische Mindestladeleistung der Wallbox erreicht (min_a × Phasen ×

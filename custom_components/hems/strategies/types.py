@@ -466,26 +466,14 @@ class PlanInput:
     # damit Ladelücken schneller geschlossen werden. Beeinflusst nur die
     # Schrittweite pro Zyklus, nicht die Umschaltrate (bleibt 1×/min).
     gain_level: str = DEFAULT_GAIN_LEVEL
-    # Notstromreserve (Laufzeit-Schalter): Der Speicher soll für einen Ausfall
-    # bereitstehen. Hebt Ladedeckel, Just-in-time-Rampe und Mittagspause auf,
-    # gibt dem Akku den Ladevorrang vor allen Lasten und lädt mit voller
-    # Regel-Schrittweite. Alterung ist dann zweitrangig — ein leerer Speicher
-    # im Ausfall kostet mehr als ein paar Zyklen Lebensdauer.
-    emergency_reserve: bool = False
-    # Speicher-Zwangsladung (Laufzeit-Schalter): Der Akku lädt mit voller
-    # Leistung, unabhängig vom Netzsaldo — also ausdrücklich AUS DEM NETZ, wenn
-    # kein Überschuss da ist. Das ist der einzige Pfad in HEMS, der Netzstrom
-    # in den Speicher schiebt; alles andere lädt nur gegen Export. Gedacht für
-    # Lagen, in denen der Ladestand mehr zählt als der Preis: angekündigter
-    # Ausfall, Kalibrierfahrt, ein Speicher, der vor dem Abend hochkommen muss.
-    # Wirkt zusätzlich wie `emergency_reserve` auf die Ladestrategie (Ziel-SoC
-    # 100 %, Deckel sofort statt just in time, keine Mittagspause) — ein Zwang,
-    # der an einem Tagesdeckel von 40 % endet, wäre keiner.
-    # Endet von selbst: Sobald kein meldender Speicher mehr unter dem
-    # physischen Ladeende (`SPEICHER_VOLL_SOC`) steht, meldet der Plan
-    # `speicher_zwang_fertig`, und der Coordinator legt den Schalter um. Ohne
-    # diese Selbstabschaltung bliebe ein vergessener Zwang stehen und kaufte
-    # jede Nacht den Eigenverbrauch aus dem Netz zurück.
+    # „Akkus aufladen" (Laufzeit-Schalter, T-004; ersetzt Notstromreserve und
+    # Speicher-Zwangsladung): Der Akku lädt mit voller Leistung, unabhängig vom
+    # Netzsaldo — also ausdrücklich AUS DEM NETZ, wenn kein Überschuss da ist.
+    # Das ist der einzige Pfad in HEMS, der Netzstrom in den Speicher schiebt.
+    # Wirkt zugleich auf die Ladestrategie (Ziel-SoC 100 %, Deckel sofort statt
+    # just in time, keine Mittagspause, Ladevorrang, volle Schrittweite). Sind
+    # alle Speicher voll, hält er sie voll (kein Entladen), bis der Schalter
+    # ausgeschaltet wird — keine Selbstabschaltung (Tobias 12.10.2026).
     battery_force: bool = False
     # E-Auto-Zwangsladung: lädt unabhängig von Überschuss und Wallbox-
     # Mindestleistung. Die Wallbox-Last wird dann aus dem Saldo herausgerechnet,
@@ -693,14 +681,6 @@ class PlanResult:
     # braucht eine Quelle, die niemand versehentlich um den Lade-Fall
     # erweitert.
     speicher_entladen_verweigert: list[str] = field(default_factory=list)
-    # Speicher-Zwangsladung hat ihr Ziel erreicht: Der Zwang war aktiv, und
-    # kein meldender Speicher steht mehr unter dem physischen Ladeende
-    # (`SPEICHER_VOLL_SOC`, nicht 100 % — ein Zendure Hyper meldet 100 %
-    # faktisch nie). Der Coordinator schaltet den Schalter daraufhin selbst aus
-    # — der Zwang ist eine Aktion mit Ende, kein Betriebsmodus. Bewusst nur mit
-    # meldenden Speichern (`known`): Ein abgemeldeter Speicher hat keinen SoC,
-    # sondern nur einen zuletzt bekannten, und dürfte den Zwang nicht beenden.
-    speicher_zwang_fertig: bool = False
     # Empfehlung der Saldo-Regelung über alle Speicher (None ohne Daten).
     regelung: ControlResult | None = None
     # Empfehlung der Wallbox-Überschussregelung (None ohne Wallbox/Saldo).

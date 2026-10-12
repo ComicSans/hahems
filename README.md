@@ -56,10 +56,8 @@ am Eingabefeld, im Options-Flow wie im HEMS-Panel.
 
 | Modus | Verhalten |
 |---|---|
-| **beobachten** | Standard. Empfehlungen werden berechnet und angezeigt, aber nichts geschaltet. |
+| **beobachten** | Standard. Empfehlungen werden berechnet und angezeigt, aber nichts geschaltet. Zugleich der Not-Aus: Beim Wechsel aus **auto** gibt HEMS den Akku einmal frei (0/0), danach keine Schreibzugriffe mehr; parallele Automationen übernehmen sofort wieder. |
 | **auto** | HEMS schreibt die Empfehlungen zusätzlich auf die konfigurierten Steuer-Entitäten. |
-| **invers-auto** | Wie **auto**, nur der Richtungs-Select des Speichers wird verkehrt herum gestellt: Laden → Ausgangsmodus, Entladen → Eingangsmodus. Für Geräte, deren Ein-/Ausgangsmodus vertauscht beschriftet ist. Die Lade-/Entlade-Sollwerte bleiben unverändert. |
-| **aus** | Kill-Switch. Keinerlei Schreibzugriffe. Geräte behalten ihren letzten Zustand, parallele Automationen übernehmen sofort wieder. |
 
 > **Der Auto-Modus schaltet echte Hardware.** Vor dem Scharfschalten:
 > `binary_sensor.hems_konfiguration` muss `bereit_fuer_auto` melden, und
@@ -125,44 +123,29 @@ größer als die Kapazität. Das Abendziel steht dann ohnehin auf 100 %, die Ram
 beginnt früh, und die Strategie verhält sich wie vorher. Die Schonung ist ein
 Sommer- und Übergangszeit-Gewinn.
 
-### Speicher als Notstromreserve
+### Akkus aufladen
 
-`switch.hems_speicher_als_notstromreserve` (auch im Panel unter **Steuerung**)
-kehrt die Abwägung um: Ziel 100 %, sofort statt just in time, Ladevorrang vor
-allen Lasten — unabhängig vom eingestellten Vorrang und ohne Mittagspause — und
-die volle Regel-Schrittweite beim Laden. Sehr schnell sehr voll; ein leerer
-Speicher im Ausfall kostet mehr als ein paar Zyklen Lebensdauer.
+`switch.hems_akkus_aufladen` (Panel: **Steuerung**; bei bestehenden
+Installationen behält der Schalter seine bisherige Entitäts-ID
+`switch.hems_speicher_zwangsladung`) lädt die Akkus mit voller Leistung,
+unabhängig vom Verbrauch — also notfalls aus dem Netz. Das ist der einzige Weg
+in HEMS, der Netzstrom in den Speicher schiebt: Die Saldo-Regelung lädt sonst
+ausschließlich gegen Einspeisung, und auch das Optimierungsziel *Vollladen*
+ändert daran nichts (es hebt nur das Ladeziel auf 100 %, nicht die Quelle).
+Gedacht für Lagen, in denen der Ladestand mehr zählt als der Preis:
+angekündigter Ausfall, Kalibrierfahrt, ein Speicher, der vor dem Abend
+hochkommen muss.
 
-Was der Schalter **nicht** tut: die Entladung begrenzen. Die untere Grenze bleibt
-die **Reserve-SoC** der Speicher-Rolle. Wer eine Reserve will, die auch über die
-Nacht stehen bleibt, hebt sie dort an — sonst ist der Speicher am Morgen wieder
-so leer wie sonst auch.
+Solange er steht, gilt: Ziel 100 %, sofort statt just in time, keine
+Mittagspause, Ladevorrang vor allen Lasten (unabhängig vom eingestellten
+Vorrang) und die volle Regel-Schrittweite.
 
-Und er lädt **nicht aus dem Netz**: Er sammelt Überschuss schneller ein, aber
-ohne Überschuss bleibt auch er still. Wer wirklich einkaufen will, nimmt den
-Schalter darunter.
-
-### Speicher-Zwangsladung (aus dem Netz)
-
-`switch.hems_speicher_zwangsladung` (Panel: **Steuerung**) lädt den Akku mit
-voller Leistung, unabhängig vom Netzsaldo — also notfalls aus dem Netz. Das ist
-der einzige Weg in HEMS, der Netzstrom in den Speicher schiebt: Die
-Saldo-Regelung lädt sonst ausschließlich gegen Einspeisung, und auch das
-Optimierungsziel *Vollladen* ändert daran nichts (es hebt nur das Ladeziel auf
-100 %, nicht die Quelle). Gedacht für Lagen, in denen der Ladestand mehr zählt
-als der Preis: angekündigter Ausfall, Kalibrierfahrt, ein Speicher, der vor dem
-Abend hochkommen muss.
-
-Solange er steht, gelten dieselben Aufhebungen wie bei der Notstromreserve
-(Ziel 100 %, sofort statt just in time, keine Mittagspause, Ladevorrang vor den
-Lasten).
-
-**Er schaltet sich selbst wieder aus**, sobald kein meldender Speicher mehr
-unter dem physischen Ladeende (99 %) steht — ein Zendure Hyper meldet 100 %
-faktisch nie, er hängt am Ende im CV-Taper. Der Zwang ist eine Aktion mit Ende, kein Betriebsmodus:
-Bliebe er stehen, kaufte HEMS jede Nacht den Eigenverbrauch aus dem Netz zurück,
-sobald der Ladestand wieder sinkt. Ein Ausfall beendet ihn dagegen nicht — melden
-sich alle Speicher ab, bleibt der Schalter stehen.
+**Sind die Akkus voll, hält er sie voll**: Überschuss wird weiter
+aufgenommen, entladen wird nicht — bis der Schalter ausgeschaltet wird. Er
+schaltet sich nicht selbst ab. „Voll" heißt das physische Ladeende (99 %), weil
+ein Zendure Hyper 100 % faktisch nie meldet; sinkt ein Akku darunter, lädt
+HEMS nach. Der Schalter ersetzt die früheren Schalter „Speicher als
+Notstromreserve" und „Speicher-Zwangsladung".
 
 ## HEMS-Panel
 
@@ -171,7 +154,7 @@ mit folgenden Ansichten:
 
 - **Übersicht** — Lastfluss- und Entladeplan-Karte
 - **Steuerung** — Betriebsmodus, Optimierungsziel, Regel-Aggressivität,
-  E-Auto-Zwangsladung, Notstromreserve und Speicher-Zwangsladung
+  E-Auto-Zwangsladung und Akkus aufladen
 - **Heizung** — Außentemperatur, Status (Frostschutz, Sommersperre, Heizgrenze),
   Vorlauf-Sollwert gegen Ist-Wert und die eingestellte Heizkurve
 - **Diagnose** — Fehler, Warnungen und Überlappungen auf einen Blick
@@ -241,12 +224,11 @@ funktioniert unabhängig davon.
 
 **Steuerung und Diagnose**
 
-- `select.hems_modus` — beobachten / auto / invers-auto / aus
+- `select.hems_modus` — beobachten / auto
 - `select.hems_optimierungsziel` — eigenverbrauch / nulleinspeisung / vollladen
 - `switch.hems_e_auto_zwangsladung`
-- `switch.hems_speicher_als_notstromreserve` — Speicher auf Ausfall-Bereitschaft
-- `switch.hems_speicher_zwangsladung` — Akku voll laden, notfalls aus dem Netz;
-  endet von selbst bei erreichtem Ladestand
+- `switch.hems_akkus_aufladen` — Akkus voll laden, notfalls aus dem Netz, und
+  voll halten, bis ausgeschaltet
 - `binary_sensor.hems_konfiguration` — Config-Check für den Auto-Modus
 
 ## Weiterlesen

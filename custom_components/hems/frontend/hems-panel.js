@@ -55,11 +55,6 @@ const HEIZ_STATUS = {
 // nur die Beschriftung weicht ab, wo die reine Erst-Buchstaben-Großschreibung
 // nicht passt (z. B. „vollladen" → „Laden").
 const SEG_LABELS = {
-  mode: {
-    // Nur der Bindestrich-Slug braucht einen Override; die übrigen Modi trifft
-    // die Erst-Buchstaben-Großschreibung unten schon richtig.
-    "invers-auto": "Invers-Auto",
-  },
   goal: {
     eigenverbrauch: "Eigenverbrauch",
     nulleinspeisung: "Nulleinspeisung",
@@ -254,7 +249,7 @@ class HemsPanel extends HTMLElement {
     s.innerHTML = `
       <div class="panel-card">
         <h2>Betriebsmodus</h2>
-        <p class="hint">beobachten = nur empfehlen · auto = schalten · invers-auto = schalten, Richtungs-Select vertauscht · aus = Stopp</p>
+        <p class="hint">beobachten = nur empfehlen · auto = schalten</p>
         <div class="segmented" data-role="mode"></div>
       </div>
       <div class="panel-card">
@@ -272,14 +267,8 @@ class HemsPanel extends HTMLElement {
           <span class="hint" data-role="force-hint"></span></div>
       </div>
       <div class="panel-card">
-        <h2>Speicher als Notstromreserve</h2>
-        <p class="hint">lädt sofort, voll und vor allen Lasten · Schonung aus</p>
-        <div class="toggle-row"><button data-role="reserve" class="toggle"></button>
-          <span class="hint" data-role="reserve-hint"></span></div>
-      </div>
-      <div class="panel-card">
-        <h2>Speicher-Zwangsladung</h2>
-        <p class="hint">lädt notfalls aus dem Netz · endet bei vollem Speicher</p>
+        <h2>Akkus aufladen</h2>
+        <p class="hint">lädt sofort voll, notfalls aus dem Netz · hält voll, bis ausgeschaltet</p>
         <div class="toggle-row"><button data-role="netz" class="toggle"></button>
           <span class="hint" data-role="netz-hint"></span></div>
       </div>`;
@@ -289,8 +278,6 @@ class HemsPanel extends HTMLElement {
       gain: s.querySelector('[data-role="gain"]'),
       force: s.querySelector('[data-role="force"]'),
       forceHint: s.querySelector('[data-role="force-hint"]'),
-      reserve: s.querySelector('[data-role="reserve"]'),
-      reserveHint: s.querySelector('[data-role="reserve-hint"]'),
       netz: s.querySelector('[data-role="netz"]'),
       netzHint: s.querySelector('[data-role="netz-hint"]'),
     };
@@ -298,8 +285,7 @@ class HemsPanel extends HTMLElement {
     this._goalEntity = resolveEntity(this._hass, "select", "hems_optimierungsziel", "optimierungsziel");
     this._gainEntity = resolveEntity(this._hass, "select", "hems_regel_aggressivitaet", "aggressiv");
     this._forceEntity = resolveEntity(this._hass, "switch", "hems_e_auto_zwangsladung", "e_auto_zwangsladung");
-    this._reserveEntity = resolveEntity(this._hass, "switch", "hems_speicher_als_notstromreserve", "notstromreserve");
-    this._netzEntity = resolveEntity(this._hass, "switch", "hems_speicher_zwangsladung", "speicher_zwangsladung");
+    this._netzEntity = resolveEntity(this._hass, "switch", "hems_akkus_aufladen", "hems_speicher_zwangsladung", "akkus_aufladen", "speicher_zwangsladung");
     this._checkEntity = resolveEntity(this._hass, "binary_sensor", "hems_konfiguration", "konfiguration");
 
     const toggle = (button, entityKey) =>
@@ -311,7 +297,6 @@ class HemsPanel extends HTMLElement {
         });
       });
     toggle(this._ctrl.force, "_forceEntity");
-    toggle(this._ctrl.reserve, "_reserveEntity");
     toggle(this._ctrl.netz, "_netzEntity");
   }
 
@@ -339,7 +324,6 @@ class HemsPanel extends HTMLElement {
     this._renderSegmented("goal", this._goalEntity, "select");
     this._renderSegmented("gain", this._gainEntity, "select");
     this._renderForce();
-    this._renderReserve();
     this._renderNetzladen();
     this._renderHeating();
     this._renderDiagnostics();
@@ -355,8 +339,7 @@ class HemsPanel extends HTMLElement {
     this._goalEntity ||= resolveEntity(this._hass, "select", "hems_optimierungsziel", "optimierungsziel");
     this._gainEntity ||= resolveEntity(this._hass, "select", "hems_regel_aggressivitaet", "aggressiv");
     this._forceEntity ||= resolveEntity(this._hass, "switch", "hems_e_auto_zwangsladung", "e_auto_zwangsladung");
-    this._reserveEntity ||= resolveEntity(this._hass, "switch", "hems_speicher_als_notstromreserve", "notstromreserve");
-    this._netzEntity ||= resolveEntity(this._hass, "switch", "hems_speicher_zwangsladung", "speicher_zwangsladung");
+    this._netzEntity ||= resolveEntity(this._hass, "switch", "hems_akkus_aufladen", "hems_speicher_zwangsladung", "akkus_aufladen", "speicher_zwangsladung");
     this._checkEntity ||= resolveEntity(this._hass, "binary_sensor", "hems_konfiguration", "konfiguration");
     // Die Heizungsdaten hängen als Attribut am Lastfluss-Sensor — derselben
     // Quelle, aus der auch die Flow-Karte ihre Schaltlasten liest.
@@ -405,30 +388,21 @@ class HemsPanel extends HTMLElement {
     );
   }
 
-  _renderReserve() {
-    this._renderToggle(
-      "reserve",
-      this._reserveEntity,
-      "Bereit für den Ausfall: Ziel 100 %, Vorrang vor allen Lasten.",
-      "Aus — bedarfsgeführtes Laden mit Akku-Schonung.",
-    );
-  }
-
   _renderNetzladen() {
     // Der einzige Schalter, der Strom kauft — der Hinweis sagt das auch dann,
-    // wenn gerade die Sonne scheint, denn er bleibt bis zum vollen Speicher
-    // stehen und trägt dann durch die Nacht.
+    // wenn gerade die Sonne scheint, denn er hält die Akkus voll, bis er
+    // ausgeschaltet wird.
     this._renderToggle(
       "netz",
       this._netzEntity,
-      "Lädt mit voller Leistung, notfalls aus dem Netz.",
+      "Lädt mit voller Leistung, notfalls aus dem Netz, und hält die Akkus voll.",
       "Aus — geladen wird nur, was sonst eingespeist würde.",
     );
   }
 
   /** Ein An/Aus-Schalter samt Hinweiszeile. `role` benennt die beiden
    * Elemente in `this._ctrl` (`role` und `roleHint`). Fehlt die Entität —
-   * Notstromreserve und Speicher-Zwangsladung gibt es nur mit konfiguriertem
+   * „Akkus aufladen" gibt es nur mit konfiguriertem
    * Speicher, die E-Auto-Zwangsladung nur mit Wallbox —, steht der Schalter
    * auf „—". */
   _renderToggle(role, entity, hintOn, hintOff) {

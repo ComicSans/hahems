@@ -233,20 +233,15 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     known = [s for s in inp.storages if s.soc is not None]
     cap = sum(s.capacity_kwh for s in known)
     speicher_frei_kwh = 0.0
-    # Voll laden, wenn morgen wenig kommt, das Ziel es verlangt oder der
-    # Speicher als Notstromreserve bereitstehen soll: Nulleinspeisung braucht
-    # maximale Aufnahmekapazität gegen Export, Vollladen hält das Ziel ohnehin
-    # dauerhaft auf 100 %, und eine Notstromreserve ist nur voll eine Reserve.
-    # ziel_voll setzt das Nacht-Ziel (ziel_kwh) auf die volle Kapazität; der
-    # Ladedeckel weiter unten fährt dieses Ziel dann sofort statt just in time.
-    #
-    # Die Zwangsladung steht aus demselben Grund hier wie die Notstromreserve:
-    # Ein Zwang, der an einem Tagesdeckel von 40 % endet, wäre keiner — und die
-    # Selbstabschaltung (battery.py) hängt am Deckel, also muss der auf dem
-    # Ziel stehen, nicht auf der Rampe.
+    # Voll laden, wenn morgen wenig kommt, das Ziel es verlangt oder „Akkus
+    # aufladen" steht: Nulleinspeisung braucht maximale Aufnahmekapazität gegen
+    # Export, Vollladen hält das Ziel ohnehin dauerhaft auf 100 %, und wer
+    # aufladen lässt, will die Akkus voll — ein Aufladen, das an einem
+    # Tagesdeckel von 40 % endet, wäre keines. ziel_voll setzt das Nacht-Ziel
+    # (ziel_kwh) auf die volle Kapazität; der Ladedeckel weiter unten fährt
+    # dieses Ziel dann sofort statt just in time.
     ziel_voll = (
         result.morgen_knapp
-        or inp.emergency_reserve
         or inp.battery_force
         or inp.goal in (GOAL_ZERO_FEEDIN, GOAL_FULL_CHARGE)
     )
@@ -278,7 +273,7 @@ def compute_plan(inp: PlanInput) -> PlanResult:
     # kalendarische Alterung zählt die Zeit bei hohem SoC, also wird so spät
     # geladen, wie der erwartete Überschuss es zulässt (`_ladeplan` rechnet
     # rückwärts). Sofort statt just in time, sobald Deckung vor Schonung geht:
-    # Ziel/morgen knapp/Notstromreserve (ziel_voll), es ist Nacht (kein
+    # Ziel/morgen knapp/Akkus aufladen (ziel_voll), es ist Nacht (kein
     # Überschuss zu erwarten), oder der Restertrag heute reicht nicht einmal
     # mehr für das Nacht-Ziel. Der Fehlbetrag bemisst sich dabei am
     # TATSÄCHLICHEN Speicherstand (`available`), nicht an einem Pauschalniveau:
@@ -502,13 +497,11 @@ def _priorities(inp: PlanInput, res: PlanResult) -> list[str]:
         res.flags.ev_bereit = True
 
     # Begründung der Akku-Zeile, in der Reihenfolge, in der sie das Verhalten
-    # erklärt: Notstromreserve schlägt alles, dann die Vollladung wegen morgen,
+    # erklärt: „Akkus aufladen" schlägt alles, dann die Vollladung wegen morgen,
     # zuletzt der Hinweis, dass die Ladung bewusst noch wartet (just in time) —
     # ohne ihn läse sich ein pausierter Akku bei Sonne wie ein Fehler.
     if inp.battery_force:
-        grund = " – Zwang, notfalls aus dem Netz"
-    elif inp.emergency_reserve:
-        grund = " – Notstromreserve"
+        grund = " – Akkus aufladen, notfalls aus dem Netz"
     elif res.morgen_knapp:
         grund = " – morgen wenig Ertrag"
     elif res.lade_start is not None:

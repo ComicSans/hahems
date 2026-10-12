@@ -242,7 +242,6 @@ def speicher_modus_option(
     *,
     lade_option: str | None,
     entlade_option: str | None,
-    invers: bool = False,
 ) -> str | None:
     """Option des Richtungs-Selects (z. B. Zendure ac_mode), oder ``None``.
 
@@ -252,19 +251,13 @@ def speicher_modus_option(
     (laden ⇄ pausiert) zwischen den Optionen und lässt das Gerät takten. Die
     0/0-Setpoints halten den Speicher in der Pause ohnehin passiv, egal in
     welcher Richtung der Select steht.
-
-    ``invers`` vertauscht genau diese Zuordnung und sonst nichts: Laden stellt
-    dann den Ausgangs-, Entladen den Eingangsmodus. Gedacht für Geräte, deren
-    Optionen verkehrt herum beschriftet sind — die Leistungs-Sollwerte und das
-    Vorzeichen der Messung bleiben unangetastet, weil die Regelung genau darüber
-    schließt (siehe ``MODE_INVERS_AUTO`` in ``const.py``).
     """
     if not lade_option or not entlade_option:
         return None
     if modus == "laden":
-        return entlade_option if invers else lade_option
+        return lade_option
     if modus == "entladen":
-        return lade_option if invers else entlade_option
+        return entlade_option
     return None
 
 
@@ -399,3 +392,15 @@ def ladeauftrag_am_ladeschluss(ist_soc: float | None) -> bool:
     dann bleibt es bei der Quittung.
     """
     return ist_soc is not None and ist_soc >= SPEICHER_VOLL_SOC
+
+
+def wiederhergestellter_modus(
+    gespeichert: str | None, optionen: list[str], vorgabe: str
+) -> str:
+    """Betriebsmodus nach dem Neustart aus dem gespeicherten Zustand.
+
+    Nur ein gültiger Modus wird übernommen. Die entfallenen Modi „invers-auto"
+    und „aus" (T-003), „unavailable" oder gar kein Zustand landen auf der
+    Vorgabe („beobachten") — bewusst nicht auf „auto", siehe const.py.
+    """
+    return gespeichert if gespeichert in optionen else vorgabe

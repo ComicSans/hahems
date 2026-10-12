@@ -43,9 +43,8 @@ from .types import PlanInput, PlanResult
 def akku_hat_vorrang(inp: PlanInput) -> bool:
     """Ob der Akku beim Laden Vorrang vor den modulierbaren Lasten hat.
 
-    Notstromreserve und Zwangsladung überstimmen die Einstellung: eine Reserve,
-    die hinter dem Auto ansteht, ist im Ausfall keine, und ein Zwang, der auf
-    das Auto wartet, ist keiner. Sonst battery_first immer; ev_first nie;
+    „Akkus aufladen" überstimmt die Einstellung: ein Aufladen, das hinter dem
+    Auto ansteht, ist im Ausfall keines. Sonst battery_first immer; ev_first nie;
     auto ebenfalls immer — wer keine Priorität setzt, will den Akku zuerst voll
     haben (entschieden am 23.08.2026).
 
@@ -58,7 +57,7 @@ def akku_hat_vorrang(inp: PlanInput) -> bool:
     nichts, unabhängig vom Vorrang. Vorrang heißt jetzt „zuerst bedient", nicht
     mehr „blockiert vorsorglich".
     """
-    if inp.emergency_reserve or inp.battery_force:
+    if inp.battery_force:
         return True
     if inp.priority_mode == PRIORITY_EV_FIRST:
         return False

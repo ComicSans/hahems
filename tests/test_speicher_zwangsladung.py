@@ -1,15 +1,15 @@
-"""Speicher-Zwangsladung: laden gegen den Netzsaldo, mit Ende.
+"""„Akkus aufladen" (T-004): laden gegen den Netzsaldo, dann voll halten.
 
 Die Saldo-Regelung lädt den Akku ausschließlich gegen Export — steht der Saldo
 im Bezug, wird der Sollwert positiv und der Akku entlädt. Kein Optimierungsziel
 ändert daran etwas: `vollladen` (im Panel „Laden") hebt nur das Ladeziel auf
-100 %, und die Notstromreserve beschleunigt nur das Einsammeln von Überschuss.
-Der Schalter `battery_force` ist die einzige Ausnahme — er ist damit auch der
+100 %. Der Schalter `battery_force` („Akkus aufladen") ist die einzige Ausnahme — er ist damit auch der
 einzige Pfad in HEMS, der Netzstrom in den Speicher schiebt.
 
-Die Tests hier halten beide Hälften fest: dass der Zwang wirklich gegen jeden
-Deckel lädt (sonst wäre er wirkungslos), und dass er von selbst endet (sonst
-kaufte er ab dem ersten Nachtverbrauch dauerhaft Strom nach).
+Die Tests hier halten beide Hälften fest: dass er wirklich gegen jeden Deckel
+lädt (sonst wäre er wirkungslos), und dass er die Akkus danach voll hält, ohne
+sich selbst abzuschalten (Entscheidung Tobias 12.10.2026): kein Entladen, nur
+noch Laden aus Überschuss, bis jemand ihn ausschaltet.
 """
 from __future__ import annotations
 
@@ -114,33 +114,40 @@ def test_empfehlung_benennt_den_zwang_auch_ohne_ueberschuss():
             battery_force=True,
         )
     )
-    assert any("Zwang, notfalls aus dem Netz" in p for p in r.prioritaeten)
+    assert any("Akkus aufladen, notfalls aus dem Netz" in p for p in r.prioritaeten)
     assert not any("kein Überschuss" in p for p in r.prioritaeten)
 
 
-# --- Ende der Zwangsladung ----------------------------------------------------
-def test_zwang_endet_am_physischen_ladeende_nicht_erst_bei_100_prozent():
-    # Der wichtigste Test der Datei: Ein Zendure Hyper 2000 meldet 100 %
-    # faktisch nie — er steht bei 99 % im CV-Taper und nimmt nichts mehr
-    # (`SPEICHER_VOLL_SOC`, Befund 07.09.2026). Ein Ende-Kriterium „SoC < 100"
-    # bliebe hier für immer offen und kommandierte drei satten BMS dauerhaft
-    # die volle Ladeleistung — auf Netzkosten und mit Lade-Quittungen, die
-    # niemand einlösen kann.
+# --- Voll halten statt Selbstabschaltung (T-004) ------------------------------
+def test_volle_speicher_werden_gehalten_nicht_entladen():
+    # Ein Zendure Hyper 2000 meldet 100 % faktisch nie — er steht bei 99 % im
+    # CV-Taper (`SPEICHER_VOLL_SOC`). Dort bekommt er keine Ladeleistung mehr
+    # kommandiert, entlädt aber auch nicht: trotz 1000 W Bezug bleibt er voll.
     r = P.compute_plan(
         plan_input(socs=[99, 99, 99], saldo_w=1000, battery_force=True)
     )
-    assert r.speicher_zwang_fertig is True
     assert r.regelung.zwang_aktiv is False
-    # Ab hier regelt wieder der Saldo: ein voller Akku, der den Hausverbrauch
-    # deckt, ist genau das Ergebnis, das der Zwang erreichen wollte.
-    assert r.regelung.modus == "entladen"
+    assert r.regelung.modus == "pausiert"
+    assert r.regelung.soll_w == 0
+    assert sum(zuteilung(r).values()) == 0
 
 
-def test_zwang_endet_bei_vollen_speichern():
+def test_auch_bei_100_prozent_kein_entladen():
     r = P.compute_plan(
         plan_input(socs=[100, 100, 100], saldo_w=1000, battery_force=True)
     )
-    assert r.speicher_zwang_fertig is True
+    assert r.regelung.soll_w <= 0
+    assert sum(zuteilung(r).values()) == 0
+
+
+def test_volle_speicher_nehmen_weiter_ueberschuss_auf():
+    # Voll halten heißt nicht stillstehen: Überschuss geht weiter in den Akku
+    # statt ins Netz (er läuft im Taper ohnehin nur noch tröpfchenweise).
+    r = P.compute_plan(
+        plan_input(socs=[99, 99, 99], saldo_w=-1500, battery_force=True)
+    )
+    assert r.regelung.modus == "laden"
+    assert r.regelung.soll_w < 0
 
 
 def test_zwang_uebergeht_volle_speicher_und_laedt_den_rest():
@@ -151,7 +158,6 @@ def test_zwang_uebergeht_volle_speicher_und_laedt_den_rest():
     r = P.compute_plan(
         plan_input(socs=[99, 99, 60], saldo_w=1000, battery_force=True)
     )
-    assert r.speicher_zwang_fertig is False
     assert r.regelung.modus == "laden"
     z = zuteilung(r)
     assert z["L3"] == 1200
@@ -159,20 +165,26 @@ def test_zwang_uebergeht_volle_speicher_und_laedt_den_rest():
     assert r.regelung.soll_w == -1200
 
 
-def test_zwang_endet_nicht_solange_ein_speicher_platz_hat():
-    r = P.compute_plan(
-        plan_input(socs=[100, 100, 60], saldo_w=1000, battery_force=True)
+def test_sinkt_ein_speicher_laedt_er_wieder_nach():
+    # Erst voll gehalten, dann sinkt L1 unter das Ladeende: Der nächste Plan
+    # lädt wieder mit voller Leistung — kein gemerkter „fertig"-Zustand.
+    voll = P.compute_plan(
+        plan_input(socs=[99, 99, 99], saldo_w=1000, battery_force=True)
     )
-    assert r.speicher_zwang_fertig is False
-    assert r.regelung.modus == "laden"
-    assert zuteilung(r)["L3"] > 0
+    assert voll.regelung.soll_w == 0
+    gesunken = P.compute_plan(
+        plan_input(
+            socs=[92, 99, 99], saldo_w=1000, battery_force=True, flags=voll.flags
+        )
+    )
+    assert gesunken.regelung.modus == "laden"
+    assert zuteilung(gesunken)["L1"] == 1200
 
 
-def test_abgemeldete_speicher_beenden_den_zwang_nicht():
+def test_abgemeldete_speicher_bekommen_keinen_entladebefehl():
     # Alle Speicher stumm: Die Regelung fällt in ihre ausdrücklich passive
-    # Empfehlung (0 W an alle) — unter Zwang auch ohne Freischwimm-Probe, denn
-    # die entlädt, und bestellt ist Laden. Das ist ein Ausfall, kein erfülltes
-    # Ladeziel — ein Zwang, den ein Broker-Neustart beendet, wäre keiner.
+    # Empfehlung (0 W an alle) — unter „Akkus aufladen" auch ohne Freischwimm-
+    # Probe, denn die entlädt, und bestellt ist Laden.
     r = P.compute_plan(
         plan_input(
             storage_states=[
@@ -184,11 +196,4 @@ def test_abgemeldete_speicher_beenden_den_zwang_nicht():
         )
     )
     assert r.regelung.modus == "pausiert"
-    assert r.speicher_zwang_fertig is False
-
-
-def test_ohne_zwang_meldet_ein_voller_speicher_kein_ende():
-    # Gegenprobe zur Bedingung: Eine 0-W-Zuteilung im Lade-Zweig ist ohne
-    # Zwang der Normalfall (Deckel erreicht) und bedeutet gerade kein Ende.
-    r = P.compute_plan(plan_input(socs=[100, 100, 100], saldo_w=-3000))
-    assert r.speicher_zwang_fertig is False
+    assert sum(zuteilung(r).values()) == 0

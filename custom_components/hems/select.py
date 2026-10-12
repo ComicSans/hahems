@@ -1,4 +1,4 @@
-"""Auswahl-Entities: Betriebsmodus (beobachten/aus) und Optimierungsziel."""
+"""Auswahl-Entities: Betriebsmodus (beobachten/auto) und Optimierungsziel."""
 from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
@@ -15,10 +15,9 @@ from .const import (
     GOAL_SELF_CONSUMPTION,
     GOALS,
     MODE_AUTO,
-    MODE_INVERS_AUTO,
     MODE_OBSERVE,
-    MODE_OFF,
 )
+from .actuation import wiederhergestellter_modus
 from .coordinator import HemsCoordinator
 
 
@@ -40,7 +39,7 @@ class HemsModeSelect(SelectEntity, RestoreEntity):
     _attr_name = "Modus"
 
     def __init__(self, coordinator: HemsCoordinator) -> None:
-        self._attr_options = [MODE_OBSERVE, MODE_AUTO, MODE_INVERS_AUTO, MODE_OFF]
+        self._attr_options = [MODE_OBSERVE, MODE_AUTO]
         self._coordinator = coordinator
         self._attr_current_option = MODE_OBSERVE
         self._attr_unique_id = f"{coordinator.entry.entry_id}_mode"
@@ -51,9 +50,12 @@ class HemsModeSelect(SelectEntity, RestoreEntity):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        if (last := await self.async_get_last_state()) and last.state in self.options:
-            self._attr_current_option = last.state
-            self._coordinator.mode = last.state
+        last = await self.async_get_last_state()
+        modus = wiederhergestellter_modus(
+            last.state if last else None, self.options, MODE_OBSERVE
+        )
+        self._attr_current_option = modus
+        self._coordinator.mode = modus
 
     async def async_select_option(self, option: str) -> None:
         self._attr_current_option = option

@@ -191,21 +191,14 @@ class Actuator:
         self._leistung_seit: dict[str, tuple[bool, datetime]] = {}
         self._speicher_gemeldet: set[str] = set()
 
-    async def apply(
-        self, reg: DeviceRegistry, plan: PlanResult, *, invers: bool = False
-    ) -> None:
+    async def apply(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         """Reihenfolge WW → Akku → modulierbare Lasten. Jedes Gerät
         gekapselt. Die Zwangsladung ist bereits in der Empfehlung kodiert
         (plan.ev_regelung.zwang → jede Last läuft, mit dem dort berechneten
         Sollstrom zwischen Unter- und Obergrenze).
-
-        ``invers`` reicht den Invers-Modus durch: nur der Richtungs-Select des
-        Speichers wird vertauscht gestellt (siehe ``speicher_modus_option``).
-        Bewusst als Argument je Aufruf und nicht als Feld am Actuator — der
-        Betriebsmodus gehört dem Coordinator, eine Kopie hier ginge schal.
         """
         await self._guard(self._apply_ww, reg, plan, name="Warmwasser")
-        await self._guard(self._apply_battery, reg, plan, name="Speicher", invers=invers)
+        await self._guard(self._apply_battery, reg, plan, name="Speicher")
         await self._guard(self._apply_modulated, reg, plan, name="Lasten")
         await self._guard(self._apply_switchable, reg, plan, name="Schaltlasten")
         await self._guard(self._apply_heating, reg, plan, name="Heizung")
@@ -495,9 +488,7 @@ class Actuator:
 
     # --- Speicher (Akku) ----------------------------------------------------
 
-    async def _apply_battery(
-        self, reg: DeviceRegistry, plan: PlanResult, *, invers: bool = False
-    ) -> None:
+    async def _apply_battery(self, reg: DeviceRegistry, plan: PlanResult) -> None:
         ctrl = plan.regelung
         if ctrl is None:
             return
@@ -544,13 +535,11 @@ class Actuator:
                 charge_w = discharge_w = 0.0
             # Richtungs-Select (optional, z. B. Zendure ac_mode). Welche Option
             # fällig ist — und wann gar keine — entscheidet die HA-freie
-            # `speicher_modus_option`; dort steht auch, warum der Invers-Modus
-            # ausschließlich hier wirkt.
+            # `speicher_modus_option`.
             want = speicher_modus_option(
                 ctrl.modus,
                 lade_option=s.mode_charge_option,
                 entlade_option=s.mode_discharge_option,
-                invers=invers,
             )
             # Beim Nachtritt OHNE Zustandsvergleich schreiben: Der Zustand der
             # Select-Entität ist das Echo des Geräts, und ein Echo, das nach

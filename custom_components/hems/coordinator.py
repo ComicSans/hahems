@@ -45,7 +45,6 @@ from .const import (
     EV_DEMAND_GRACE_S,
     EV_EMPTY_COOLDOWN_S,
     GOAL_SELF_CONSUMPTION,
-    MODE_INVERS_AUTO,
     MODE_OBSERVE,
     MODES_ACTUATING,
     PRIORITY_AUTO,
@@ -415,14 +414,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._check_signature: tuple | None = None
         # Signatur der zuletzt zugestellten Meldungen (verhindert Zyklus-Lärm).
         self._alert_signature: tuple | None = None
-        # Optimierungsziel, E-Auto-Zwangsladung, Notstromreserve und
-        # Speicher-Zwangsladung (von Select bzw. Switch gesetzt, in
-        # RestoreEntity persistiert). Die Zwangsladung setzt zusätzlich der
-        # Coordinator selbst zurück, sobald der Plan ihr Ziel als erreicht
-        # meldet — siehe `_async_update_data`.
+        # Optimierungsziel, E-Auto-Zwangsladung und „Akkus aufladen" (von
+        # Select bzw. Switch gesetzt, in RestoreEntity persistiert).
         self.goal: str = GOAL_SELF_CONSUMPTION
         self.ev_force: bool = False
-        self.emergency_reserve: bool = False
         self.battery_force: bool = False
         # Regel-Aggressivität (min/normal/max), vom Select gesetzt und in
         # RestoreEntity persistiert. Default aggressiv, damit Ladelücken zügig
@@ -1241,7 +1236,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 gain_level=self.gain_level,
                 ev_force=self.ev_force,
                 battery_to_ev=self._opt(CONF_BATTERY_TO_EV, False),
-                emergency_reserve=self.emergency_reserve,
                 battery_force=self.battery_force,
                 wallbox_w=data.wallbox_w,
                 weather_factor_tomorrow=data.wetter_faktor_morgen,
@@ -1354,22 +1348,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             for h in reg.heatings
         ]
 
-        # Ende der Speicher-Zwangsladung: Der Plan meldet, dass kein meldender
-        # Speicher mehr unter dem physischen Ladeende steht — der Auftrag ist
-        # erfüllt (siehe `PlanResult.speicher_zwang_fertig`). Der Zwang ist
-        # eine Aktion mit Ende, kein Betriebsmodus: Bliebe er stehen, kaufte
-        # HEMS jede Nacht den Eigenverbrauch aus dem Netz zurück, sobald der
-        # SoC wieder sinkt. Der Schalter zieht über den Listener nach.
-        #
-        # Erst hier und nicht vor der Aktuierung: Der Plan dieses Zyklus regelt
-        # in dieser Lage bereits wieder nach dem Saldo (der Zwang teilt vollen
-        # Speichern nichts mehr zu) — abgeschaltet wird also nichts anderes
-        # kommandiert, als ohnehin schon geplant ist.
-        if data.plan.speicher_zwang_fertig and self.battery_force:
-            _LOGGER.info(
-                "HEMS: Speicher-Zwangsladung beendet – Ziel-SoC erreicht"
-            )
-            self.battery_force = False
         data.ziel = self.goal
         data.ev_zwang = self.ev_force
         data.speicher_zwang = self.battery_force
@@ -1411,17 +1389,13 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         self._letzte_empfehlung = empfehlung_log
         if self.mode in MODES_ACTUATING:
             _LOGGER.log(log_level, "HEMS-%s: %s", self.mode, data.plan.empfehlung)
-            await self._actuator.apply(
-                reg, data.plan, invers=self.mode == MODE_INVERS_AUTO
-            )
+            await self._actuator.apply(reg, data.plan)
         else:
             if self.mode == MODE_OBSERVE:
                 _LOGGER.log(log_level, "HEMS-Empfehlung: %s", data.plan.empfehlung)
-            # Verlassen des Auto-Modus (→ beobachten oder aus): den Akku einmalig
+            # Verlassen des Auto-Modus (→ beobachten): den Akku einmalig
             # freigeben, damit er nicht mit der letzten Rate blind weiterläuft.
-            # WW/WP/EV bleiben unangetastet. Der Wechsel auto ⇄ invers-auto ist
-            # kein Verlassen — beide schalten weiter, die Freigabe wäre ein
-            # unnötiger Aussetzer mitten im Betrieb.
+            # WW/WP/EV bleiben unangetastet.
             if self._prev_mode in MODES_ACTUATING:
                 _LOGGER.info("HEMS: Auto verlassen – Akku wird auf 0/0 freigegeben")
                 await self._actuator.release_battery(reg)
@@ -1445,7 +1419,6 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             self.goal,
             self.ev_force,
             data.plan,
-            self.emergency_reserve,
             self.battery_force,
         )
         prev, self._decisions = self._decisions, snap
