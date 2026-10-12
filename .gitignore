@@ -22,3 +22,4 @@ __pycache__/
 # Nicht umdrehen: .claude/worktrees trägt zeitweise zweistellige Gigabyte, und
 # settings.local.json ist maschinenspezifisch.
 ha.key
+ha.json
