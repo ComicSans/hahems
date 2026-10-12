@@ -148,51 +148,68 @@ SALDO_JUMP_COOLDOWN_S = 20.0
 
 # Kaltreserve: als Reserve markierte Speicher nehmen am Entladen erst teil,
 # wenn der mittlere SoC der übrigen unter ON fällt, und scheiden erst
-# oberhalb von OFF wieder aus (Hysterese). Geladen werden sie immer mit,
-# proportional zur freien Kapazität.
+# oberhalb von OFF wieder aus (Hysterese) — die Energie-Seite der Reserve,
+# die Leistungs-Seite steht bei RESERVE_POWER_ON/OFF. Geladen werden sie
+# zuerst und bis 100 %, unabhängig vom Ladedeckel: ein Notfallakku muss
+# bereitstehen (Tobias 12.10.2026, T-002).
 RESERVE_SOC_ON = 40.0
 RESERVE_SOC_OFF = 45.0
 
 # Speicher-Auswahl-Hysterese ("erst einen Akku nutzen, dann den nächsten").
 # Die Zuteilung bündelt greedy auf den Speicher mit der meisten verfügbaren
-# Energie (bzw. freien Kapazität beim Laden). Bei fast gleichem SoC rotiert die
-# Führung sonst jeden Zyklus, weil der arbeitende Speicher minimal unter die
-# anderen fällt — jede Umschaltung ist eine kurze Leistungslücke (Netz-Spike)
-# und ein Schaltvorgang, der die Akku-Elektronik verschleißt. LEAD_HYST_SOC ist
-# der SoC-Vorsprung (in Prozentpunkten), den der aktuell arbeitende Speicher in
-# der Rangfolge behält, bevor ein voller Speicher übernimmt: der Bonus
-# verschiebt NUR die Reihenfolge, nie die Teilnahme-Schranke (Reserve-Grenze,
-# Kaltreserve-Ausschluss bleiben unberührt). Größer = weniger Wechsel, aber ein
-# Speicher altert etwas ungleicher; ~12 % ≈ ein Wechsel je 12 % Entladung.
-# LEAD_POWER_W ist die |Leistung|, ab der ein Speicher als "arbeitend" gilt
-# (über dem Mess-/Standby-Rauschen, unter dem kleinsten Setpoint von 60 W).
-CONTROL_LEAD_HYST_SOC = 12.0
+# Energie. Bei fast gleichem Stand rotiert die Führung sonst jeden Zyklus, weil
+# der arbeitende Speicher minimal unter die anderen fällt — jede Umschaltung
+# ist eine kurze Leistungslücke (Netz-Spike) und ein Schaltvorgang, der die
+# Akku-Elektronik verschleißt. Nach der Zendure-Verteilstrategie (Tobias
+# 12.10.2026, T-002) wird die verfügbare Energie dafür in Stufen von
+# LEAD_STEP_KWH gerechnet: Innerhalb derselben Stufe behält der FÜHRENDE
+# Speicher den Vorrang, abgelöst wird er erst, wenn ein anderer eine ganze
+# Stufe mehr hat. Bei 8 kWh ist das ein Wechsel je ~6 % Entladung (vorher ein
+# SoC-Vorsprung von 12 %). Die Stufe verschiebt NUR die Reihenfolge, nie die
+# Teilnahme-Schranke (Reserve-Grenze, Kaltreserve-Ausschluss bleiben
+# unberührt). LEAD_POWER_W ist die |Leistung|, ab der ein Speicher als
+# "arbeitend" gilt (über dem Mess-/Standby-Rauschen, unter dem kleinsten
+# Setpoint von 60 W).
+CONTROL_LEAD_STEP_KWH = 0.5
 CONTROL_LEAD_POWER_W = 30.0
 # Anteil an der Gesamt-Entladeleistung, ab dem ein Speicher als FÜHRUNG gilt
-# und damit den Hysterese-Bonus bekommt. Die absolute Schwelle LEAD_POWER_W
+# und damit innerhalb seiner Energiestufe den Vorrang behält. Die absolute Schwelle LEAD_POWER_W
 # allein reicht nicht: Muss die Zuteilung splitten (Soll über dem
 # Einzelmaximum), steht der Mitläufer bei 70–120 W und liegt damit ebenfalls
-# über 30 W. Dann bekommen BEIDE den Bonus, er hebt sich auf, und die
+# über 30 W. Dann gelten BEIDE als Führung, der Vorrang hebt sich auf, und die
 # Rangfolge fällt auf den rohen SoC zurück — die Führung kippt bei jedem
 # 1-%-Crossover. Am 07.09.2026 an drei Hyper 2000 gemessen: drei Wechsel in
 # fünf Minuten, je rund 70 s voller Netzbezug (~1100 W), weil die abgelöste
 # Einheit sofort gekappt wird und die neue erst einen Zyklus später steht.
-# Ein Anteil über 0.5 kann nur EINEM Speicher zufallen — damit ist der Bonus
+# Ein Anteil über 0.5 kann nur EINEM Speicher zufallen — damit ist der Vorrang
 # eindeutig und die Hysterese wirkt wieder so, wie sie beschrieben ist.
 CONTROL_LEAD_SHARE = 0.5
 
-# Entladen parallel statt greedy, sobald KEIN einzelner Speicher das Soll
-# allein tragen kann. Das Bündeln auf einen Akku ist gegen Verschleiß gedacht;
-# in diesem Regime läuft der zweite ohnehin mit (greedy: 1200 W + 100 W), der
-# Vorteil ist also dahin, während der Führungswechsel seine volle Lücke kostet.
-# Anteilig aufgeteilt (650 W + 650 W) bleiben die SoCs gekoppelt, es entsteht
-# gar kein Crossover und damit kein Wechsel.
+# Entladen parallel statt greedy, sobald ein einzelner Speicher an seine
+# Auslastungsgrenze käme. Zendure-Verteilstrategie (Tobias 12.10.2026, T-002):
+# ein Gerät möglichst unter 85 % seiner Höchstleistung halten, vor allem wegen
+# der Wärme — darüber läuft der nächste mit. Anteilig aufgeteilt bleiben die
+# SoCs zudem gekoppelt, es entsteht kein Crossover und damit kein Wechsel.
 #
 # Schmitt-Trigger auf `soll / größtes Einzelmaximum`, damit die Betriebsart an
-# der Grenze nicht flattert. ON liegt bewusst ÜBER 1.0: Bei soll == Einzel-
-# maximum trägt ein Akku die Last exakt allein, dort ist greedy richtig.
-CONTROL_PARALLEL_ON = 1.05
-CONTROL_PARALLEL_OFF = 0.85
+# der Grenze nicht flattert: parallel ab 85 %, zurück auf einen Akku unter 70 %.
+CONTROL_PARALLEL_ON = 0.85
+CONTROL_PARALLEL_OFF = 0.70
+
+# Mindestleistung je Speicher, wenn auf mehrere verteilt wird. Unterhalb davon
+# arbeitet der Wandler im ineffizienten Teillastbereich; dann trägt lieber ein
+# Speicher allein (sofern er das Soll aufnehmen kann). Bewusst getrennt von
+# CONTROL_MIN_SETPOINT_W: das ist die Rundungsgrenze für jeden Sollwert, auch
+# den eines einzelnen Speichers — die anzuheben ließe kleine Überschüsse ins
+# Netz laufen.
+CONTROL_SPLIT_MIN_W = 150.0
+
+# Kaltreserve als LEISTUNGSreserve (Tobias 12.10.2026, T-002): Der Reserve-
+# Speicher springt auch ein, wenn die übrigen Speicher zusammen an ihre
+# Auslastungsgrenze kämen — Schmitt-Trigger auf `soll / Σ Höchstleistung der
+# übrigen`, gleiche 85-%-Grenze wie bei CONTROL_PARALLEL_ON.
+RESERVE_POWER_ON = 0.85
+RESERVE_POWER_OFF = 0.70
 
 # Wie viele Minuten die SoC-Entität eines Speichers geschwiegen haben muss,
 # damit er abgemeldet werden DARF. Gemessen wird `last_reported`, nicht

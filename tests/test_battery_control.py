@@ -1,10 +1,11 @@
 """Charakterisierung der Saldo-Speicherregelung (`_storage_control`).
 
-Laden verteilt parallel (proportional zur freien Kapazität). Entladen greedy
-mit Auswahl-Hysterese (ein Akku zur Zeit, gegen Verschleiß) — aber nur, solange
-ein einzelner Speicher das Soll allein tragen kann; darüber anteilig auf alle,
-weil dort ohnehin mehrere laufen und das Bündeln nur noch Führungswechsel
-kostet (siehe CONTROL_PARALLEL_ON/OFF).
+Zendure-Verteilstrategie (T-002): Laden verteilt parallel (gewichtet nach freier
+Kapazität × Ladeleistung), Kaltreserve zuerst. Entladen greedy mit Auswahl-
+Hysterese in 0,5-kWh-Stufen (ein Akku zur Zeit, gegen Verschleiß) — aber nur
+bis 85 % der Einzelleistung; darüber anteilig auf alle (Wärme, siehe
+CONTROL_PARALLEL_ON/OFF). Die Kaltreserve springt bei Energie- ODER
+Leistungsmangel der übrigen ein.
 """
 from __future__ import annotations
 
@@ -100,26 +101,26 @@ def test_entladen_mitlaeufer_stiehlt_die_fuehrung_nicht():
     „über 30 W", sondern „trägt den Hauptteil" (CONTROL_LEAD_SHARE).
 
     Ungleiche Entladegrenzen, damit greedy hier überhaupt splittet und der Fall
-    nicht schon von der Parallel-Verteilung abgefangen wird: Soll 1230 W liegt
-    unter 1.05 × 1200 W (größtes Einzelmaximum), also bleibt es bei greedy.
-    L2 hat den höheren SoC — ohne den Anteils-Vorbehalt zöge er an L1 vorbei.
+    nicht schon von der Parallel-Verteilung abgefangen wird: Die Führung L1
+    kann nur 300 W, Soll 481 W liegt unter 0.85 × 1200 W (größtes
+    Einzelmaximum), also bleibt es bei greedy und L2 läuft mit 181 W mit.
+    Beide liegen in derselben 0,5-kWh-Stufe; L2 hat den höheren SoC — ohne den
+    Anteils-Vorbehalt zöge er an L1 vorbei.
     """
     ss = [
-        storage("L1", 67, max_discharge_w=1200.0, power_w=1200.0),
-        storage("L2", 68, max_discharge_w=300.0, power_w=100.0),
+        storage("L1", 67, max_discharge_w=300.0, power_w=300.0),
+        storage("L2", 68, max_discharge_w=1200.0, power_w=100.0),
     ]
-    r = P.compute_plan(
-        plan_input(storage_states=ss, saldo_w=-165, gain_level="normal")
-    )
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=100))
     z = zuteilung(r)
     assert r.regelung.parallel_aktiv is False
-    assert z["L1"] == 1200
-    assert z["L2"] == 0
+    assert z["L1"] == 300
+    assert z["L2"] == 181
 
 
-# --- Entladen: parallel oberhalb des Einzelmaximums ---------------------------
+# --- Entladen: parallel ab 85 % des Einzelmaximums ----------------------------
 def test_entladen_ueber_einzelmaximum_verteilt_parallel():
-    # Soll 1641 W > 1.05 × 1200 W: kein Speicher trägt das allein. Statt
+    # Soll 1641 W > 0.85 × 1200 W: kein Speicher soll das allein tragen. Statt
     # 1200/441/0 (greedy) anteilig auf alle drei — gleiche SoCs, gleiche
     # Anteile, also gleiche Leistung. Damit bleiben die SoCs gekoppelt und es
     # entsteht gar kein Crossover, an dem die Führung kippen könnte.
@@ -132,13 +133,13 @@ def test_entladen_ueber_einzelmaximum_verteilt_parallel():
 
 
 def test_entladen_parallel_haelt_in_der_hysterese():
-    # Läuft die Verteilung bereits parallel, bleibt sie es bis 0.85 ×
-    # Einzelmaximum. Soll 1121 W (= 0.93 ×) liegt in der Hysterese: kein
+    # Läuft die Verteilung bereits parallel, bleibt sie es bis 0.70 ×
+    # Einzelmaximum. Soll 861 W (= 0.72 ×) liegt in der Hysterese: kein
     # Rückfall auf greedy, sonst flatterte die Betriebsart an der Grenze.
     r = P.compute_plan(
         plan_input(
             socs=[60, 60, 60],
-            saldo_w=1700,
+            saldo_w=1300,
             flags=PlanFlags(parallel_entladen=True),
         )
     )
@@ -148,18 +149,18 @@ def test_entladen_parallel_haelt_in_der_hysterese():
 
 
 def test_entladen_parallel_faellt_unter_der_schwelle_zurueck():
-    # Soll 991 W (= 0.83 × Einzelmaximum) liegt unter CONTROL_PARALLEL_OFF:
+    # Soll 796 W (= 0.66 × Einzelmaximum) liegt unter CONTROL_PARALLEL_OFF:
     # Ein Speicher trägt das mit Abstand allein, also wieder bündeln.
     r = P.compute_plan(
         plan_input(
             socs=[60, 60, 60],
-            saldo_w=1500,
+            saldo_w=1200,
             flags=PlanFlags(parallel_entladen=True),
         )
     )
     assert r.regelung.parallel_aktiv is False
     z = zuteilung(r)
-    assert z["L1"] == 991
+    assert z["L1"] == 796
     assert z["L2"] == z["L3"] == 0
 
 
@@ -266,3 +267,145 @@ def test_kleiner_saldo_pausiert():
 def test_ohne_saldo_keine_regelung():
     r = P.compute_plan(plan_input(socs=[60, 60, 60], saldo_w=None))
     assert r.regelung is None
+
+
+# --- Anlage 2 × 8 kWh + 2-kWh-Notfallakku (Zendure-Verteilstrategie, T-002) ---
+def _gross(name: str, soc: float, **kw):
+    return storage(name, soc, capacity_kwh=8.0, **kw)
+
+
+def _notfall(soc: float, **kw):
+    return storage(
+        "R", soc, capacity_kwh=2.0, cold_reserve=True,
+        max_charge_w=800.0, max_discharge_w=800.0, **kw,
+    )
+
+
+def test_anlage_zweiter_akku_erst_ab_85_prozent():
+    # 991 W = 0.83 × 1200 W: ein Akku trägt allein.
+    r = P.compute_plan(
+        plan_input(storage_states=[_gross("A", 60), _gross("B", 60), _notfall(90)], saldo_w=1500)
+    )
+    assert zuteilung(r) == {"A": 991, "B": 0, "R": 0}
+    # 1056 W = 0.88 ×: der zweite läuft mit, anteilig.
+    r = P.compute_plan(
+        plan_input(storage_states=[_gross("A", 60), _gross("B", 60), _notfall(90)], saldo_w=1600)
+    )
+    assert r.regelung.parallel_aktiv is True
+    assert zuteilung(r) == {"A": 528, "B": 528, "R": 0}
+
+
+def test_anlage_fuehrung_haelt_innerhalb_der_halben_kwh_stufe():
+    # A führt mit 3,52 kWh über der Reserve, B hat 3,84 kWh: dieselbe
+    # 0,5-kWh-Stufe, A behält die Führung trotz 4 % weniger SoC.
+    ss = [_gross("A", 54, power_w=800.0), _gross("B", 58), _notfall(90)]
+    z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=300)))
+    assert z == {"A": 1011, "B": 0, "R": 0}
+
+
+def test_anlage_fuehrung_wechselt_ab_einer_ganzen_stufe():
+    # A 3,36 kWh (Stufe 3,0), B 3,6 kWh (Stufe 3,5): B übernimmt.
+    ss = [_gross("A", 52, power_w=800.0), _gross("B", 55), _notfall(90)]
+    z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=300)))
+    assert z == {"A": 0, "B": 1011, "R": 0}
+
+
+def test_notfallakku_springt_bei_leistungsspitze_ein():
+    # Beide 8-kWh-Akkus voll genug (keine Energie-Reserve), aber 2096 W liegen
+    # über 0.85 × 2400 W: der Notfallakku trägt seinen gewichteten Anteil mit.
+    ss = [_gross("A", 70), _gross("B", 70), _notfall(90)]
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=3200))
+    assert r.regelung.reserve_aktiv is True
+    assert r.flags.kaltreserve is False
+    assert r.flags.kaltreserve_leistung is True
+    z = zuteilung(r)
+    assert z["R"] > 0
+    assert z["A"] == z["B"] > z["R"]
+    # Unterhalb der Spitze bleibt er außen vor.
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=2800))
+    assert r.regelung.reserve_aktiv is False
+    assert zuteilung(r)["R"] == 0
+
+
+def test_notfallakku_leistungsreserve_haelt_in_der_hysterese():
+    # 1836 W = 0.77 × 2400 W: unter ON, aber über OFF — ein bereits
+    # zugeschalteter Notfallakku bleibt dabei.
+    ss = [_gross("A", 70), _gross("B", 70), _notfall(90)]
+    r = P.compute_plan(
+        plan_input(
+            storage_states=ss, saldo_w=2800,
+            flags=PlanFlags(kaltreserve_leistung=True, parallel_entladen=True),
+        )
+    )
+    assert r.regelung.reserve_aktiv is True
+    assert zuteilung(r)["R"] > 0
+
+
+def test_notfallakku_wird_zuerst_geladen():
+    # Kleiner Überschuss: alles in den Notfallakku, die großen warten.
+    ss = [_gross("A", 50), _gross("B", 50), _notfall(50)]
+    z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=-800)))
+    assert z == {"A": 0, "B": 0, "R": 388}
+    # Großer Überschuss: Notfallakku an seiner Ladegrenze, der Rest parallel.
+    z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=-3000)))
+    assert z == {"A": 344, "B": 344, "R": 800}
+
+
+def test_laden_kleiner_ueberschuss_nicht_unter_mindestlast_splitten():
+    # 238 W auf zwei gleiche Akkus wären 119 W je Gerät (< CONTROL_SPLIT_MIN_W):
+    # einer nimmt alles auf.
+    ss = [_gross("A", 50), _gross("B", 50), _notfall(100)]
+    z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=-500)))
+    assert z == {"A": 238, "B": 0, "R": 0}
+
+
+def test_parallel_gewichtet_nach_hoechstleistung():
+    # Gleicher Stand, 2400 W gegen 800 W: Aufteilung 3 : 1 (Zendure-Gewichtung).
+    ss = [
+        storage("G", 60, capacity_kwh=8.0, max_discharge_w=2400.0),
+        storage("K", 60, capacity_kwh=8.0, max_discharge_w=800.0),
+    ]
+    z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=4000)))
+    assert z == {"G": 1962, "K": 654}
+
+
+def test_notfallakku_laedt_bis_100_ohne_ladedeckel():
+    # Der Ladedeckel steht unter 50 %, die großen Akkus liegen darunter und
+    # warten — der Notfallakku bei 95 % wird trotzdem weiter geladen.
+    ss = [_gross("A", 40), _gross("B", 40), _notfall(95)]
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=-800))
+    assert r.lade_deckel_soc is not None and r.lade_deckel_soc < 95
+    assert zuteilung(r)["R"] > 0
+
+
+def test_notfallakku_energiereserve_in_der_anlage():
+    # Mittlerer SoC der großen Akkus 35 % (< RESERVE_SOC_ON): Energie-Seite
+    # aktiv, Leistungs-Seite nicht (991 W ≪ 0.85 × 2400 W).
+    ss = [_gross("A", 35), _gross("B", 35), _notfall(90)]
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=1500))
+    assert r.flags.kaltreserve is True
+    assert r.flags.kaltreserve_leistung is False
+    assert r.regelung.reserve_aktiv is True
+
+
+def test_entladen_parallel_kein_teillast_mitlaeufer_unter_mindestlast():
+    # Parallel (2291 W > 0.85 × 2400 W), aber B bekäme gewichtet nur ~116 W
+    # (< CONTROL_SPLIT_MIN_W). A trägt das Ganze allein, also bleibt B aus.
+    ss = [
+        _gross("A", 60, max_discharge_w=2400.0),
+        _gross("B", 18, max_discharge_w=800.0),
+    ]
+    r = P.compute_plan(plan_input(storage_states=ss, saldo_w=3500))
+    assert r.regelung.parallel_aktiv is True
+    assert zuteilung(r) == {"A": 2291, "B": 0}
+
+
+def test_entladen_mitlaeufer_bleibt_wenn_der_rest_sonst_ins_netz_ginge():
+    # 2616 W: A kann höchstens 2400 W. Ohne B ginge der Rest ins Netz — dann
+    # läuft B mit, auch wenn sein gewichteter Anteil klein wäre.
+    ss = [
+        _gross("A", 60, max_discharge_w=2400.0),
+        _gross("B", 18, max_discharge_w=800.0),
+    ]
+    z = zuteilung(P.compute_plan(plan_input(storage_states=ss, saldo_w=4000)))
+    assert z == {"A": 2400, "B": 216}

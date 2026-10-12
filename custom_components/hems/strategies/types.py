@@ -363,8 +363,11 @@ class PlanFlags:
     # Kaltreserve der Saldo-Regelung: Reserve-Speicher entladen mit, solange
     # der mittlere SoC der übrigen unten ist.
     kaltreserve: bool = False
+    # Kaltreserve als Leistungsreserve: die übrigen Speicher kämen allein an
+    # ihre Auslastungsgrenze (RESERVE_POWER_ON/OFF). Start konservativ False.
+    kaltreserve_leistung: bool = False
     # Entladen läuft parallel (anteilig auf alle) statt greedy (ein Akku
-    # trägt), weil das Soll über dem Einzelmaximum liegt. Gehalten, weil die
+    # trägt), weil das Soll über 85 % des Einzelmaximums liegt. Gehalten, weil die
     # Betriebsart sonst an der Grenze zwischen beiden Verteilungen flattert —
     # Schwellen und Begründung bei CONTROL_PARALLEL_ON/OFF. Start konservativ
     # False: greedy ist die Betriebsart, die auf die Nachtgrundlast passt.
