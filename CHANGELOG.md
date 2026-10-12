@@ -4,6 +4,53 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 3.0.0 — Zwei Betriebsmodi, ein Ladeschalter, eine Kaltreserve für den Rest
+
+Diese Version räumt bei Modi und Schaltern auf und stellt die Verteilung auf
+mehrere Akkus auf die Strategie der Zendure-Integration um. Drei Änderungen
+verlangen nach dem Update einen Blick in die eigene Einrichtung.
+
+**Nur noch „beobachten“ und „auto“.** `select.hems_modus` kennt die Modi
+„invers-auto“ und „aus“ nicht mehr. „beobachten“ ist zugleich der Not-Aus:
+Beim Wechsel aus „auto“ gibt HEMS den Akku einmal frei (0/0) und schreibt
+danach nichts mehr.
+
+**Anpassungsbedarf:** Wer „invers-auto“ oder „aus“ eingestellt hatte, steht
+nach dem Update auf „beobachten“. Das ist Absicht und nicht „auto“: Bei
+„invers-auto“ waren die Richtungsoptionen vertauscht beschriftet, „auto“ hätte
+den Akku also in die falsche Richtung gefahren. Wer „invers-auto“ brauchte,
+tauscht in der Speicher-Rolle die Werte von „Richtungs-Option beim Laden“ und
+„Richtungs-Option beim Entladen“ und stellt danach auf „auto“.
+
+**Ein Schalter „Akkus aufladen“ ersetzt zwei.** Die bisherigen Schalter
+„Speicher als Notstromreserve“ und „Speicher-Zwangsladung“ gehen in ihm auf.
+Er lädt mit voller Leistung, notfalls aus dem Netz, Ziel 100 %, ohne
+Mittagspause und mit Ladevorrang vor allen Lasten. Sind die Akkus voll, hält
+er sie voll: Überschuss wird weiter aufgenommen, entladen wird nicht. Solange
+er an ist, zeigt Home Assistant einen dauerhaften Hinweis mit dem
+Einschaltzeitpunkt, auch nach einem Neustart.
+
+**Anpassungsbedarf:** Der Schalter schaltet sich nicht mehr selbst ab — die
+Zwangsladung endete bisher bei vollem Akku, „Akkus aufladen“ bleibt an, bis
+man ihn ausschaltet. Bestehende Installationen behalten die Entitäts-ID
+`switch.hems_speicher_zwangsladung`, neue Installationen heißen
+`switch.hems_akkus_aufladen`. Der Schalter „Speicher als Notstromreserve“ wird
+entfernt; war er an, ist dieser Zustand nach dem Update weg — bei Bedarf
+„Akkus aufladen“ einschalten. Automationen, die auf einen der alten Schalter
+schreiben oder ihn auswerten, müssen angepasst werden.
+
+**Die Kaltreserve trägt nur noch den Rest.** Ein als Kaltreserve markierter
+Speicher (Notfallakku) übernimmt beim Entladen nie die Führung. Er springt
+ein, wenn die übrigen Akkus 85 % ihrer Summenleistung erreichen, im Mittel nur noch
+5 Punkte über ihrer Reserve-SoC stehen oder alle abgemeldet sind. Geladen wird
+er zuerst, bis zum neuen Feld „Ziel-SoC der Kaltreserve“ (Vorgabe 100 %).
+
+**Anpassungsbedarf:** Bisher sprang die Kaltreserve ein, sobald der mittlere
+SoC der übrigen Akkus auf 40 % fiel, und konnte danach die Führung übernehmen.
+Wer sich darauf verlassen hat, dass die Kaltreserve früh mitträgt: Wann sie
+einspringt, hängt jetzt an der Reserve-SoC der übrigen Akkus und an deren
+Höchstleistung — beides in deren Speicher-Rollen prüfen.
+
 ## 2.11.0 — `max_block_min = 0` heißt jetzt „keine Obergrenze"
 
 Bei Schaltlasten und Heizungen erzwingt die maximale Sperrdauer
