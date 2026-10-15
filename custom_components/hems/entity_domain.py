@@ -94,6 +94,16 @@ def domain_of(entity: str | None) -> str:
     return entity.split(".")[0] if entity else ""
 
 
+def erreichbar(state: str | None) -> bool:
+    """Ob die Steuer-Entität einen echten Zustand meldet.
+
+    Fehlt die Entität oder steht sie auf `unavailable`/`unknown`, kann die Last
+    einem Schaltbefehl nicht folgen — sie gilt dann nicht nur als „aus",
+    sondern als nicht schaltbar.
+    """
+    return state is not None and state.lower() not in STATE_UNAVAILABLE_VALUES
+
+
 def ist_an(entity: str | None, state: str | None) -> bool:
     """Ob die Steuer-Entität eingeschaltet ist.
 

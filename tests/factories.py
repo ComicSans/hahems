@@ -113,6 +113,7 @@ def switchable(
     min_on_min: int = 20,
     min_off_min: int = 10,
     max_block_min: int = 120,
+    erreichbar: bool = True,
 ) -> P.SwitchableState:
     return P.SwitchableState(
         name=name,
@@ -126,6 +127,7 @@ def switchable(
         min_on_min=min_on_min,
         min_off_min=min_off_min,
         max_block_min=max_block_min,
+        erreichbar=erreichbar,
     )
 
 

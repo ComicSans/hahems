@@ -211,6 +211,10 @@ class SwitchableState:
     min_on_min: int = 20
     min_off_min: int = 10
     max_block_min: int = 120
+    # Steuer-Entität meldet einen Zustand (nicht `unavailable`/`unknown`).
+    # Eine nicht erreichbare Last kann HEMS' Befehl nicht folgen; ihre
+    # Erwartung darf weder Budget noch Vorsteuerung belegen (15.10.2026).
+    erreichbar: bool = True
     # Vorgaben einer übergeordneten Domäne, die vor jeder Überschuss- und
     # Anti-Takt-Entscheidung stehen. Heute setzt sie nur die Heizung
     # (`strategies/heating.py`), und zwar in dieser Rangfolge:

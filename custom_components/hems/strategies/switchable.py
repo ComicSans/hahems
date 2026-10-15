@@ -189,6 +189,21 @@ def switchable_control(inp: PlanInput, res: PlanResult) -> SwitchableResult | No
         # nicht zurücknehmen lässt, bevor das Haus kalt ist.
         if not an and s.nicht_abschalten and s.ist_an:
             an, grund = True, s.grund_vorgabe or "Lage unbekannt"
+        # Nicht erreichbar (Steuer-Entität `unavailable`/`unknown` oder keine):
+        # Die Empfehlung bleibt sichtbar, aber die Last kann ihr nicht folgen.
+        # Ihre Erwartung belegt deshalb weder Budget noch Vorsteuerung. Sonst
+        # meldet sie Zyklus für Zyklus „schaltet gleich zu", der Speicher-Regler
+        # deckt eine Last, die nie kommt, und entlädt in die Einspeisung.
+        # Gemessen am 15.10.2026: Steckdose Luftentfeuchter seit zwei Tagen
+        # offline, `max_block` erzwang „an", +2000 W Vorsteuerung je Zyklus,
+        # nach dem Ende der Wallbox-Ladung rund 2 kW Akku ins Netz.
+        if not s.erreichbar:
+            lasten.append(
+                SwitchableSetpoint(
+                    name=s.name, an=an, id=s.id, grund=f"{grund} (nicht erreichbar)"
+                )
+            )
+            continue
         if an:
             budget -= erwartet
             soll_w += erwartet

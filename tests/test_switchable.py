@@ -162,3 +162,44 @@ def test_max_block_wartet_die_mindestpause_ab():
     )
     r = _plan([sw], socs=[60, 60, 60], saldo_w=2000)
     assert _an(r, "Pumpe") is True
+
+
+# --- Nicht erreichbare Last (15.10.2026) -------------------------------------
+def _offline(**kw):
+    # Steckdose offline seit Tagen: `aus_seit_s` läuft weiter, `max_block`
+    # erzwingt „an" — aber die Last kann nicht folgen.
+    return switchable(
+        "Luftentfeuchter", erwartet_w=None, ist_an=False, aus_seit_s=50000,
+        max_block_min=700, erreichbar=False, **kw,
+    )
+
+
+def test_unerreichbare_last_ohne_vorsteuerung_und_budget():
+    r = _plan([_offline()], socs=[60, 60, 60], saldo_w=-4000)
+    assert r.schaltbare.delta_w == 0
+    assert r.schaltbare.soll_w == 0
+    grund = next(l.grund for l in r.schaltbare.lasten if l.name == "Luftentfeuchter")
+    assert "nicht erreichbar" in grund
+
+
+def test_unerreichbare_last_belegt_kein_budget_fuer_andere():
+    lasten = [
+        _offline(id="a", priority=1),
+        switchable("Pumpe", id="b", priority=2, erwartet_w=1500),
+    ]
+    r = _plan(lasten, socs=[60, 60, 60], saldo_w=-2000)
+    assert _an(r, "Pumpe") is True
+
+
+def test_unerreichbare_last_treibt_akku_nicht_in_die_einspeisung():
+    # Nacht-Szenario vom 15.10.2026: Saldo ausgeglichen, Akkus ruhen. Mit der
+    # Phantom-Vorsteuerung (2000 W Fallback) entlud der Regler ~2 kW ins Netz.
+    erreichbar = _plan(
+        [switchable("Luftentfeuchter", erwartet_w=None, ist_an=False,
+                    aus_seit_s=50000, max_block_min=700)],
+        socs=[60, 60, 60], saldo_w=0,
+    )
+    offline = _plan([_offline()], socs=[60, 60, 60], saldo_w=0)
+    assert erreichbar.schaltbare.delta_w == 2000  # Vorsteuerung bei echter Last
+    assert offline.regelung.soll_w <= 100
+    assert offline.regelung.soll_w < erreichbar.regelung.soll_w

@@ -949,6 +949,9 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                     min_on_min=s.min_on_min,
                     min_off_min=s.min_off_min,
                     max_block_min=s.max_block_min,
+                    erreichbar=entity_domain.erreichbar(
+                        st.state if st is not None else None
+                    ),
                 )
             )
         # Über beide Rollen hinweg nach Nutzer-Priorität sortieren; sonst käme
