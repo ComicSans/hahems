@@ -17,6 +17,7 @@ from hems.entity_domain import (
     BETRIEBSART_HEIZEN,
     BETRIEBSART_KUEHLEN,
     betriebsart,
+    erreichbar,
     ist_an,
     schalt_service,
 )
@@ -160,3 +161,12 @@ def test_ausschalten_ignoriert_die_betriebsart():
         "climate.wp", False, "heat", "cool", BETRIEBSART_KUEHLEN
     )
     assert daten == {"hvac_mode": "off"}
+
+
+@pytest.mark.parametrize(
+    "state,erwartet",
+    [(None, False), ("unavailable", False), ("unknown", False),
+     ("UNAVAILABLE", False), ("on", True), ("off", True), ("heat", True)],
+)
+def test_erreichbar(state, erwartet):
+    assert erreichbar(state) is erwartet

@@ -111,7 +111,7 @@ def ist_an(entity: str | None, state: str | None) -> bool:
     `switch` ist das die alte Bedeutung von ``state == "on"``, bei `climate`
     verhindert es, dass `unavailable` als „läuft" durchgeht.
     """
-    if state is None or state.lower() in STATE_UNAVAILABLE_VALUES:
+    if not erreichbar(state):
         return False
     if domain_of(entity) == "climate":
         return state != CLIMATE_OFF

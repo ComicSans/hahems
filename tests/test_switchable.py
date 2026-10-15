@@ -203,3 +203,14 @@ def test_unerreichbare_last_treibt_akku_nicht_in_die_einspeisung():
     assert erreichbar.schaltbare.delta_w == 2000  # Vorsteuerung bei echter Last
     assert offline.regelung.soll_w <= 100
     assert offline.regelung.soll_w < erreichbar.regelung.soll_w
+
+
+def test_unerreichbare_laufende_last_ohne_abschalt_vorsteuerung():
+    # Meldet die Steuer-Entität nichts mehr, ist auch das Abschalten kein
+    # Lagewechsel, den HEMS herbeiführen kann — kein negatives Delta.
+    sw = switchable(
+        "Pumpe", erwartet_w=1500, ist_an=True, an_seit_s=99999, power_w=1500,
+        erreichbar=False,
+    )
+    r = _plan([sw], socs=[60, 60, 60], saldo_w=3000)
+    assert r.schaltbare.delta_w == 0
