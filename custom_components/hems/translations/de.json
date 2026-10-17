@@ -423,6 +423,7 @@
           "min_on_min": "Mindestlaufzeit (min)",
           "min_off_min": "Mindestpause (min)",
           "max_block_min": "Max. Sperrdauer (min)",
+          "takt_sperre_min": "Taktsperre (min)",
           "priority": "Priorität"
         },
         "data_description": {
@@ -446,6 +447,7 @@
           "min_on_min": "Ist die Anlage einmal an, läuft sie mindestens so lange.",
           "min_off_min": "Nach dem Abschalten bleibt die Anlage mindestens so lange aus. Der Frostschutz geht daran vorbei.",
           "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat. 0 = keine Obergrenze.",
+          "takt_sperre_min": "Mindestabstand zwischen zwei Starts. Schaltet HEMS die Anlage früher als nach dieser Zeit seit ihrem letzten Start ab, bleibt sie bis zum Ende des Intervalls aus und wird dann wieder eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Lief die Anlage länger, entscheidet der Überschuss. Unter der Frostschutz-Schwelle gilt die Sperre nicht, ebenso wenig in der Sommersperre und über der Heizgrenze. 0 = aus.",
           "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge."
         }
       },
@@ -473,6 +475,7 @@
           "min_on_min": "Mindestlaufzeit (min)",
           "min_off_min": "Mindestpause (min)",
           "max_block_min": "Max. Sperrdauer (min)",
+          "takt_sperre_min": "Taktsperre (min)",
           "priority": "Priorität"
         },
         "data_description": {
@@ -496,6 +499,7 @@
           "min_on_min": "Ist die Anlage einmal an, läuft sie mindestens so lange.",
           "min_off_min": "Nach dem Abschalten bleibt die Anlage mindestens so lange aus. Der Frostschutz geht daran vorbei.",
           "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat. 0 = keine Obergrenze.",
+          "takt_sperre_min": "Mindestabstand zwischen zwei Starts. Schaltet HEMS die Anlage früher als nach dieser Zeit seit ihrem letzten Start ab, bleibt sie bis zum Ende des Intervalls aus und wird dann wieder eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Lief die Anlage länger, entscheidet der Überschuss. Unter der Frostschutz-Schwelle gilt die Sperre nicht, ebenso wenig in der Sommersperre und über der Heizgrenze. 0 = aus.",
           "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge."
         }
       }

@@ -246,6 +246,7 @@ HEATING_SCHEMA = vol.Schema(
         vol.Required("min_on_min", default=20): _number(0, 240, "min"),
         vol.Required("min_off_min", default=10): _number(0, 240, "min"),
         vol.Required("max_block_min", default=120): _number(0, 720, "min"),
+        vol.Required("takt_sperre_min", default=0): _number(0, 720, "min"),
         vol.Required("priority", default=1): _number(1, 10, ""),
     }
 )

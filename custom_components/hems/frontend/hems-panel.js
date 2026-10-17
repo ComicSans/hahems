@@ -46,6 +46,7 @@ const HEIZ_STATUS = {
   heizen: { label: "Heizen", klasse: "good" },
   sommersperre: { label: "Sommersperre", klasse: "" },
   heizgrenze: { label: "Über Heizgrenze", klasse: "" },
+  taktsperre: { label: "Taktsperre", klasse: "" },
   unbekannt: { label: "Keine Außentemperatur", klasse: "bad" },
   kuehlen: { label: "Kühlen", klasse: "good" },
   fremdmodus: { label: "Modus nicht zugeordnet", klasse: "" },

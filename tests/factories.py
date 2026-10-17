@@ -149,6 +149,11 @@ def heating(
     heat_lock_from_month: int = 6,
     heat_lock_to_month: int = 8,
     betriebsart: str = "heizen",
+    takt_sperre_min: int = 0,
+    min_off_min: int = 10,
+    ist_an: bool = False,
+    start_seit_s: float | None = None,
+    aus_seit_s: float | None = None,
 ) -> P.HeatingState:
     """Witterungsführung einer Heizung. Die `id` deckt sich absichtlich mit dem
     Default von `switchable()` — Heizung und Schaltlast sind dasselbe Gerät in
@@ -170,6 +175,11 @@ def heating(
         vlt_max_c=vlt_max_c,
         heat_lock_from_month=heat_lock_from_month,
         heat_lock_to_month=heat_lock_to_month,
+        takt_sperre_min=takt_sperre_min,
+        min_off_min=min_off_min,
+        ist_an=ist_an,
+        start_seit_s=start_seit_s,
+        aus_seit_s=aus_seit_s,
     )
 
 

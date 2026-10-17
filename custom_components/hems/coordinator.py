@@ -453,6 +453,11 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         # "fremd"). Überbrückt das Abschalten, in dem die climate-Entität nur
         # noch `off` sagt — siehe _betriebsart.
         self._letzte_betriebsart: dict[str, str] = {}
+        # Letzter beobachteter Start je Heizung (für die Taktsperre). HA kennt
+        # bei Aus-Lage nur den Zeitpunkt des Ausschaltens, nicht den des
+        # Starts davor. Nach einem Neustart leer: dann greift die Sperre erst,
+        # wenn die Anlage einmal lief.
+        self._letzter_start: dict[str, datetime] = {}
         self._unit_warned: set[str] = set()
         # (Modus, Empfehlung) des letzten Zyklus, damit sie nur bei Änderung
         # auf INFO geloggt wird.
@@ -1014,6 +1019,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         month = dt_util.now().month
         return [
             HeatingState(
+                **self._takt_lage(h, now),
                 name=h.name,
                 id=h.id,
                 outdoor_temp_c=(
@@ -1034,9 +1040,34 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
                 vlt_max_c=h.vlt_max_c,
                 heat_lock_from_month=h.heat_lock_from_month,
                 heat_lock_to_month=h.heat_lock_to_month,
+                takt_sperre_min=h.takt_sperre_min,
+                min_off_min=h.min_off_min,
             )
             for h in reg.heatings
         ]
+
+    def _takt_lage(self, h, now: datetime) -> dict:
+        """Schaltlage einer Heizung für die Taktsperre, mit Start-Gedächtnis.
+
+        Solange die Anlage läuft, ist `last_changed` ihr Start und wird gemerkt.
+        Bei Aus-Lage liefert HA nur den Zeitpunkt des Ausschaltens; der Start
+        kommt dann aus dem Gedächtnis.
+        """
+        st = self.hass.states.get(h.switch_entity) if h.switch_entity else None
+        if st is None or not entity_domain.erreichbar(st.state):
+            # Nicht erreichbar: `last_changed` ist dann der Ausfall, kein Aus.
+            return {"ist_an": False, "start_seit_s": None, "aus_seit_s": None}
+        ist_an = entity_domain.ist_an(h.switch_entity, st.state)
+        if ist_an:
+            self._letzter_start[h.id] = st.last_changed
+        start = self._letzter_start.get(h.id)
+        return {
+            "ist_an": ist_an,
+            "start_seit_s": (now - start).total_seconds() if start else None,
+            "aus_seit_s": (
+                None if ist_an else (now - st.last_changed).total_seconds()
+            ),
+        }
 
     def _own_entity_id(self, key: str) -> str | None:
         """Entity-ID einer eigenen Entität über die Registry auflösen.

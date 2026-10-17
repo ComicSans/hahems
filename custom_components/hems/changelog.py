@@ -54,6 +54,7 @@ _HEIZUNG_LABEL = {
     "heizen": "witterungsgeführt",
     "sommersperre": "Sommersperre",
     "heizgrenze": "über Heizgrenze",
+    "taktsperre": "Taktsperre",
     "unbekannt": "keine Außentemperatur",
     "kuehlen": "Kühlbetrieb (nur Überschuss)",
     "fremdmodus": "Modus nicht zugeordnet",

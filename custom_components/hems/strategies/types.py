@@ -264,12 +264,15 @@ class SwitchableResult:
 class HeatingState:
     """Zustand eines Wärmeerzeugers für die Witterungsführung.
 
-    Die Schaltlage (`ist_an`, Mindestzeiten, gelernte Leistung) läuft NICHT
-    hier, sondern über den `SwitchableState` derselben `id` — die Heizung
+    Die Überschussregelung (Mindestzeiten, gelernte Leistung, Budget) läuft
+    NICHT hier, sondern über den `SwitchableState` derselben `id` — die Heizung
     konkurriert im selben Überschuss-Budget wie jede andere schaltbare Last.
-    Dieser Zustand trägt nur, was eine Steckdosenlast nicht hat: die
+    Dieser Zustand trägt, was eine Steckdosenlast nicht hat: die
     Außentemperatur und die Parameter von Frostschutz, Heizgrenze, Kurve und
-    Sommersperre.
+    Sommersperre. Dazu kommt die Schaltlage, soweit die Taktsperre sie braucht
+    (`ist_an`, `start_seit_s`, `aus_seit_s`, `min_off_min`): ihr Wiederanlauf
+    muss wie der Frostschutz ohne Netzsaldo gestellt werden und läuft deshalb
+    über `HeatingSetpoint.zwang_an`, nicht über die Überschussregelung.
 
     `outdoor_temp_c` ist `None`, wenn weder ein eigener Temperatursensor noch
     die Wetter-Entität einen Wert liefert. Dann kann HEMS weder Frost erkennen
@@ -299,17 +302,28 @@ class HeatingState:
     vlt_max_c: float = 45.0
     heat_lock_from_month: int = 0
     heat_lock_to_month: int = 0
+    # Taktsperre (Mindestabstand zwischen zwei Starts, min), 0 = aus.
+    takt_sperre_min: int = 0
+    min_off_min: int = 10
+    ist_an: bool = False
+    # Sekunden seit dem letzten beobachteten Start; None = unbekannt (nach
+    # einem Neustart, bevor die Anlage einmal lief).
+    start_seit_s: float | None = None
+    # Sekunden seit dem Ausschalten (nur bei Aus-Lage), sonst None.
+    aus_seit_s: float | None = None
 
 
 @dataclass
 class HeatingSetpoint:
     """Empfehlung für einen Wärmeerzeuger.
 
-    `zwang_an` ist der Frostschutz und der einzige Teil dieser Empfehlung, der
-    ohne Netzsaldo entsteht: er hängt allein an der Temperatur. Der Actuator
-    wertet ihn deshalb auch dann aus, wenn gar kein Überschussplan vorliegt
-    (Zähler unerreichbar) — sonst bliebe eine abgeschaltete Heizung genau in
-    der Störung aus, in der niemand hinschaut.
+    `zwang_an` ist der Frostschutz oder der Wiederanlauf am Ende der
+    Taktsperre — die einzigen Teile dieser Empfehlung, die ohne Netzsaldo
+    entstehen. Der Actuator wertet ihn deshalb auch dann aus, wenn gar kein
+    Überschussplan vorliegt (Zähler unerreichbar) — sonst bliebe eine
+    abgeschaltete Heizung genau in der Störung aus, in der niemand hinschaut.
+    Nur den Frostschutz (`status == "frostschutz"`) schreibt er nach, wenn die
+    Anlage ihn nicht übernimmt.
     """
 
     name: str
@@ -324,8 +338,8 @@ class HeatingSetpoint:
     # Witterungsgeführter Vorlauf-Sollwert (°C); None heißt „nicht schreiben".
     vorlauf_c: float | None = None
     t_aussen_c: float | None = None
-    # "frostschutz" | "heizen" | "sommersperre" | "heizgrenze" | "unbekannt"
-    # | "kuehlen" | "fremdmodus"
+    # "frostschutz" | "heizen" | "sommersperre" | "heizgrenze" | "taktsperre"
+    # | "unbekannt" | "kuehlen" | "fremdmodus"
     status: str = ""
     grund: str = ""
 

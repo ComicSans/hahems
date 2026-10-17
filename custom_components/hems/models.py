@@ -184,6 +184,9 @@ class HeatingSystem:
     min_on_min: int = 20
     min_off_min: int = 10
     max_block_min: int = 120
+    # Taktsperre: Mindestabstand zwischen zwei Starts (min), 0 = aus. Siehe
+    # `strategies/heating.py`.
+    takt_sperre_min: int = 0
     priority: int = 1
 
     frost_on_c: float = DEFAULT_FROST_ON_C

@@ -907,8 +907,15 @@ class Actuator:
                 if not h.switch_entity:
                     continue
                 if sp.zwang_an:
+                    # Nachgeschrieben wird nur der Frostschutz. Der Wiederanlauf
+                    # nach der Taktsperre ist reguläres Schalten: wer ihn
+                    # ignoriert, tut es beim zweiten Mal auch.
                     await self._turn_heizung(
-                        h, True, sp.betriebsart, plan, frostschutz=True
+                        h,
+                        True,
+                        sp.betriebsart,
+                        plan,
+                        frostschutz=sp.status == "frostschutz",
                     )
                 elif sp.nicht_abschalten:
                     continue

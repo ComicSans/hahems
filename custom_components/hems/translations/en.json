@@ -423,6 +423,7 @@
           "min_on_min": "Minimum runtime (min)",
           "min_off_min": "Minimum pause (min)",
           "max_block_min": "Max. block duration (min)",
+          "takt_sperre_min": "Cycle lock (min)",
           "priority": "Priority"
         },
         "data_description": {
@@ -446,6 +447,7 @@
           "min_on_min": "Once on, the appliance stays on for at least this long.",
           "min_off_min": "After switching off, the appliance stays off for at least this long. Frost protection bypasses this.",
           "max_block_min": "Once the appliance has been off this long, it is switched on even without surplus — but never before its minimum pause has passed. Measured from the entity's last state change, whoever caused it. 0 = no limit.",
+          "takt_sperre_min": "Minimum interval between two starts. If HEMS switches the system off sooner than this after its last start, it stays off until the interval ends and is then switched on again, even without surplus — but never before its minimum pause has passed. If it ran longer, the surplus decides. Below the frost protection threshold the lock does not apply, nor during the summer lock or above the heating limit. 0 = off.",
           "priority": "1 = most important. When surplus is scarce, the least important load gives way first. Heating systems and switchable loads share one ranking."
         }
       },
@@ -473,6 +475,7 @@
           "min_on_min": "Minimum runtime (min)",
           "min_off_min": "Minimum pause (min)",
           "max_block_min": "Max. block duration (min)",
+          "takt_sperre_min": "Cycle lock (min)",
           "priority": "Priority"
         },
         "data_description": {
@@ -496,6 +499,7 @@
           "min_on_min": "Once on, the appliance stays on for at least this long.",
           "min_off_min": "After switching off, the appliance stays off for at least this long. Frost protection bypasses this.",
           "max_block_min": "Once the appliance has been off this long, it is switched on even without surplus — but never before its minimum pause has passed. Measured from the entity's last state change, whoever caused it. 0 = no limit.",
+          "takt_sperre_min": "Minimum interval between two starts. If HEMS switches the system off sooner than this after its last start, it stays off until the interval ends and is then switched on again, even without surplus — but never before its minimum pause has passed. If it ran longer, the surplus decides. Below the frost protection threshold the lock does not apply, nor during the summer lock or above the heating limit. 0 = off.",
           "priority": "1 = most important. When surplus is scarce, the least important load gives way first. Heating systems and switchable loads share one ranking."
         }
       }

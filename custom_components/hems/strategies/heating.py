@@ -23,7 +23,27 @@ entschieden und vom Actuator auf einem eigenen Weg gestellt.
    Netz; das ist der Preis und hier die richtige Wahl.
 2. **Sommersperre** — in den Sperrmonaten wird nicht geheizt.
 3. **Heizgrenze** — oberhalb `heat_off_c` braucht das Haus keine Wärme.
-4. Sonst entscheidet der Überschuss (in `switchable_control`).
+4. **Taktsperre** — Mindestabstand zwischen zwei Starts, siehe unten.
+5. Sonst entscheidet der Überschuss (in `switchable_control`).
+
+**Taktsperre** (Tobias 17.10.2026, T-017). Ein Verdichter verträgt nur
+begrenzt viele Starts je Stunde. Mit `takt_sperre_min > 0` gilt: Schaltet die
+Überschussregelung die Heizung innerhalb von `takt_sperre_min` nach ihrem
+letzten Start ab, bleibt sie bis zum Ende dieses Intervalls aus — gleich, wie
+viel Überschuss da ist — und wird an dessen Ende zwangsweise wieder
+eingeschaltet, notfalls aus dem Netz. Faktisch wirkt das in der Heizsaison wie
+ein `max_block` von der Länge des Intervalls. Der Wiederanlauf wartet
+zusätzlich die Mindestpause ab; sonst hebelte ein kurzes Intervall `min_off`
+aus.
+
+Die Sperre greift nur, wenn das Aus *innerhalb* des Intervalls lag (Laufzeit
+kürzer als das Intervall). Lief die Anlage länger, entscheidet der Überschuss
+wie bisher — sonst käme sie nach dem ersten langen Lauf nie mehr aus, weil
+jeder Abschaltwunsch sofort wieder in den Wiederanlauf liefe. Eine laufende
+Anlage berührt die Sperre nie. Ist der letzte Start unbekannt (nach einem
+Neustart, bevor die Anlage einmal lief), gibt es weder Sperre noch Zwang.
+Frostschutz, Sommersperre und Heizgrenze stehen darüber: unter der
+Frostschutz-Schwelle zählt die Sperre nicht.
 
 **Betriebsart.** Eine Anlage, die kühlt, ist keine Heizung: Sommersperre und
 Heizgrenze sagen über sie das Gegenteil dessen aus, wofür sie gedacht sind —
@@ -38,12 +58,14 @@ Das ist keine Vorsichtsmaßnahme auf Verdacht. Am 04.08.2026 schaltete die
 Sommersperre eine Anlage ab, die im Modus `heat_cool` bei 39 °C
 Außentemperatur kühlte.
 
-**Wenn die Außentemperatur fehlt**, kann HEMS keine dieser vier Fragen
+**Wenn die Außentemperatur fehlt**, kann HEMS keine dieser Fragen
 beantworten. Es erzwingt dann nichts, verbietet nichts — und schaltet vor allem
 nichts ab: `nicht_abschalten` lässt eine laufende Anlage in Ruhe, statt sie
 blind wegzunehmen. Wer nicht messen kann, soll nicht regeln.
 """
 from __future__ import annotations
+
+from math import ceil
 
 from ..entity_domain import (
     BETRIEBSART_FREMD,
@@ -87,6 +109,28 @@ def _gesperrt(month: int, von: int, bis: int) -> bool:
     if von <= bis:
         return von <= month <= bis
     return month >= von or month <= bis
+
+
+def _taktsperre_rest_s(h) -> float | None:
+    """Restzeit der Taktsperre in Sekunden; `None` heißt „Sperre greift nicht".
+
+    0 (oder weniger) heißt: Intervall und Mindestpause sind vorbei, die Anlage
+    ist wieder einzuschalten. Begründung der Bedingungen im Modulkopf.
+    """
+    intervall_s = h.takt_sperre_min * 60
+    if intervall_s <= 0 or h.ist_an:
+        return None
+    if h.start_seit_s is None or h.aus_seit_s is None:
+        return None
+    laufzeit_s = h.start_seit_s - h.aus_seit_s
+    if laufzeit_s < 0 or laufzeit_s >= intervall_s:
+        # Negativ: Buchführung widersprüchlich (Start nach dem Aus) — nicht
+        # raten. Ab Intervalllänge: lief lang genug, der Überschuss entscheidet.
+        return None
+    return max(
+        intervall_s - h.start_seit_s,
+        h.min_off_min * 60 - h.aus_seit_s,
+    )
 
 
 def _vorlauf_c(h, t_aussen: float) -> float:
@@ -211,8 +255,18 @@ def heating_control(inp: PlanInput, res: PlanResult) -> HeatingResult | None:
             sp.status = "heizgrenze"
             sp.grund = f"über Heizgrenze ({t:.0f} °C)"
         else:
-            sp.status = "heizen"
-            sp.grund = f"witterungsgeführt ({t:.0f} °C)"
+            rest_s = _taktsperre_rest_s(h)
+            if rest_s is not None and rest_s > 0:
+                sp.sperre = True
+                sp.status = "taktsperre"
+                sp.grund = f"Taktsperre (noch {ceil(rest_s / 60)} min)"
+            elif rest_s is not None:
+                sp.zwang_an = True
+                sp.status = "heizen"
+                sp.grund = f"Taktsperre abgelaufen, Wiederanlauf ({t:.0f} °C)"
+            else:
+                sp.status = "heizen"
+                sp.grund = f"witterungsgeführt ({t:.0f} °C)"
             if h.hat_vorlauf_entity:
                 sp.vorlauf_c = _vorlauf_c(h, t)
 
