@@ -1,0 +1,13 @@
+{
+  "blockedBy": [],
+  "completedDate": "2026-10-17",
+  "createdDate": "2026-10-17",
+  "description": "Tobias 17.10.2026: Version auf seiner HA-Instanz installieren; Release 3.1.0 freigegeben. manifest.json 3.1.0, Tag v3.1.0, GitHub-Release. Danach HACS-Update und HA-Neustart durch Tobias (kein direkter Zugang zur Instanz).",
+  "displayId": "T-018",
+  "id": "T-018",
+  "order": 20,
+  "phase": "v3-1",
+  "status": "complete",
+  "title": "Release 3.1.0 (Taktsperre) über HACS",
+  "type": "chore"
+}
