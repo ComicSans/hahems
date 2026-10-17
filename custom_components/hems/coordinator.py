@@ -1046,8 +1046,11 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             for h in reg.heatings
         ]
 
-    def _takt_lage(self, h, now: datetime) -> dict:
-        """Schaltlage einer Heizung für die Taktsperre, mit Start-Gedächtnis.
+    def _takt_lage(
+        self, h: HeatingSystem, now: datetime
+    ) -> dict[str, bool | float | None]:
+        """Schaltlage einer Heizung für die Taktsperre; schreibt nebenbei das
+        Start-Gedächtnis `_letzter_start` fort.
 
         Solange die Anlage läuft, ist `last_changed` ihr Start und wird gemerkt.
         Bei Aus-Lage liefert HA nur den Zeitpunkt des Ausschaltens; der Start

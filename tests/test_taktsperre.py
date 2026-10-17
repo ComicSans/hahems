@@ -198,3 +198,41 @@ def test_coordinator_merkt_den_start_und_reicht_die_lage_durch():
     assert "takt_sperre_min=h.takt_sperre_min" in states
     assert "min_off_min=h.min_off_min" in states
     assert "self._takt_lage(h, now)" in states
+
+
+# --- Grenzwerte ----------------------------------------------------------------
+def test_laufzeit_genau_ein_intervall_gibt_keinen_zwang():
+    heiz = heating(takt_sperre_min=60, start_seit_s=70 * MIN, aus_seit_s=10 * MIN)
+    a = _anlage(_plan(heiz, saldo_w=3000.0))
+    assert a.sperre is False and a.zwang_an is False
+
+
+def test_restzeit_null_ist_wiederanlauf():
+    heiz = heating(takt_sperre_min=60, start_seit_s=60 * MIN, aus_seit_s=50 * MIN)
+    a = _anlage(_plan(heiz, saldo_w=3000.0))
+    assert a.zwang_an is True and a.sperre is False
+
+
+def test_eine_sekunde_vor_ende_noch_gesperrt():
+    heiz = heating(
+        takt_sperre_min=60, start_seit_s=60 * MIN - 1, aus_seit_s=50 * MIN
+    )
+    a = _anlage(_plan(heiz))
+    assert a.status == "taktsperre" and "noch 1 min" in a.grund
+
+
+def test_mindestpause_gerade_abgelaufen_gibt_zwang():
+    heiz = heating(
+        takt_sperre_min=60,
+        start_seit_s=65 * MIN,
+        aus_seit_s=10 * MIN + 1,
+        min_off_min=10,
+    )
+    assert _anlage(_plan(heiz, saldo_w=3000.0)).zwang_an is True
+
+
+def test_widerspruechliche_buchfuehrung_gibt_weder_sperre_noch_zwang():
+    """Aus länger her als der gemerkte Start: nicht raten."""
+    heiz = heating(takt_sperre_min=60, start_seit_s=5 * MIN, aus_seit_s=10 * MIN)
+    a = _anlage(_plan(heiz))
+    assert a.sperre is False and a.zwang_an is False
