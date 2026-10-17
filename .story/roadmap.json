@@ -7,6 +7,12 @@
       "id": "p0",
       "label": "PHASE 0",
       "name": "Setup"
+    },
+    {
+      "description": "Heizung bekommt eine einstellbare Taktsperre (Mindestabstand zwischen zwei Starts) mit sicherem Wiedereinschalten, ohne den Frostschutz anzutasten.",
+      "id": "v3-1",
+      "label": "PHASE 1",
+      "name": "Version 3.1"
     }
   ],
   "title": "hems"

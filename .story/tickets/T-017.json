@@ -1,0 +1,28 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-10-17",
+  "description": "Auftrag Tobias 17.10.2026: Taktungssperre für die Heizung.\n\nEntscheidungen (Tobias):\n- Semantik Start-zu-Start-Abstand: Einstellung „Taktsperre (min)“ je Heizung. Nach jedem Start darf die Heizung erst nach N Minuten wieder starten. Geht sie dazwischen aus, bleibt sie bis Intervallende aus (unabhängig vom Überschuss) und wird am Intervallende zwangsweise eingeschaltet, sofern Heizbetrieb nötig ist (nicht über Heizgrenze, nicht in Sommersperre, nicht Kühl-/Fremdmodus).\n- Frostschutz (unter frost_on_c) hebt die Sperre auf: die Heizung läuft dann immer.\n- 0 = aus (Standard), bestehendes Verhalten unverändert.\n\nAbnahme:\n- Option in den Einstellungen (Config-Flow, de/en/strings).\n- Tests: Sperre hält aus; Zwang-an am Intervallende; Frost übersteuert; Heizgrenze/Sommersperre verhindern Zwang; 0 = unverändert.\n- Volle Testsuite grün.",
+  "displayId": "T-017",
+  "id": "T-017",
+  "officeReview": {
+    "agent": "Ronja",
+    "lens": [
+      "security",
+      "error-handling",
+      "clean-code",
+      "performance",
+      "concurrency",
+      "test-quality"
+    ],
+    "reviewId": "lens-mvcr2it1",
+    "role": "reviewer",
+    "since": 1792262924,
+    "stage": "CODE_REVIEW"
+  },
+  "order": 10,
+  "phase": "v3-1",
+  "status": "inprogress",
+  "title": "Heizung: Taktsperre (Mindestabstand zwischen zwei Starts)",
+  "type": "feature"
+}
