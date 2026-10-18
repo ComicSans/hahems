@@ -404,9 +404,9 @@
         "description": "Eine **Heizung** (Wärmepumpe, Heizstab) ist eine schaltbare Last mit Witterungsführung. Sie läuft im selben Überschuss-Budget wie jede andere Last, hat aber drei Zusätze: Der **Frostschutz** erzwingt das Einschalten, sobald es draußen kalt wird — an Überschuss und Mindestpause vorbei, notfalls also aus dem Netz. In den **Sperrmonaten** und oberhalb der **Heizgrenze** wird nicht geheizt. Ist ein Vorlauf-Sollwert hinterlegt, schreibt HEMS ihn aus der **Heizkurve**.\n\nHEMS ist dabei keine Sicherheitseinrichtung und ersetzt den Frostschutz des Geräts nicht.",
         "data": {
           "name": "Name",
-          "switch_entity": "Schalter- oder Climate-Entität",
-          "mode_heat_option": "Heiz-Modus (nur bei Climate-Entität)",
-          "mode_cool_option": "Kühl-Modus (nur bei Climate-Entität)",
+          "switch_entity": "Schalter, Climate- oder Select-Entität",
+          "mode_heat_option": "Heiz-Modus (Climate/Select)",
+          "mode_cool_option": "Kühl-Modus (Climate/Select, optional)",
           "power_entity": "Leistungs-Entität (W, optional)",
           "outdoor_temp_entity": "Außentemperatur-Sensor (optional)",
           "flow_setpoint_entity": "Vorlauf-Sollwert (optional)",
@@ -424,16 +424,17 @@
           "min_off_min": "Mindestpause (min)",
           "max_block_min": "Max. Sperrdauer (min)",
           "takt_sperre_min": "Taktsperre (min)",
-          "priority": "Priorität"
+          "priority": "Priorität",
+          "mode_off_option": "Aus-Option (bei Select erforderlich)"
         },
         "data_description": {
           "name": "Kurze Bezeichnung, nur für die Anzeige.",
-          "switch_entity": "Womit HEMS die Anlage freigibt oder sperrt. Ein **switch** ist typischerweise der SG-Ready- oder EVU-Sperrkontakt: HEMS sperrt dann nur, und die geräteeigene Regelung samt Frostschutz bleibt aktiv. Eine **climate**-Entität schaltet den Wärmeerzeuger wirklich ab — dort ist der Frostschutz von HEMS die einzige Rückfallebene, die HEMS kennt.",
-          "mode_heat_option": "Nur bei einer climate-Entität: der HVAC-Modus, der „heizen\" bedeutet (meist „heat\", bei manchen Anlagen „auto\"). HEMS stellt ihn per set_hvac_mode, statt turn_on zu rufen — das bieten viele Integrationen gar nicht an. Leer = „heat\". Läuft die Anlage bereits in einem anderen Modus, lässt HEMS sie in Ruhe.",
-          "mode_cool_option": "Nur bei einer climate-Entität: der HVAC-Modus, der „kühlen\" bedeutet (meist „cool\"). Leer heißt: HEMS regelt ausschließlich den Heiz-Modus. Ist er angegeben, regelt HEMS die Kühlung über den Überschuss — aber ohne Sommersperre, Heizgrenze und Heizkurve, die im Kühlbetrieb das Gegenteil dessen aussagen, wofür sie gedacht sind. Ein Modus, der weder hier noch als Heiz-Modus steht (typisch „heat_cool\"/„auto\"), bleibt unangetastet: Dort entscheidet die Anlage selbst, ob sie heizt oder kühlt, und HEMS kann ein Abschalten nicht beurteilen.",
+          "switch_entity": "Womit HEMS die Anlage freigibt oder sperrt. Ein **switch** ist typischerweise der SG-Ready- oder EVU-Sperrkontakt: HEMS sperrt dann nur, und die geräteeigene Regelung samt Frostschutz bleibt aktiv. Eine **climate**-Entität schaltet den Wärmeerzeuger wirklich ab — dort ist der Frostschutz von HEMS die einzige Rückfallebene, die HEMS kennt. Ein **select** steuert den Betriebsmodus direkt; Heiz- und Aus-Option müssen exakt eingetragen sein.",
+          "mode_heat_option": "Bei Climate: HVAC-Modus für Heizen, leer = heat. Bei Select: exakte Einschalt-Option, z. B. Auto (RAW 3). Auto kann geräteseitig auch kühlen; HEMS behandelt die hier gewählte Option als Heizen und wendet Heizgrenze und Sommersperre an.",
+          "mode_cool_option": "Optional: HVAC-Modus bzw. exakte Select-Option für Kühlen. Ohne Angabe regelt HEMS nur den Heiz-Modus. Nicht zugeordnete Betriebsmodi bleiben unangetastet.",
           "power_entity": "Aus ihr lernt HEMS die Leistungsaufnahme im Betrieb und weiß dann, wie viel Überschuss die Anlage braucht. Ohne sie rechnet HEMS mit einem konservativ hohen Pauschalwert.",
           "outdoor_temp_entity": "Steuert Frostschutz, Heizgrenze und Heizkurve. Ohne eigenen Sensor nimmt HEMS die Temperatur der global konfigurierten Wetter-Entität. Fehlt beides, regelt HEMS nicht: Es schaltet die Anlage dann weder ein noch aus, sondern lässt sie in Ruhe.",
-          "flow_setpoint_entity": "Number-Entität für die Vorlauf-Solltemperatur. Ohne sie bleibt die Heizkurve reine Anzeige — HEMS gibt dann nur frei und sperrt.",
+          "flow_setpoint_entity": "Number-Entität für die Vorlauf-Solltemperatur. Ohne sie bleibt die Heizkurve reine Anzeige — HEMS gibt dann nur frei und sperrt. Bei geräteeigenem Auto-Modus leer lassen, wenn das Register eine Heizkurvenverschiebung statt einer Vorlauftemperatur enthält.",
           "frost_on_c": "Fällt die Außentemperatur auf diesen Wert, wird Einschalten erzwungen — unabhängig von Überschuss, Mindestpause und Sommersperre, notfalls also aus dem Netz. 0 schaltet den Frostschutz nicht ab, sondern setzt die Schwelle auf den Gefrierpunkt; das ist knapp, weil ein Heizkreis nach dem Abschalten weiter auskühlt.",
           "frost_off_c": "Erst oberhalb dieses Werts endet der Frostschutz wieder. Der Abstand zur Ein-Schwelle ist die Hysterese — ohne sie würde die Anlage am Schwellwert im Minutentakt takten.",
           "heat_on_c": "Unterhalb dieser Außentemperatur braucht das Haus Wärme.",
@@ -448,7 +449,8 @@
           "min_off_min": "Nach dem Abschalten bleibt die Anlage mindestens so lange aus. Der Frostschutz geht daran vorbei.",
           "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat. 0 = keine Obergrenze.",
           "takt_sperre_min": "Mindestabstand zwischen zwei Starts. Schaltet HEMS die Anlage früher als nach dieser Zeit seit ihrem letzten Start ab, bleibt sie bis zum Ende des Intervalls aus und wird dann wieder eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Lief die Anlage länger, entscheidet der Überschuss. Unter der Frostschutz-Schwelle gilt die Sperre nicht, ebenso wenig in der Sommersperre und über der Heizgrenze. 0 = aus.",
-          "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge."
+          "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge.",
+          "mode_off_option": "Nur bei Select erforderlich: exakte Option für Aus, z. B. Off / Hot Water Only. Sie muss sich von Heiz- und Kühl-Option unterscheiden. Climate nutzt weiterhin off."
         }
       },
       "edit_heating": {
@@ -456,9 +458,9 @@
         "description": "Eine **Heizung** (Wärmepumpe, Heizstab) ist eine schaltbare Last mit Witterungsführung. Sie läuft im selben Überschuss-Budget wie jede andere Last, hat aber drei Zusätze: Der **Frostschutz** erzwingt das Einschalten, sobald es draußen kalt wird — an Überschuss und Mindestpause vorbei, notfalls also aus dem Netz. In den **Sperrmonaten** und oberhalb der **Heizgrenze** wird nicht geheizt. Ist ein Vorlauf-Sollwert hinterlegt, schreibt HEMS ihn aus der **Heizkurve**.\n\nHEMS ist dabei keine Sicherheitseinrichtung und ersetzt den Frostschutz des Geräts nicht.",
         "data": {
           "name": "Name",
-          "switch_entity": "Schalter- oder Climate-Entität",
-          "mode_heat_option": "Heiz-Modus (nur bei Climate-Entität)",
-          "mode_cool_option": "Kühl-Modus (nur bei Climate-Entität)",
+          "switch_entity": "Schalter, Climate- oder Select-Entität",
+          "mode_heat_option": "Heiz-Modus (Climate/Select)",
+          "mode_cool_option": "Kühl-Modus (Climate/Select, optional)",
           "power_entity": "Leistungs-Entität (W, optional)",
           "outdoor_temp_entity": "Außentemperatur-Sensor (optional)",
           "flow_setpoint_entity": "Vorlauf-Sollwert (optional)",
@@ -476,16 +478,17 @@
           "min_off_min": "Mindestpause (min)",
           "max_block_min": "Max. Sperrdauer (min)",
           "takt_sperre_min": "Taktsperre (min)",
-          "priority": "Priorität"
+          "priority": "Priorität",
+          "mode_off_option": "Aus-Option (bei Select erforderlich)"
         },
         "data_description": {
           "name": "Kurze Bezeichnung, nur für die Anzeige.",
-          "switch_entity": "Womit HEMS die Anlage freigibt oder sperrt. Ein **switch** ist typischerweise der SG-Ready- oder EVU-Sperrkontakt: HEMS sperrt dann nur, und die geräteeigene Regelung samt Frostschutz bleibt aktiv. Eine **climate**-Entität schaltet den Wärmeerzeuger wirklich ab — dort ist der Frostschutz von HEMS die einzige Rückfallebene, die HEMS kennt.",
-          "mode_heat_option": "Nur bei einer climate-Entität: der HVAC-Modus, der „heizen\" bedeutet (meist „heat\", bei manchen Anlagen „auto\"). HEMS stellt ihn per set_hvac_mode, statt turn_on zu rufen — das bieten viele Integrationen gar nicht an. Leer = „heat\". Läuft die Anlage bereits in einem anderen Modus, lässt HEMS sie in Ruhe.",
-          "mode_cool_option": "Nur bei einer climate-Entität: der HVAC-Modus, der „kühlen\" bedeutet (meist „cool\"). Leer heißt: HEMS regelt ausschließlich den Heiz-Modus. Ist er angegeben, regelt HEMS die Kühlung über den Überschuss — aber ohne Sommersperre, Heizgrenze und Heizkurve, die im Kühlbetrieb das Gegenteil dessen aussagen, wofür sie gedacht sind. Ein Modus, der weder hier noch als Heiz-Modus steht (typisch „heat_cool\"/„auto\"), bleibt unangetastet: Dort entscheidet die Anlage selbst, ob sie heizt oder kühlt, und HEMS kann ein Abschalten nicht beurteilen.",
+          "switch_entity": "Womit HEMS die Anlage freigibt oder sperrt. Ein **switch** ist typischerweise der SG-Ready- oder EVU-Sperrkontakt: HEMS sperrt dann nur, und die geräteeigene Regelung samt Frostschutz bleibt aktiv. Eine **climate**-Entität schaltet den Wärmeerzeuger wirklich ab — dort ist der Frostschutz von HEMS die einzige Rückfallebene, die HEMS kennt. Ein **select** steuert den Betriebsmodus direkt; Heiz- und Aus-Option müssen exakt eingetragen sein.",
+          "mode_heat_option": "Bei Climate: HVAC-Modus für Heizen, leer = heat. Bei Select: exakte Einschalt-Option, z. B. Auto (RAW 3). Auto kann geräteseitig auch kühlen; HEMS behandelt die hier gewählte Option als Heizen und wendet Heizgrenze und Sommersperre an.",
+          "mode_cool_option": "Optional: HVAC-Modus bzw. exakte Select-Option für Kühlen. Ohne Angabe regelt HEMS nur den Heiz-Modus. Nicht zugeordnete Betriebsmodi bleiben unangetastet.",
           "power_entity": "Aus ihr lernt HEMS die Leistungsaufnahme im Betrieb und weiß dann, wie viel Überschuss die Anlage braucht. Ohne sie rechnet HEMS mit einem konservativ hohen Pauschalwert.",
           "outdoor_temp_entity": "Steuert Frostschutz, Heizgrenze und Heizkurve. Ohne eigenen Sensor nimmt HEMS die Temperatur der global konfigurierten Wetter-Entität. Fehlt beides, regelt HEMS nicht: Es schaltet die Anlage dann weder ein noch aus, sondern lässt sie in Ruhe.",
-          "flow_setpoint_entity": "Number-Entität für die Vorlauf-Solltemperatur. Ohne sie bleibt die Heizkurve reine Anzeige — HEMS gibt dann nur frei und sperrt.",
+          "flow_setpoint_entity": "Number-Entität für die Vorlauf-Solltemperatur. Ohne sie bleibt die Heizkurve reine Anzeige — HEMS gibt dann nur frei und sperrt. Bei geräteeigenem Auto-Modus leer lassen, wenn das Register eine Heizkurvenverschiebung statt einer Vorlauftemperatur enthält.",
           "frost_on_c": "Fällt die Außentemperatur auf diesen Wert, wird Einschalten erzwungen — unabhängig von Überschuss, Mindestpause und Sommersperre, notfalls also aus dem Netz. 0 schaltet den Frostschutz nicht ab, sondern setzt die Schwelle auf den Gefrierpunkt; das ist knapp, weil ein Heizkreis nach dem Abschalten weiter auskühlt.",
           "frost_off_c": "Erst oberhalb dieses Werts endet der Frostschutz wieder. Der Abstand zur Ein-Schwelle ist die Hysterese — ohne sie würde die Anlage am Schwellwert im Minutentakt takten.",
           "heat_on_c": "Unterhalb dieser Außentemperatur braucht das Haus Wärme.",
@@ -500,7 +503,8 @@
           "min_off_min": "Nach dem Abschalten bleibt die Anlage mindestens so lange aus. Der Frostschutz geht daran vorbei.",
           "max_block_min": "War die Anlage so lange aus, wird sie eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Gemessen wird die Zeit seit der letzten Schaltkante der Entität, gleich wer sie ausgelöst hat. 0 = keine Obergrenze.",
           "takt_sperre_min": "Mindestabstand zwischen zwei Starts. Schaltet HEMS die Anlage früher als nach dieser Zeit seit ihrem letzten Start ab, bleibt sie bis zum Ende des Intervalls aus und wird dann wieder eingeschaltet, auch ohne Überschuss — frühestens aber nach Ablauf der Mindestpause. Lief die Anlage länger, entscheidet der Überschuss. Unter der Frostschutz-Schwelle gilt die Sperre nicht, ebenso wenig in der Sommersperre und über der Heizgrenze. 0 = aus.",
-          "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge."
+          "priority": "1 = wichtigste. Bei knappem Überschuss weicht die unwichtigste Last zuerst. Heizungen und Schaltlasten stehen in derselben Rangfolge.",
+          "mode_off_option": "Nur bei Select erforderlich: exakte Option für Aus, z. B. Off / Hot Water Only. Sie muss sich von Heiz- und Kühl-Option unterscheiden. Climate nutzt weiterhin off."
         }
       }
     },

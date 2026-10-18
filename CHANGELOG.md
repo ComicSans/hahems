@@ -4,6 +4,21 @@ Nur Umbenennungen und Umstellungen, die nach einem Update eine manuelle
 Anpassung erfordern. Die vollständige Historie steht in den
 [Releases](https://github.com/ComicSans/hahems/releases).
 
+## 3.1.1 — Heizung über Betriebsmodus-Select wieder einschalten
+
+Eine Climate-Entität kann den Gerätezustand nur spiegeln: Ausschalten wird
+weitergegeben, Einschalten jedoch ignoriert. Die Heizung lässt sich deshalb
+jetzt direkt über einen Betriebsmodus-Select steuern. Heiz-Modus, optionaler
+Kühl-Modus und die neue Aus-Option müssen exakt den Select-Optionen entsprechen.
+Bestehende Climate- und Switch-Konfigurationen bleiben unverändert.
+
+**Anpassungsbedarf bei spiegelnden Climate-Entitäten:** Als Steuer-Entität den
+schreibenden Select eintragen, beispielsweise `Auto` zum Einschalten und
+`Off / Hot Water Only` zum Ausschalten. Im geräteeigenen Auto-Modus den
+HEMS-Vorlauf-Sollwert leer lassen, wenn dieses Register eine
+Heizkurvenverschiebung statt einer Vorlauftemperatur enthält. Die Anlage
+führt dann ihre eigene Heizkurve.
+
 ## 3.0.0 — Zwei Betriebsmodi, ein Ladeschalter, eine Kaltreserve für den Rest
 
 Diese Version räumt bei Modi und Schaltern auf und stellt die Verteilung auf

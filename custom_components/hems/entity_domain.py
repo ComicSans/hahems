@@ -10,6 +10,9 @@ Gerät nur als Thermostat in Home Assistant auftaucht. Die beiden Formen sagen
     „An" heißt hier „irgendein Modus außer `off`" — und Einschalten heißt
     `set_hvac_mode` auf einen konfigurierten Modus, nicht `turn_on` (das ist
     optionales Geräte-Feature und kippt sonst still).
+  • select (Heizung): exakte Betriebsmodus-Optionen; `mode_off_option` benennt
+    Aus. Geschrieben wird über `select_option`. Eine nur spiegelnde Climate-
+    Entität kann damit durch den tatsächlich schreibenden Select ersetzt werden.
 
 **Welcher Modus was bedeutet, sagt die Konfiguration** (`mode_heat_option`,
 `mode_cool_option`) — nicht dieses Modul. Der Grund steht in `betriebsart`:
@@ -46,13 +49,14 @@ def betriebsart(
     state: str | None,
     heat_mode: str | None = None,
     cool_mode: str | None = None,
+    off_mode: str | None = None,
 ) -> str:
     """Was die Anlage laut ihrem Zustand gerade tut.
 
     Für `switch`/`input_boolean` immer `heizen`: eine Schaltlast hat keinen
     Modus, und ein SG-Ready-Kontakt sperrt bestenfalls das Heizen.
 
-    Für `climate` entscheidet der HVAC-Modus gegen die Konfiguration. Ein nicht
+    Für `climate`/`select` entscheidet der Modus gegen die Konfiguration. Ein nicht
     zugeordneter Modus ist `fremd` — insbesondere `heat_cool`/`auto`. Das ist
     die vorsichtige Auslegung: Wer nicht weiß, ob die Anlage kühlt, darf sie im
     Hochsommer nicht als Heizung abschalten. Am 04.08.2026 tat HEMS genau das —
@@ -63,11 +67,11 @@ def betriebsart(
     Anlage weiter beurteilen können. Der Aufrufer, der den zuletzt aktiven Modus
     kennt, reicht diesen statt `off` herein (siehe Coordinator).
     """
-    if domain_of(entity) != "climate":
+    if domain_of(entity) not in ("climate", "select"):
         return BETRIEBSART_HEIZEN
     if state is None or state.lower() in STATE_UNAVAILABLE_VALUES:
         return BETRIEBSART_HEIZEN
-    if state == CLIMATE_OFF:
+    if state == (off_mode if domain_of(entity) == "select" else CLIMATE_OFF):
         return BETRIEBSART_HEIZEN
     if state == (heat_mode or DEFAULT_HEAT_MODE):
         return BETRIEBSART_HEIZEN
@@ -104,7 +108,9 @@ def erreichbar(state: str | None) -> bool:
     return state is not None and state.lower() not in STATE_UNAVAILABLE_VALUES
 
 
-def ist_an(entity: str | None, state: str | None) -> bool:
+def ist_an(
+    entity: str | None, state: str | None, off_mode: str | None = None
+) -> bool:
     """Ob die Steuer-Entität eingeschaltet ist.
 
     Unbekannte oder nicht erreichbare Zustände zählen als „aus" — bei einem
@@ -115,6 +121,9 @@ def ist_an(entity: str | None, state: str | None) -> bool:
         return False
     if domain_of(entity) == "climate":
         return state != CLIMATE_OFF
+    if domain_of(entity) == "select":
+        # Ohne explizite Aus-Option ist die Konfiguration unvollständig.
+        return bool(off_mode) and state != off_mode
     return state == "on"
 
 
@@ -124,6 +133,7 @@ def schalt_service(
     heat_mode: str | None = None,
     cool_mode: str | None = None,
     art: str = BETRIEBSART_HEIZEN,
+    off_mode: str | None = None,
 ) -> tuple[str, str, dict]:
     """(Domain, Service, Daten), um die Entität ein- oder auszuschalten.
 
@@ -136,6 +146,11 @@ def schalt_service(
     Ausschalten spielt sie keine Rolle.
     """
     domain = domain_of(entity)
+    if domain == "select":
+        if not heat_mode or not off_mode or off_mode in (heat_mode, cool_mode):
+            raise ValueError("Select-Heizung braucht getrennte Ein-/Aus-Optionen")
+        modus = ziel_modus(art, heat_mode, cool_mode) if on else off_mode
+        return domain, "select_option", {"option": modus}
     if domain == "climate":
         modus = ziel_modus(art, heat_mode, cool_mode) if on else CLIMATE_OFF
         return domain, "set_hvac_mode", {"hvac_mode": modus}

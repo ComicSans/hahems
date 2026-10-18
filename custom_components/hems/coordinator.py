@@ -917,7 +917,8 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
             power = self._power_w(s.power_entity)
             st = self.hass.states.get(s.switch_entity) if s.switch_entity else None
             ist_an = entity_domain.ist_an(
-                s.switch_entity, st.state if st is not None else None
+                s.switch_entity, st.state if st is not None else None,
+                s.mode_off_option if ist_heizung else None,
             )
             seit = (
                 (now - st.last_changed).total_seconds() if st is not None else None
@@ -995,9 +996,10 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         st = self.hass.states.get(h.switch_entity)
         state = st.state if st is not None else None
         art = entity_domain.betriebsart(
-            h.switch_entity, state, h.mode_heat_option, h.mode_cool_option
+            h.switch_entity, state, h.mode_heat_option, h.mode_cool_option,
+            h.mode_off_option,
         )
-        if entity_domain.ist_an(h.switch_entity, state):
+        if entity_domain.ist_an(h.switch_entity, state, h.mode_off_option):
             if art == entity_domain.BETRIEBSART_FREMD:
                 self._letzte_betriebsart.pop(h.id, None)
             else:
@@ -1060,7 +1062,7 @@ class HemsCoordinator(DataUpdateCoordinator[HemsData]):
         if st is None or not entity_domain.erreichbar(st.state):
             # Nicht erreichbar: `last_changed` ist dann der Ausfall, kein Aus.
             return {"ist_an": False, "start_seit_s": None, "aus_seit_s": None}
-        ist_an = entity_domain.ist_an(h.switch_entity, st.state)
+        ist_an = entity_domain.ist_an(h.switch_entity, st.state, h.mode_off_option)
         if ist_an:
             self._letzter_start[h.id] = st.last_changed
         start = self._letzter_start.get(h.id)

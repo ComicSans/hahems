@@ -243,10 +243,28 @@ def check_config(
         _mark("Heizung (Frostschutz + Heizkurve)")
         _need(
             h.switch_entity,
-            ("switch", "climate", "input_boolean"),
+            ("switch", "climate", "input_boolean", "select"),
             ctx,
             "Schalter",
         )
+        if _domain(h.switch_entity) == "select":
+            st = hass.states.get(h.switch_entity)
+            options = st.attributes.get("options") if st else None
+            for option, label in (
+                (h.mode_heat_option, "mode_heat_option"),
+                (h.mode_off_option, "mode_off_option"),
+                (h.mode_cool_option, "mode_cool_option"),
+            ):
+                if not option and label != "mode_cool_option":
+                    c.errors.append(f"{ctx}: Select-Heizung braucht {label}")
+                elif option and options is not None and option not in options:
+                    c.errors.append(f"{ctx}: {label} '{option}' fehlt in {options}")
+            if h.mode_off_option and h.mode_off_option in (
+                h.mode_heat_option, h.mode_cool_option
+            ):
+                c.errors.append(f"{ctx}: Aus-Option muss von Heizen/Kühlen abweichen")
+            if h.mode_heat_option and h.mode_heat_option == h.mode_cool_option:
+                c.errors.append(f"{ctx}: Heiz- und Kühl-Option müssen verschieden sein")
         # Ohne Temperatur greift weder Frostschutz noch Heizkurve — und HEMS
         # rührt die Anlage dann gar nicht mehr an. Das ist die sichere, aber
         # eben auch die wirkungslose Auslegung; sie gehört gesagt.

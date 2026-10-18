@@ -123,6 +123,21 @@ größer als die Kapazität. Das Abendziel steht dann ohnehin auf 100 %, die Ram
 beginnt früh, und die Strategie verhält sich wie vorher. Die Schonung ist ein
 Sommer- und Übergangszeit-Gewinn.
 
+### Heizung über Betriebsmodus-Select
+
+Wenn die Climate-Entität nur den Gerätezustand spiegelt und Einschalten nicht
+weiterleitet, den schreibenden `select` als Steuer-Entität der Heizung wählen.
+Heiz-Modus, optionaler Kühl-Modus und Aus-Option müssen exakt den Select-Optionen
+entsprechen. Beispiel für einen Modbus-Select: `Auto` zum Einschalten (RAW 3),
+`Cool` zum Kühlen und `Off / Hot Water Only` zum Ausschalten (RAW 0).
+HEMS schreibt über `select.select_option`; Zustandserkennung, Mindestlaufzeit,
+Mindestpause und Taktsperre beziehen sich dann auf diesen Select.
+
+Die gewählte Heiz-Option unterliegt Heizgrenze und Sommersperre, auch wenn
+`Auto` geräteseitig zusätzlich kühlen kann. Enthält das Sollwertregister im
+Auto-Modus eine Heizkurvenverschiebung statt einer Vorlauftemperatur, bleibt
+der Vorlauf-Sollwert in HEMS leer; die Anlage führt dann ihre eigene Heizkurve.
+
 ### Akkus aufladen
 
 `switch.hems_akkus_aufladen` (Panel: **Steuerung**; bei bestehenden

@@ -404,9 +404,9 @@
         "description": "A **heating system** (heat pump, heating rod) is a switchable load with weather compensation. It competes for the same surplus budget as any other load, but adds three things: **frost protection** forces it on once it gets cold outside — past surplus and minimum pause, from the grid if necessary. During the **lock months** and above the **heating limit** it never heats. If a flow setpoint entity is configured, HEMS writes it from the **heating curve**.\n\nHEMS is not a safety device and does not replace the appliance's own frost protection.",
         "data": {
           "name": "Name",
-          "switch_entity": "Switch or climate entity",
-          "mode_heat_option": "Heating mode (climate entity only)",
-          "mode_cool_option": "Cooling mode (climate entity only)",
+          "switch_entity": "Switch, climate or select entity",
+          "mode_heat_option": "Heating mode (climate/select)",
+          "mode_cool_option": "Cooling mode (climate/select, optional)",
           "power_entity": "Power entity (W, optional)",
           "outdoor_temp_entity": "Outdoor temperature sensor (optional)",
           "flow_setpoint_entity": "Flow setpoint (optional)",
@@ -424,16 +424,17 @@
           "min_off_min": "Minimum pause (min)",
           "max_block_min": "Max. block duration (min)",
           "takt_sperre_min": "Cycle lock (min)",
-          "priority": "Priority"
+          "priority": "Priority",
+          "mode_off_option": "Off option (required for select)"
         },
         "data_description": {
           "name": "A short label, used for display only.",
-          "switch_entity": "How HEMS enables or blocks the appliance. A **switch** is typically the SG-Ready or utility blocking contact: HEMS then only blocks, and the appliance keeps its own control including frost protection. A **climate** entity really switches the heat generator off — there, the HEMS frost protection is the only fallback HEMS knows about.",
-          "mode_heat_option": "Climate entities only: the HVAC mode that means \"heating\" (usually \"heat\", on some systems \"auto\"). HEMS sets it via set_hvac_mode rather than calling turn_on, which many integrations do not implement. Empty = \"heat\". If the appliance already runs in another mode, HEMS leaves it alone.",
-          "mode_cool_option": "Climate entities only: the HVAC mode that means \"cooling\" (usually \"cool\"). Empty means HEMS only regulates the heating mode. When set, HEMS regulates cooling from surplus — but without the summer lock, heating limit and heating curve, which say the opposite of what they are meant for while the system cools. A mode listed neither here nor as the heating mode (typically \"heat_cool\"/\"auto\") is left alone: there the system itself decides whether it heats or cools, and HEMS cannot judge what switching it off would do.",
+          "switch_entity": "How HEMS enables or blocks the appliance. A **switch** is typically the SG-Ready or utility blocking contact: HEMS then only blocks, and the appliance keeps its own control including frost protection. A **climate** entity really switches the heat generator off — there, the HEMS frost protection is the only fallback HEMS knows about. A **select** controls the operating mode directly; enter its exact heating and off options.",
+          "mode_heat_option": "For climate: heating HVAC mode, empty = heat. For select: exact on option, e.g. Auto (RAW 3). Auto may also cool under appliance control; HEMS treats this option as heating and applies the heating limit and summer lock.",
+          "mode_cool_option": "Optional: cooling HVAC mode or exact select option. Without it HEMS only regulates the heating mode. Unassigned operating modes are left alone.",
           "power_entity": "HEMS learns the running power draw from it and then knows how much surplus the appliance needs. Without it, HEMS assumes a conservatively high flat value.",
           "outdoor_temp_entity": "Drives frost protection, heating limit and heating curve. Without its own sensor HEMS uses the temperature of the globally configured weather entity. With neither, HEMS does not control at all: it neither switches the appliance on nor off, but leaves it alone.",
-          "flow_setpoint_entity": "Number entity for the flow target temperature. Without it the heating curve is display only — HEMS then merely enables and blocks.",
+          "flow_setpoint_entity": "Number entity for the flow target temperature. Without it the heating curve is display only — HEMS then merely enables and blocks. Leave empty in appliance Auto mode if the register represents a heating curve shift rather than a flow temperature.",
           "frost_on_c": "Once the outdoor temperature falls to this value, switching on is forced — regardless of surplus, minimum pause and summer lock, from the grid if necessary. 0 does not disable frost protection; it puts the threshold at freezing point, which is tight because a heating circuit keeps cooling down after being switched off.",
           "frost_off_c": "Frost protection only ends above this value. The gap to the on threshold is the hysteresis — without it the appliance would cycle at the threshold.",
           "heat_on_c": "Below this outdoor temperature the house needs heat.",
@@ -448,7 +449,8 @@
           "min_off_min": "After switching off, the appliance stays off for at least this long. Frost protection bypasses this.",
           "max_block_min": "Once the appliance has been off this long, it is switched on even without surplus — but never before its minimum pause has passed. Measured from the entity's last state change, whoever caused it. 0 = no limit.",
           "takt_sperre_min": "Minimum interval between two starts. If HEMS switches the system off sooner than this after its last start, it stays off until the interval ends and is then switched on again, even without surplus — but never before its minimum pause has passed. If it ran longer, the surplus decides. Below the frost protection threshold the lock does not apply, nor during the summer lock or above the heating limit. 0 = off.",
-          "priority": "1 = most important. When surplus is scarce, the least important load gives way first. Heating systems and switchable loads share one ranking."
+          "priority": "1 = most important. When surplus is scarce, the least important load gives way first. Heating systems and switchable loads share one ranking.",
+          "mode_off_option": "Required for select only: exact off option, e.g. Off / Hot Water Only. It must differ from heating and cooling. Climate continues to use off."
         }
       },
       "edit_heating": {
@@ -456,9 +458,9 @@
         "description": "A **heating system** (heat pump, heating rod) is a switchable load with weather compensation. It competes for the same surplus budget as any other load, but adds three things: **frost protection** forces it on once it gets cold outside — past surplus and minimum pause, from the grid if necessary. During the **lock months** and above the **heating limit** it never heats. If a flow setpoint entity is configured, HEMS writes it from the **heating curve**.\n\nHEMS is not a safety device and does not replace the appliance's own frost protection.",
         "data": {
           "name": "Name",
-          "switch_entity": "Switch or climate entity",
-          "mode_heat_option": "Heating mode (climate entity only)",
-          "mode_cool_option": "Cooling mode (climate entity only)",
+          "switch_entity": "Switch, climate or select entity",
+          "mode_heat_option": "Heating mode (climate/select)",
+          "mode_cool_option": "Cooling mode (climate/select, optional)",
           "power_entity": "Power entity (W, optional)",
           "outdoor_temp_entity": "Outdoor temperature sensor (optional)",
           "flow_setpoint_entity": "Flow setpoint (optional)",
@@ -476,16 +478,17 @@
           "min_off_min": "Minimum pause (min)",
           "max_block_min": "Max. block duration (min)",
           "takt_sperre_min": "Cycle lock (min)",
-          "priority": "Priority"
+          "priority": "Priority",
+          "mode_off_option": "Off option (required for select)"
         },
         "data_description": {
           "name": "A short label, used for display only.",
-          "switch_entity": "How HEMS enables or blocks the appliance. A **switch** is typically the SG-Ready or utility blocking contact: HEMS then only blocks, and the appliance keeps its own control including frost protection. A **climate** entity really switches the heat generator off — there, the HEMS frost protection is the only fallback HEMS knows about.",
-          "mode_heat_option": "Climate entities only: the HVAC mode that means \"heating\" (usually \"heat\", on some systems \"auto\"). HEMS sets it via set_hvac_mode rather than calling turn_on, which many integrations do not implement. Empty = \"heat\". If the appliance already runs in another mode, HEMS leaves it alone.",
-          "mode_cool_option": "Climate entities only: the HVAC mode that means \"cooling\" (usually \"cool\"). Empty means HEMS only regulates the heating mode. When set, HEMS regulates cooling from surplus — but without the summer lock, heating limit and heating curve, which say the opposite of what they are meant for while the system cools. A mode listed neither here nor as the heating mode (typically \"heat_cool\"/\"auto\") is left alone: there the system itself decides whether it heats or cools, and HEMS cannot judge what switching it off would do.",
+          "switch_entity": "How HEMS enables or blocks the appliance. A **switch** is typically the SG-Ready or utility blocking contact: HEMS then only blocks, and the appliance keeps its own control including frost protection. A **climate** entity really switches the heat generator off — there, the HEMS frost protection is the only fallback HEMS knows about. A **select** controls the operating mode directly; enter its exact heating and off options.",
+          "mode_heat_option": "For climate: heating HVAC mode, empty = heat. For select: exact on option, e.g. Auto (RAW 3). Auto may also cool under appliance control; HEMS treats this option as heating and applies the heating limit and summer lock.",
+          "mode_cool_option": "Optional: cooling HVAC mode or exact select option. Without it HEMS only regulates the heating mode. Unassigned operating modes are left alone.",
           "power_entity": "HEMS learns the running power draw from it and then knows how much surplus the appliance needs. Without it, HEMS assumes a conservatively high flat value.",
           "outdoor_temp_entity": "Drives frost protection, heating limit and heating curve. Without its own sensor HEMS uses the temperature of the globally configured weather entity. With neither, HEMS does not control at all: it neither switches the appliance on nor off, but leaves it alone.",
-          "flow_setpoint_entity": "Number entity for the flow target temperature. Without it the heating curve is display only — HEMS then merely enables and blocks.",
+          "flow_setpoint_entity": "Number entity for the flow target temperature. Without it the heating curve is display only — HEMS then merely enables and blocks. Leave empty in appliance Auto mode if the register represents a heating curve shift rather than a flow temperature.",
           "frost_on_c": "Once the outdoor temperature falls to this value, switching on is forced — regardless of surplus, minimum pause and summer lock, from the grid if necessary. 0 does not disable frost protection; it puts the threshold at freezing point, which is tight because a heating circuit keeps cooling down after being switched off.",
           "frost_off_c": "Frost protection only ends above this value. The gap to the on threshold is the hysteresis — without it the appliance would cycle at the threshold.",
           "heat_on_c": "Below this outdoor temperature the house needs heat.",
@@ -500,7 +503,8 @@
           "min_off_min": "After switching off, the appliance stays off for at least this long. Frost protection bypasses this.",
           "max_block_min": "Once the appliance has been off this long, it is switched on even without surplus — but never before its minimum pause has passed. Measured from the entity's last state change, whoever caused it. 0 = no limit.",
           "takt_sperre_min": "Minimum interval between two starts. If HEMS switches the system off sooner than this after its last start, it stays off until the interval ends and is then switched on again, even without surplus — but never before its minimum pause has passed. If it ran longer, the surplus decides. Below the frost protection threshold the lock does not apply, nor during the summer lock or above the heating limit. 0 = off.",
-          "priority": "1 = most important. When surplus is scarce, the least important load gives way first. Heating systems and switchable loads share one ranking."
+          "priority": "1 = most important. When surplus is scarce, the least important load gives way first. Heating systems and switchable loads share one ranking.",
+          "mode_off_option": "Required for select only: exact off option, e.g. Off / Hot Water Only. It must differ from heating and cooling. Climate continues to use off."
         }
       }
     },

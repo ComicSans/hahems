@@ -830,14 +830,14 @@ class Actuator:
         """
         ent = h.switch_entity
         ist = self._state(ent)
-        if entity_domain.ist_an(ent, ist) == on:
+        if entity_domain.ist_an(ent, ist, h.mode_off_option) == on:
             # Lage erreicht — Buchung und Meldung sind erledigt.
             self._last_heizung.pop(ent, None)
             self._heizung_gemeldet.discard(ent)
             return
         if not on and (
             entity_domain.betriebsart(
-                ent, ist, h.mode_heat_option, h.mode_cool_option
+                ent, ist, h.mode_heat_option, h.mode_cool_option, h.mode_off_option
             )
             == entity_domain.BETRIEBSART_FREMD
         ):
@@ -868,7 +868,7 @@ class Actuator:
                 return
 
         domain, service, data = entity_domain.schalt_service(
-            ent, on, h.mode_heat_option, h.mode_cool_option, art
+            ent, on, h.mode_heat_option, h.mode_cool_option, art, h.mode_off_option
         )
         # Nur buchen, was tatsächlich rausging: ein gedrosselter Aufruf darf
         # keine Nicht-Übernahme melden, die niemand geschrieben hat.
