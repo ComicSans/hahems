@@ -126,8 +126,12 @@ function hourlyMeans(points, until) {
     let cur = t;
     while (cur < segEnd) {
       const hour = new Date(cur);
-      hour.setMinutes(0, 0, 0);
-      const hourStart = hour.getTime();
+      // Lokale Date-Setter wählen bei der Zeitumstellung die erste 02-Uhr-
+      // Stunde. In der zweiten Stunde bliebe chunkEnd dann <= cur: Endlosschleife.
+      // Nur den Minutenanteil abziehen, damit der aktuelle UTC-Offset erhalten bleibt.
+      const hourStart = cur - (
+        hour.getMinutes() * 60000 + hour.getSeconds() * 1000 + hour.getMilliseconds()
+      );
       const chunkEnd = Math.min(segEnd, hourStart + 3600000);
       const dur = chunkEnd - cur;
       if (dur > 0) {
