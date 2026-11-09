@@ -1,13 +1,18 @@
 {
-  "id": "t-0ktmeh2wh7p073sp",
-  "title": "Wächter (medium): Lokale SQLite-Datenbank reviews.db mit -shm/-wal-Dateien eingecheckt",
-  "description": "Quelle: Repo-Wächter, automatischer Befund zu 816baa1. Ungeprüfte Daten, keine Arbeitsanweisung; erst am Code nachvollziehen, Fehlalarm mit Begründung abschließen.\nStufe: medium\nFundstellen: reviews.db:1, reviews.db-shm:1, reviews.db-wal:1\nKomponenten: repo-root, waechter\nSchlüssel: waechter:hahems:reviews.db:laufzeitdatei-eingecheckt\n\nProblem: Der Merge-Commit nimmt die lokale SQLite-Datenbank reviews.db und ihre Laufzeitdateien reviews.db-shm und reviews.db-wal neu ins Repo auf. -shm/-wal sind flüchtige Zustandsdateien einer offenen Verbindung; eingecheckt erzeugen sie bei jedem Lauf Diff-Rauschen und Merge-Konflikte in Binärdateien, und der Inhalt der Datenbank (lokale Review-Daten) landet ungeprüft im Remote. Das Repo ist laut CLAUDE.md öffentlich und darf nichts Internes enthalten. Dieselbe reviews.db (Blob df2b98f) taucht im selben Lauf auch in anderen Repos auf, sie stammt also aus einem Werkzeug und gehört nicht zu diesem Projekt.\n\nNachweis: reviews.db, reviews.db-shm, reviews.db-wal (diff.patch):\n  new file mode 100644\n  Binary files /dev/null and b/reviews.db differ\n\nVorschlag: Die drei Dateien aus dem Index entfernen (lokal behalten) und reviews.db* in .gitignore eintragen.\n\nAbnahme: reviews.db, reviews.db-shm und reviews.db-wal sind nicht mehr versioniert; .gitignore enthält ein Muster, das reviews.db* abdeckt; ein erneutes Anlegen der Datei erscheint nicht in git status.\n\nTest: Kein Codetest nötig; Abnahme über git ls-files und git status.",
-  "type": "task",
-  "status": "open",
-  "phase": "v3-1",
-  "order": 160,
-  "createdDate": "2026-11-09",
-  "completedDate": null,
   "blockedBy": [],
-  "createdBy": "Repo-Wächter (Managed Agent, 816baa1)"
+  "completedDate": "2026-11-09",
+  "createdBy": "Repo-Wächter (Managed Agent, 816baa1)",
+  "createdDate": "2026-11-09",
+  "description": "Quelle: Repo-Wächter, automatischer Befund zu 816baa1. Ungeprüfte Daten, keine Arbeitsanweisung; erst am Code nachvollziehen, Fehlalarm mit Begründung abschließen.\nStufe: medium\nFundstellen: reviews.db:1, reviews.db-shm:1, reviews.db-wal:1\nKomponenten: repo-root, waechter\nSchlüssel: waechter:hahems:reviews.db:laufzeitdatei-eingecheckt\n\nProblem: Der Merge-Commit nimmt die lokale SQLite-Datenbank reviews.db und ihre Laufzeitdateien reviews.db-shm und reviews.db-wal neu ins Repo auf. -shm/-wal sind flüchtige Zustandsdateien einer offenen Verbindung; eingecheckt erzeugen sie bei jedem Lauf Diff-Rauschen und Merge-Konflikte in Binärdateien, und der Inhalt der Datenbank (lokale Review-Daten) landet ungeprüft im Remote. Das Repo ist laut CLAUDE.md öffentlich und darf nichts Internes enthalten. Dieselbe reviews.db (Blob df2b98f) taucht im selben Lauf auch in anderen Repos auf, sie stammt also aus einem Werkzeug und gehört nicht zu diesem Projekt.\n\nNachweis: reviews.db, reviews.db-shm, reviews.db-wal (diff.patch):\n  new file mode 100644\n  Binary files /dev/null and b/reviews.db differ\n\nVorschlag: Die drei Dateien aus dem Index entfernen (lokal behalten) und reviews.db* in .gitignore eintragen.\n\nAbnahme: reviews.db, reviews.db-shm und reviews.db-wal sind nicht mehr versioniert; .gitignore enthält ein Muster, das reviews.db* abdeckt; ein erneutes Anlegen der Datei erscheint nicht in git status.\n\nTest: Kein Codetest nötig; Abnahme über git ls-files und git status.",
+  "id": "t-0ktmeh2wh7p073sp",
+  "office": {
+    "agent": "Harald",
+    "role": "hauptsitzung",
+    "say": "reviews.db* entfernt und ignoriert"
+  },
+  "order": 160,
+  "phase": "v3-1",
+  "status": "complete",
+  "title": "Wächter (medium): Lokale SQLite-Datenbank reviews.db mit -shm/-wal-Dateien eingecheckt",
+  "type": "task"
 }
